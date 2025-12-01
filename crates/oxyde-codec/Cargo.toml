@@ -1,0 +1,12 @@
+[package]
+name = "oxyde-codec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+rmp-serde = "1.1"

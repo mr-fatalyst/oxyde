@@ -1,0 +1,40 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "oxyde-core"
+version = "0.1.0"
+description = "Rust core for Oxyde ORM - high-performance database operations"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Nikita Ryzhenkov", email = "nikita.ryzhenkoff@gmail.com"}
+]
+keywords = ["orm", "rust", "database", "async", "performance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Database",
+]
+
+[project.urls]
+Homepage = "https://github.com/mr-fatalyst/oxyde"
+Documentation = "https://github.com/mr-fatalyst/oxyde#readme"
+Repository = "https://github.com/mr-fatalyst/oxyde"
+Issues = "https://github.com/mr-fatalyst/oxyde/issues"
+
+[tool.maturin]
+python-source = "python"
+module-name = "_oxyde_core"
+features = ["pyo3/extension-module"]

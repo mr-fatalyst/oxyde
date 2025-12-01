@@ -1,0 +1,14 @@
+[package]
+name = "oxyde-query"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+sea-query = "0.31"
+oxyde-codec = { path = "../oxyde-codec" }
+regex = "1"

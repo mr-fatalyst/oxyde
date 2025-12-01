@@ -1,0 +1,90 @@
+site_name: Oxyde ORM
+site_description: High-performance async Python ORM with Rust core
+site_url: https://oxyde.fatalyst.dev/
+repo_url: https://github.com/mr-fatalyst/oxyde
+repo_name: oxyde-orm/oxyde
+docs_dir: docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: light blue
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: light blue
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - First Project: getting-started/first-project.md
+    - FastAPI Project: getting-started/fastapi-project.md
+  - Guide:
+    - Models: guide/models.md
+    - Fields: guide/fields.md
+    - Database Connections: guide/connections.md
+    - Queries: guide/queries.md
+    - Filtering: guide/filtering.md
+    - F-Expressions: guide/expressions.md
+    - Aggregation: guide/aggregation.md
+    - Relations: guide/relations.md
+    - Transactions: guide/transactions.md
+    - Exceptions: guide/exceptions.md
+    - Migrations: guide/migrations.md
+  - Advanced:
+    - Performance: advanced/performance.md
+    - Raw Queries: advanced/raw-queries.md
+    - Internals (Rust Core): advanced/internals.md
+  - Cheatsheet: cheatsheet.md
+  - FAQ: faq.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mr-fatalyst/oxyde
+    - icon: fontawesome/brands/linkedin
+      link: https://linkedin.com/in/nikita-ryzhenkov
+    - icon: fontawesome/solid/envelope
+      link: mailto:nikita.ryzhenkoff@gmail.com

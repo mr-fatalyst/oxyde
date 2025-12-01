@@ -1,0 +1,125 @@
+[project]
+name = "oxyde"
+version = "0.1.0"
+description = "High-performance async Python ORM with Rust core"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Nikita Ryzhenkov", email = "nikita.ryzhenkoff@gmail.com"}
+]
+keywords = ["orm", "async", "database", "postgresql", "sqlite", "mysql", "pydantic"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Framework :: AsyncIO",
+    "Topic :: Database",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.0",
+    "msgpack>=1.0",
+    "typer>=0.9",
+    "oxyde-core>=0.1.0,<0.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.0",
+    "pytest-cov>=7.0",
+    "ruff>=0.14.7",
+    "pre-commit>=4.5.0",
+]
+
+[project.scripts]
+oxyde = "oxyde.migrations.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/mr-fatalyst/oxyde"
+Documentation = "https://github.com/mr-fatalyst/oxyde#readme"
+Repository = "https://github.com/mr-fatalyst/oxyde"
+Issues = "https://github.com/mr-fatalyst/oxyde/issues"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["oxyde*"]
+exclude = ["oxyde.tests*"]
+
+# Ruff configuration (replaces black, isort, flake8)
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+exclude = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+    ".eggs",
+    "oxyde/tests",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E203",   # whitespace before ':' (conflicts with black-style)
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["oxyde"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# pytest configuration
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+testpaths = ["oxyde/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["oxyde"]
+omit = ["oxyde/tests/*"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+show_missing = true
+
+# mypy configuration
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["tests/", "build/"]

@@ -1,0 +1,14 @@
+[package]
+name = "oxyde-migrate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+oxyde-codec = { path = "../oxyde-codec" }
+oxyde-driver = { path = "../oxyde-driver" }
