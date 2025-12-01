@@ -18,8 +18,27 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  build-sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: -m crates/oxyde-core-py/Cargo.toml --out dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
   build-wheels:
     name: Build ${{ matrix.platform.target }} wheels
+    needs: [build-sdist]
     runs-on: ${{ matrix.platform.os }}
     strategy:
       fail-fast: false
@@ -81,24 +100,6 @@ jobs:
         with:
           name: wheels-${{ matrix.platform.target }}
           path: dist/*.whl
-
-  build-sdist:
-    name: Build source distribution
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Build sdist
-        uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: -m crates/oxyde-core-py/pyproject.toml --out dist
-
-      - name: Upload sdist
-        uses: actions/upload-artifact@v4
-        with:
-          name: sdist
-          path: dist/*.tar.gz
 
   publish:
     name: Publish to PyPI
