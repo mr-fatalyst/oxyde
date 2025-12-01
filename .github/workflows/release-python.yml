@@ -12,7 +12,7 @@ on:
         required: true
 
 permissions:
-  contents: read
+  contents: write  # Needed for release and docs
 
 jobs:
   build:
@@ -122,3 +122,11 @@ jobs:
           files: dist/*
           generate_release_notes: true
           tag_name: ${{ github.ref_name }}
+
+  # Deploy docs for minor/major releases
+  docs:
+    name: Deploy docs
+    needs: [publish]
+    uses: ./.github/workflows/docs.yml
+    with:
+      version: ${{ github.ref_name }}

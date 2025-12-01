@@ -1,0 +1,58 @@
+name: Deploy docs
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v0.1.0)'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    # Only deploy docs for minor/major releases (v0.1.0, v0.2.0, v1.0.0, not v0.1.1)
+    if: endsWith(inputs.version, '.0')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Needed for mike to work with git history
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install mkdocs-material mike
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract version number
+        id: version
+        run: |
+          # v0.1.0 -> 0.1
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"           # Remove 'v' prefix
+          VERSION="${VERSION%.*}"          # Remove patch version
+          echo "short=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Deploy docs
+        run: |
+          uv run mike deploy ${{ steps.version.outputs.short }} latest --update-aliases --push
+          uv run mike set-default latest --push
