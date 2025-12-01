@@ -14,7 +14,6 @@ permissions:
   contents: read
 
 env:
-  PYTHON_VERSION: '3.12'
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -76,24 +75,24 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Python
+      - name: Set up Python (macOS/Windows)
+        if: runner.os != 'Linux'
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist -m crates/oxyde-core-py/pyproject.toml
-          sccache: 'true'
-          manylinux: ${{ matrix.platform.manylinux }}
           python-version: |
             3.10
             3.11
             3.12
             3.13
             3.14
+
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist -m crates/oxyde-core-py/Cargo.toml --find-interpreter
+          sccache: 'true'
+          manylinux: ${{ matrix.platform.manylinux }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
