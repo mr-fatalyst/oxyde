@@ -56,3 +56,11 @@ jobs:
         run: |
           uv run mike deploy ${{ steps.version.outputs.short }} latest --update-aliases --push
           uv run mike set-default latest --push
+
+      - name: Ensure CNAME exists
+        run: |
+          git checkout gh-pages
+          echo "oxyde.fatalyst.dev" > CNAME
+          git add CNAME
+          git diff --cached --quiet || git commit -m "Add CNAME"
+          git push origin gh-pages

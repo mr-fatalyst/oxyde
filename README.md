@@ -143,9 +143,8 @@ Full documentation: **[https://oxyde.fatalyst.dev/](https://oxyde.fatalyst.dev/)
 
 - [Getting Started](https://oxyde.fatalyst.dev/getting-started/quickstart/) — First steps with Oxyde
 - [User Guide](https://oxyde.fatalyst.dev/guide/models/) — Models, queries, relations, transactions
-- [API Reference](https://oxyde.fatalyst.dev/reference/api/models/) — Complete API documentation
-- [Cheatsheet](https://oxyde.fatalyst.dev/reference/cheatsheet/) — Quick reference for all methods
-- [API Classification](ORM_API_CLASSIFICATION.md) — Complete API table with examples
+- [Cheatsheet](https://oxyde.fatalyst.dev/cheatsheet/) — Quick reference for all methods
+- [FAQ](https://oxyde.fatalyst.dev/faq/) — Common questions and answers
 
 ## Contributing
 

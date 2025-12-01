@@ -18,7 +18,7 @@ If you need to build from source (e.g., for development or customization):
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/oxyde-orm/oxyde.git
+git clone https://github.com/mr-fatalyst/oxyde.git
 cd oxyde
 ```
 
