@@ -59,8 +59,8 @@ jobs:
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             manylinux: musllinux_1_1
-          # macOS x86_64 (Intel)
-          - os: macos-13
+          # macOS x86_64 (Intel) - runs on ARM with Rosetta
+          - os: macos-14
             target: x86_64-apple-darwin
             manylinux: auto
           # macOS ARM64 (Apple Silicon)
