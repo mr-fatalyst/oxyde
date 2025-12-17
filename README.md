@@ -1,34 +1,20 @@
-# Oxyde ORM
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mr-fatalyst/oxyde/master/logo.png" alt="Logo" width="200">
+</p>
 
-High-performance async Python ORM with Rust core.
+<p align="center"> <b>Oxyde ORM</b> is a type-safe, Pydantic-centric asynchronous ORM with a high-performance Rust core designed for clarity, speed, and reliability. </p>
 
-Oxyde combines Python's expressiveness with Rust's performance. Models defined with Pydantic v2, queries executed in native Rust.
+<p align="center"> Inspired by the elegance of <a href="https://www.djangoproject.com/">Django's ORM</a>, Oxyde focuses on explicitness over magic, providing a modern developer-friendly workflow with predictable behavior and strong typing throughout. </p>
 
-```python
-from oxyde import OxydeModel, Field, db
+<p align="center">
+  <img src="https://img.shields.io/github/license/mr-fatalyst/oxyde">
+  <img src="https://github.com/mr-fatalyst/oxyde/actions/workflows/test.yml/badge.svg">
+  <img src="https://img.shields.io/pypi/v/oxyde">
+  <img src="https://img.shields.io/pypi/pyversions/oxyde">
+  <img src="https://static.pepy.tech/badge/oxyde" alt="PyPI Downloads">
+</p>
 
-class User(OxydeModel):
-    class Meta:
-        is_table = True
-
-    id: int | None = Field(default=None, db_pk=True)
-    email: str = Field(db_unique=True)
-    age: int = Field(ge=0, le=150)
-
-async def main():
-    async with db.connect("postgresql://localhost/mydb"):
-        # Create
-        user = await User.objects.create(email="alice@example.com", age=30)
-
-        # Read
-        users = await User.objects.filter(age__gte=18).limit(10).all()
-
-        # Update
-        await User.objects.filter(id=user.id).update(age=31)
-
-        # Delete
-        await User.objects.filter(id=user.id).delete()
-```
+---
 
 ## Features
 
@@ -37,7 +23,7 @@ async def main():
 - **Async-first** — Built for modern async Python with `asyncio`
 - **Rust performance** — SQL generation and execution in native Rust
 - **Multi-database** — PostgreSQL, SQLite, MySQL support
-- **Transactions** — `atomic()` context manager with savepoints
+- **Transactions** — `transaction.atomic()` context manager with savepoints
 - **Migrations** — Django-style `makemigrations` and `migrate` CLI
 
 ## Installation
@@ -48,34 +34,52 @@ pip install oxyde
 
 ## Quick Start
 
-### Define a Model
+### 1. Initialize Project
+
+```bash
+oxyde init
+```
+
+This creates `oxyde_config.py` with your database settings and model paths.
+
+### 2. Define Models
 
 ```python
+# models.py
 from oxyde import OxydeModel, Field
 
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
     age: int | None = Field(default=None)
+
+    class Meta:
+        is_table = True
 ```
 
-### Connect and Query
+### 3. Create Tables
+
+```bash
+oxyde makemigrations
+oxyde migrate
+```
+
+### 4. Use It
 
 ```python
+import asyncio
 from oxyde import db
+from models import User
 
-async with db.connect("sqlite:///app.db"):
+async def main():
+    await db.init(default="sqlite:///app.db")
+
     # Create
     user = await User.objects.create(name="Alice", email="alice@example.com", age=30)
 
-    # Query
-    adults = await User.objects.filter(age__gte=18).all()
-
-    # Get single object
+    # Read
+    users = await User.objects.filter(age__gte=18).all()
     user = await User.objects.get(id=1)
 
     # Update
@@ -84,9 +88,13 @@ async with db.connect("sqlite:///app.db"):
 
     # Delete
     await user.delete()
+
+    await db.close()
+
+asyncio.run(main())
 ```
 
-### Transactions
+## Transactions
 
 ```python
 from oxyde.db import transaction
@@ -97,7 +105,7 @@ async with transaction.atomic():
     # Auto-commits on success, rolls back on exception
 ```
 
-### FastAPI Integration
+## FastAPI Integration
 
 ```python
 from fastapi import FastAPI
@@ -122,29 +130,22 @@ async def get_users():
 | SQLite     | 3.35+ | Full | RETURNING, UPSERT, WAL mode by default |
 | MySQL      | 8.0+ | Full | UPSERT via ON DUPLICATE KEY, FOR UPDATE/SHARE |
 
-**Recommendation**: PostgreSQL for production, SQLite for development/testing.
-
-> **SQLite < 3.35**: Falls back to `last_insert_rowid()` which may return incorrect IDs with concurrent inserts.
->
-> **MySQL**: No RETURNING clause — uses `last_insert_id()`. Bulk INSERT returns calculated ID range which may be incorrect with concurrent inserts.
-
 **Connection URLs:**
 
-```python
-"postgresql://user:password@localhost:5432/database"
-"sqlite:///path/to/database.db"
-"sqlite:///:memory:"
-"mysql://user:password@localhost:3306/database"
+```
+postgresql://user:password@localhost:5432/database
+sqlite:///path/to/database.db
+sqlite:///:memory:
+mysql://user:password@localhost:3306/database
 ```
 
 ## Documentation
 
 Full documentation: **[https://oxyde.fatalyst.dev/](https://oxyde.fatalyst.dev/)**
 
-- [Getting Started](https://oxyde.fatalyst.dev/getting-started/quickstart/) — First steps with Oxyde
+- [Quick Start](https://oxyde.fatalyst.dev/getting-started/quickstart/) — Get up and running
 - [User Guide](https://oxyde.fatalyst.dev/guide/models/) — Models, queries, relations, transactions
 - [Cheatsheet](https://oxyde.fatalyst.dev/cheatsheet/) — Quick reference for all methods
-- [FAQ](https://oxyde.fatalyst.dev/faq/) — Common questions and answers
 
 ## Contributing
 

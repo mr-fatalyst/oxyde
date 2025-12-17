@@ -9,10 +9,10 @@ All Oxyde exceptions inherit from OxydeError, allowing catch-all handling:
 
 Exception hierarchy:
     OxydeError (base)
-    ├── FieldError           - Invalid field definition or access
-    ├── LookupError          - Unknown lookup operator (e.g., __xyz)
-    │   └── LookupValueError - Invalid value for lookup (e.g., __in=None)
-    └── ManagerError         - Query execution errors
+    ├── FieldError                - Invalid field definition or access
+    ├── FieldLookupError          - Unknown lookup operator (e.g., __xyz)
+    │   └── FieldLookupValueError - Invalid value for lookup (e.g., __in=None)
+    └── ManagerError              - Query execution errors
         ├── NotFoundError         - get() returned no rows
         ├── MultipleObjectsReturned - get() returned multiple rows
         └── IntegrityError        - Constraint violation (PK, FK, UNIQUE)
@@ -29,11 +29,11 @@ class FieldError(OxydeError):
     """Raised when a model field is invalid or missing."""
 
 
-class LookupError(OxydeError):
-    """Raised when an unsupported lookup is requested."""
+class FieldLookupError(OxydeError):
+    """Raised when an unsupported field lookup is requested."""
 
 
-class LookupValueError(LookupError):
+class FieldLookupValueError(FieldLookupError):
     """Raised when the lookup value is not compatible with the operator."""
 
 
@@ -56,8 +56,8 @@ class IntegrityError(ManagerError):
 __all__ = [
     "OxydeError",
     "FieldError",
-    "LookupError",
-    "LookupValueError",
+    "FieldLookupError",
+    "FieldLookupValueError",
     "ManagerError",
     "NotFoundError",
     "MultipleObjectsReturned",

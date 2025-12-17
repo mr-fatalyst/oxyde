@@ -11,6 +11,7 @@ Architecture:
 
     OxydeModel (base class)
         └── Inherits from pydantic.BaseModel for validation
+        └── Uses extra="ignore" to skip JOIN fields (author__id, author__name)
         └── Auto-registers in global model registry if Meta.is_table = True
         └── Provides QueryManager via Model.objects for CRUD operations
         └── Instance methods: save(), delete(), refresh()
@@ -179,7 +180,15 @@ class OxydeModelMeta(ModelMetaclass):
         namespace["__pending_fk_fields__"] = pending_fk_fields
         namespace["__fk_fields_resolved__"] = False
 
-        return super().__new__(mcs, name, bases, namespace, **kwargs)
+        cls = super().__new__(mcs, name, bases, namespace, **kwargs)
+
+        # Resolve FK fields AFTER Pydantic completes (model_fields is now populated)
+        # This also tries to resolve any previously pending models
+        from oxyde.models.registry import resolve_pending_fk
+
+        resolve_pending_fk()
+
+        return cls
 
     def __getattr__(cls, item: str) -> Any:  # type: ignore[override]
         return super().__getattr__(item)  # type: ignore[misc]
@@ -188,10 +197,17 @@ class OxydeModelMeta(ModelMetaclass):
 class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
     """Base class for Oxyde ORM models."""
 
-    model_config = ConfigDict(ignored_types=(RelationDescriptorBase,))
+    model_config = ConfigDict(
+        ignored_types=(RelationDescriptorBase,),
+    )
     _db_meta: ClassVar[ModelMeta]
     objects: ClassVar[QueryManager]
     _is_table: ClassVar[bool] = False
+
+    def __init__(self, **data: Any) -> None:
+        # Ensure FK fields are in model_fields before Pydantic validates
+        self.__class__.ensure_field_metadata()
+        super().__init__(**data)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -347,54 +363,76 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
             ):
                 continue
 
-            # Get target model's PK field name and type
+            # Get target field: db_fk or auto-detect PK
             target_model = inner_type
-            pk_field_name = _get_pk_field_name(target_model)
+            db_fk = None
+            if isinstance(field_info, OxydeFieldInfo):
+                db_fk = getattr(field_info, "db_fk", None)
+            target_field_name = db_fk or _get_pk_field_name(target_model)
 
-            # Get PK type from target model
-            target_pk_info = target_model.model_fields.get(pk_field_name)
-            if target_pk_info is None:
-                pk_type: type = int  # fallback
+            # Get target field type from target model
+            target_field_info = target_model.model_fields.get(target_field_name)
+            if target_field_info is None:
+                fk_type: type = int  # fallback
             else:
-                pk_annotation = target_pk_info.annotation
-                pk_type_inner, _ = _unwrap_optional(pk_annotation)
-                pk_type = pk_type_inner if isinstance(pk_type_inner, type) else int
+                fk_annotation = target_field_info.annotation
+                fk_type_inner, _ = _unwrap_optional(fk_annotation)
+                fk_type = fk_type_inner if isinstance(fk_type_inner, type) else int
 
-            # Build FK column name: db_column or {field_name}_{pk_field_name}
+            # Build FK column name: db_column or {field_name}_{target_field}
             db_column = None
+            db_nullable = None
             if isinstance(field_info, OxydeFieldInfo):
                 db_column = getattr(field_info, "db_column", None)
-            fk_column_name = db_column or f"{field_name}_{pk_field_name}"
+                db_nullable = getattr(field_info, "db_nullable", None)
+            fk_column_name = db_column or f"{field_name}_{target_field_name}"
 
             # Check if this field already exists (avoid duplicates)
             if fk_column_name in cls.model_fields:
                 continue
 
             # Determine FK column type (nullable if original FK field is optional)
+            # db_nullable from virtual FK field applies to the real column
             if is_optional:
-                fk_column_type = pk_type | None
+                fk_column_type = fk_type | None
                 fk_default = None
             else:
-                fk_column_type = pk_type
+                fk_column_type = fk_type
                 fk_default = PydanticUndefined
 
+            # Pass db_nullable to the synthetic FK column field
             fields_to_add.append(
-                (fk_column_name, fk_column_type, Field(default=fk_default))
+                (
+                    fk_column_name,
+                    fk_column_type,
+                    Field(default=fk_default, db_nullable=db_nullable),
+                )
             )
 
         if not fields_to_add:
             return
 
         # Add fields to model
+        added_fields: list[str] = []
         for fk_column_name, fk_column_type, fk_field_info in fields_to_add:
             cls.__annotations__[fk_column_name] = fk_column_type
-            cls.__pydantic_fields__[fk_column_name] = FieldInfo(
-                annotation=fk_column_type,
-                default=fk_field_info.default,
-            )
+            # Preserve OxydeFieldInfo with db_nullable
+            fk_field_info.annotation = fk_column_type
+            cls.__pydantic_fields__[fk_column_name] = fk_field_info
+            added_fields.append(fk_column_name)
 
         # Rebuild model to include new fields
-        cls.model_rebuild(force=True)
+        # May fail if other forward refs are not yet resolvable
+        from pydantic.errors import PydanticUndefinedAnnotation
+
+        try:
+            cls.model_rebuild(force=True)
+        except PydanticUndefinedAnnotation:
+            # Forward ref not resolvable yet - revert and retry later
+            for fk_column_name in added_fields:
+                cls.__annotations__.pop(fk_column_name, None)
+                cls.__pydantic_fields__.pop(fk_column_name, None)
+            cls.__fk_fields_resolved__ = False
 
     @classmethod
     def _parse_field_tags(cls) -> None:
@@ -410,8 +448,9 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
         combined_globalns.setdefault("ColumnMeta", ColumnMeta)
         combined_globalns.setdefault("ForeignKeyInfo", ForeignKeyInfo)
         combined_globalns.setdefault("OxydeModel", OxydeModel)
-        from oxyde.queries.manager import QueryManager  # noqa: WPS433 - local import
-        from oxyde.queries.select import Query  # noqa: WPS433 - local import
+        # Local imports to avoid circular dependency (OxydeModel ↔ Query)
+        from oxyde.queries.manager import QueryManager
+        from oxyde.queries.select import Query
 
         combined_globalns.setdefault("Query", Query)
         combined_globalns.setdefault("QueryManager", QueryManager)
@@ -452,34 +491,43 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
             db_fk = get_db_attr(model_field, "db_fk", None)
             db_on_delete = get_db_attr(model_field, "db_on_delete", "RESTRICT")
             db_on_update = get_db_attr(model_field, "db_on_update", "CASCADE")
+            db_nullable = get_db_attr(model_field, "db_nullable", None)
             db_reverse_fk = get_db_attr(model_field, "db_reverse_fk", None)
             db_m2m = get_db_attr(model_field, "db_m2m", False)
             db_through = get_db_attr(model_field, "db_through", None)
 
-            # Determine nullable from type hint
-            nullable = optional_flag
-            if db_pk:
-                # Primary keys are NOT NULL unless explicitly Optional
+            # Foreign Key detection
+            # FK is defined by type annotation: field type must be OxydeModel
+            # db_fk parameter specifies target field (defaults to PK)
+            fk_info: ForeignKeyInfo | None = None
+            is_fk = isinstance(python_type, type) and issubclass(
+                python_type, OxydeModel
+            )
+
+            # Determine nullable:
+            # 1. If db_nullable explicitly set — use it
+            # 2. Otherwise — infer from type hint (X | None = nullable)
+            if db_nullable is not None:
+                nullable = db_nullable
+            else:
                 nullable = optional_flag
 
             default_value = model_field.default
             default_factory = getattr(model_field, "default_factory", None)
 
-            # Allow None default for optional fields
+            # Allow None default for optional fields (non-FK only)
+            # Only override if db_nullable was not explicitly set
             if (
-                not nullable
+                not is_fk
+                and not nullable
+                and db_nullable is None  # don't override explicit db_nullable
                 and not model_field.is_required()
                 and default_value is None
                 and default_value is not PydanticUndefined
             ):
                 nullable = True
 
-            # Foreign Key detection
-            # FK is defined by type annotation: field type must be OxydeModel
-            # db_fk parameter specifies target field (defaults to PK)
-            fk_info: ForeignKeyInfo | None = None
-
-            if isinstance(python_type, type) and issubclass(python_type, OxydeModel):
+            if is_fk:
                 target_key = f"{python_type.__module__}.{python_type.__qualname__}"
 
                 # Determine target field: db_fk or auto-detect PK

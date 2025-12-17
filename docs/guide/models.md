@@ -8,13 +8,13 @@ Models are the foundation of Oxyde. Each model class represents a database table
 from oxyde import OxydeModel, Field
 
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
     age: int | None = Field(default=None)
+
+    class Meta:
+        is_table = True
 ```
 
 ## The Meta Class
@@ -52,9 +52,6 @@ Oxyde uses Python type hints to infer SQL types:
 
 ```python
 class Example(OxydeModel):
-    class Meta:
-        is_table = True
-
     # Required field
     name: str
 
@@ -63,6 +60,9 @@ class Example(OxydeModel):
 
     # With default value
     status: str = Field(default="active")
+
+    class Meta:
+        is_table = True
 ```
 
 ### Type Mapping
@@ -85,10 +85,10 @@ class Example(OxydeModel):
 
 ```python
 class User(OxydeModel):
+    id: int | None = Field(default=None, db_pk=True)
+
     class Meta:
         is_table = True
-
-    id: int | None = Field(default=None, db_pk=True)
 ```
 
 The `id` will be auto-generated on insert.
@@ -99,22 +99,22 @@ The `id` will be auto-generated on insert.
 from uuid import UUID, uuid4
 
 class User(OxydeModel):
+    id: UUID = Field(default_factory=uuid4, db_pk=True)
+
     class Meta:
         is_table = True
-
-    id: UUID = Field(default_factory=uuid4, db_pk=True)
 ```
 
 ### Composite Primary Key
 
 ```python
 class UserRole(OxydeModel):
+    user_id: int
+    role_id: int
+
     class Meta:
         is_table = True
         primary_key = ("user_id", "role_id")
-
-    user_id: int
-    role_id: int
 ```
 
 ## Indexes
@@ -123,10 +123,10 @@ class UserRole(OxydeModel):
 
 ```python
 class User(OxydeModel):
+    email: str = Field(db_index=True)
+
     class Meta:
         is_table = True
-
-    email: str = Field(db_index=True)
 ```
 
 ### Composite Index
@@ -135,28 +135,28 @@ class User(OxydeModel):
 from oxyde import Index
 
 class Event(OxydeModel):
+    city: str
+    start_date: datetime
+
     class Meta:
         is_table = True
         indexes = [
             Index(("city", "start_date")),
         ]
-
-    city: str
-    start_date: datetime
 ```
 
 ### Partial Index
 
 ```python
 class User(OxydeModel):
+    email: str
+    deleted_at: datetime | None = Field(default=None)
+
     class Meta:
         is_table = True
         indexes = [
             Index(("email",), unique=True, where="deleted_at IS NULL"),
         ]
-
-    email: str
-    deleted_at: datetime | None = Field(default=None)
 ```
 
 ### Index Methods
@@ -187,16 +187,16 @@ class Meta:
 from oxyde import Check
 
 class Event(OxydeModel):
+    start_date: datetime
+    end_date: datetime
+    price: float
+
     class Meta:
         is_table = True
         constraints = [
             Check("start_date < end_date", name="valid_dates"),
             Check("price >= 0"),
         ]
-
-    start_date: datetime
-    end_date: datetime
-    price: float
 ```
 
 ## SQL Defaults
@@ -205,13 +205,13 @@ Set database-level default values:
 
 ```python
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
     uuid: str = Field(db_default="gen_random_uuid()")  # PostgreSQL
     status: str = Field(db_default="'active'")  # Note: strings need quotes
+
+    class Meta:
+        is_table = True
 ```
 
 !!! warning "Python vs SQL Defaults"
@@ -224,10 +224,10 @@ Override the database column name:
 
 ```python
 class User(OxydeModel):
+    created_at: datetime = Field(db_column="created_timestamp")
+
     class Meta:
         is_table = True
-
-    created_at: datetime = Field(db_column="created_timestamp")
 ```
 
 The Python attribute is `created_at`, but the database column is `created_timestamp`.
@@ -238,12 +238,12 @@ Override the inferred SQL type:
 
 ```python
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int = Field(db_pk=True, db_type="BIGSERIAL")
     name: str = Field(db_type="VARCHAR(255)")
     data: dict = Field(db_type="JSONB")  # PostgreSQL
+
+    class Meta:
+        is_table = True
 ```
 
 ## Instance Methods
@@ -292,14 +292,14 @@ Override these methods to run code before/after database operations:
 
 ```python
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str
     created_at: datetime | None = Field(default=None)
     updated_at: datetime | None = Field(default=None)
+
+    class Meta:
+        is_table = True
 
     async def pre_save(self, *, is_create: bool, update_fields: list[str] | None = None):
         """Called before save()."""
@@ -337,11 +337,11 @@ class TimestampMixin(OxydeModel):
 
 
 class User(TimestampMixin):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
+
+    class Meta:
+        is_table = True
 ```
 
 Only `User` creates a database table.
@@ -354,12 +354,12 @@ OxydeModel inherits from Pydantic's BaseModel, so you get:
 
 ```python
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     age: int = Field(ge=0, le=150)  # Must be 0-150
     email: str = Field(pattern=r"^[\w.-]+@[\w.-]+\.\w+$")
+
+    class Meta:
+        is_table = True
 
 # Raises ValidationError
 user = User(age=200, email="invalid")
@@ -384,13 +384,13 @@ user = User.model_validate({"name": "Alice", "email": "alice@example.com"})
 
 ```python
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     created_at: datetime = Field(
         alias="createdAt",        # JSON key
         db_column="created_at",   # Database column
     )
+
+    class Meta:
+        is_table = True
 ```
 
 ## Next Steps

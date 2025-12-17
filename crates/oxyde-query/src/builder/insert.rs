@@ -6,7 +6,7 @@ use sea_query::{
 };
 
 use crate::error::{QueryError, Result};
-use crate::utils::{json_to_simple_expr, json_to_value, ColumnIdent, TableIdent};
+use crate::utils::{json_to_simple_expr, json_to_value_typed, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build INSERT query from QueryIR
@@ -14,6 +14,13 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
     let table = TableIdent(ir.table.clone());
     let mut query = Query::insert();
     query.into_table(table);
+
+    // Helper to get column type from col_types
+    let get_col_type = |col: &str| -> Option<&str> {
+        ir.col_types
+            .as_ref()
+            .and_then(|ct| ct.get(col).map(|s| s.as_str()))
+    };
 
     // Single row insert
     if let Some(values) = &ir.values {
@@ -25,7 +32,8 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
             if let Some(expr) = json_to_simple_expr(val)? {
                 vals.push(expr);
             } else {
-                vals.push(Expr::val(json_to_value(val)).into());
+                let col_type = get_col_type(col);
+                vals.push(Expr::val(json_to_value_typed(val, col_type)).into());
             }
         }
 
@@ -61,7 +69,8 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                 if let Some(expr) = json_to_simple_expr(val)? {
                     vals.push(expr);
                 } else {
-                    vals.push(Expr::val(json_to_value(val)).into());
+                    let col_type = get_col_type(&col.0);
+                    vals.push(Expr::val(json_to_value_typed(val, col_type)).into());
                 }
             }
             query.values(vals)?;
@@ -106,8 +115,11 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                             if let Some(expr) = json_to_simple_expr(val)? {
                                 conflict.value(ColumnIdent(col.clone()), expr);
                             } else {
-                                conflict
-                                    .value(ColumnIdent(col.clone()), Expr::val(json_to_value(val)));
+                                let col_type = get_col_type(col);
+                                conflict.value(
+                                    ColumnIdent(col.clone()),
+                                    Expr::val(json_to_value_typed(val, col_type)),
+                                );
                             }
                         }
 
@@ -163,8 +175,11 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                             if let Some(expr) = json_to_simple_expr(val)? {
                                 conflict.value(ColumnIdent(col.clone()), expr);
                             } else {
-                                conflict
-                                    .value(ColumnIdent(col.clone()), Expr::val(json_to_value(val)));
+                                let col_type = get_col_type(col);
+                                conflict.value(
+                                    ColumnIdent(col.clone()),
+                                    Expr::val(json_to_value_typed(val, col_type)),
+                                );
                             }
                         }
                         query.on_conflict(conflict.to_owned());

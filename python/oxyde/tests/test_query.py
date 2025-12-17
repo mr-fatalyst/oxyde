@@ -12,8 +12,8 @@ from oxyde.db import atomic
 from oxyde.db.transaction import get_active_transaction
 from oxyde.exceptions import (
     FieldError,
-    LookupError,
-    LookupValueError,
+    FieldLookupError,
+    FieldLookupValueError,
     ManagerError,
     MultipleObjectsReturned,
     NotFoundError,
@@ -277,10 +277,10 @@ def test_lookup_generation_for_strings_and_numbers() -> None:
 
     # Signature tests removed - filter() accepts **kwargs dynamically
 
-    with pytest.raises(LookupError):
+    with pytest.raises(FieldLookupError):
         Product.objects.filter(title__unknown="foo")
 
-    with pytest.raises(LookupValueError):
+    with pytest.raises(FieldLookupValueError):
         Product.objects.filter(title__contains=123)
 
     with pytest.raises(FieldError):
@@ -555,18 +555,13 @@ async def test_join_hydrates_related_models() -> None:
         class Meta:
             is_table = True
 
-    rows = [
-        [
-            {
-                "id": 1,
-                "title": "First",
-                "author": None,
-                "author__id": 10,
-                "author__email": "ada@example.com",
-            }
-        ]
-    ]
-    stub = StubExecuteClient(rows)
+    # Columnar result format (as returned by Rust for all SELECT queries)
+    # Columns include both main model fields and joined fields with prefix
+    columnar_result = (
+        ["id", "title", "author__id", "author__email"],
+        [[1, "First", 10, "ada@example.com"]],
+    )
+    stub = StubExecuteClient([columnar_result])
     posts = await Post.objects.join("author").fetch_models(stub)
     assert posts[0].author is not None
     assert posts[0].author.email == "ada@example.com"
@@ -636,10 +631,10 @@ async def test_prefetch_populates_reverse_relation() -> None:
     assert conditions_day[0]["operator"] == ">="
     assert conditions_day[1]["operator"] == "<"
 
-    with pytest.raises(LookupValueError):
+    with pytest.raises(FieldLookupValueError):
         Event.objects.filter(created_at__month=3)
 
-    with pytest.raises(LookupValueError):
+    with pytest.raises(FieldLookupValueError):
         Event.objects.filter(created_at__day=(2024, 2, 30))
 
     clear_registry()
@@ -819,3 +814,361 @@ async def test_query_all_conflicting_execution_args() -> None:
     stub = StubExecuteClient([[]])
     with pytest.raises(ManagerError):
         await User.objects.all(client=stub, using="default")
+
+
+# ==========================
+# FK traversal filter tests
+# ==========================
+
+
+def test_fk_filter_parses_nested_path() -> None:
+    """Test that user__age__gte parses to correct field path and lookup."""
+    clear_registry()
+
+    class Author(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        age: int = 0
+
+        class Meta:
+            is_table = True
+
+    class Post(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        title: str
+        author: Author = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    # Ensure metadata is populated
+    Post.ensure_field_metadata()
+
+    # Filter by FK traversal
+    query = Post.objects.filter(author__age__gte=18)
+    ir = query.to_ir()
+
+    # Should have JOIN
+    assert "joins" in ir
+    assert len(ir["joins"]) == 1
+    join = ir["joins"][0]
+    assert join["alias"] == "author"
+
+    # Should have qualified filter (column has alias prefix)
+    filter_tree = ir["filter_tree"]
+    assert filter_tree["column"] == "author.age"
+    assert filter_tree["operator"] == ">="
+    assert filter_tree["value"] == 18
+
+    clear_registry()
+
+
+def test_fk_filter_exact_lookup() -> None:
+    """Test FK traversal with exact (default) lookup."""
+    clear_registry()
+
+    class Writer(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        name: str
+
+        class Meta:
+            is_table = True
+
+    class Article(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        writer: Writer = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    Article.ensure_field_metadata()
+
+    query = Article.objects.filter(writer__name="Alice")
+    ir = query.to_ir()
+
+    assert len(ir["joins"]) == 1
+    assert ir["filter_tree"]["column"] == "writer.name"
+    assert ir["filter_tree"]["operator"] == "="
+    assert ir["filter_tree"]["value"] == "Alice"
+
+    clear_registry()
+
+
+def test_fk_filter_string_lookups() -> None:
+    """Test FK traversal with string lookups like icontains."""
+    clear_registry()
+
+    class Person(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        email: str
+
+        class Meta:
+            is_table = True
+
+    class Comment(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        person: Person = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    Comment.ensure_field_metadata()
+
+    query = Comment.objects.filter(person__email__icontains="@gmail")
+    ir = query.to_ir()
+
+    assert len(ir["joins"]) == 1
+    assert ir["filter_tree"]["column"] == "person.email"
+    assert ir["filter_tree"]["operator"] == "ILIKE"
+    assert ir["filter_tree"]["value"] == "%@gmail%"
+
+    clear_registry()
+
+
+def test_fk_filter_in_q_expression() -> None:
+    """Test FK traversal works in Q expressions with AND/OR."""
+    clear_registry()
+
+    from oxyde.queries.q import Q
+
+    class Owner(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        verified: bool = False
+
+        class Meta:
+            is_table = True
+
+    class Pet(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        name: str
+        owner: Owner = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    Pet.ensure_field_metadata()
+
+    # Q expression with FK traversal and OR
+    query = Pet.objects.filter(
+        Q(name="Fluffy") | Q(owner__verified=True)
+    )
+    ir = query.to_ir()
+
+    # Should have JOIN from FK traversal
+    assert len(ir["joins"]) == 1
+
+    # Filter should be OR
+    filter_tree = ir["filter_tree"]
+    assert filter_tree["type"] == "or"
+    conditions = filter_tree["conditions"]
+    assert len(conditions) == 2
+
+    # First child: name = "Fluffy" (no FK traversal, field name)
+    assert conditions[0]["field"] == "name"
+    assert conditions[0]["value"] == "Fluffy"
+
+    # Second child: owner.verified = True (FK traversal, column has alias)
+    assert conditions[1]["column"] == "owner.verified"
+    assert conditions[1]["value"] is True
+
+    clear_registry()
+
+
+def test_fk_filter_exclude() -> None:
+    """Test FK traversal in exclude()."""
+    clear_registry()
+
+    class Account(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        active: bool = True
+
+        class Meta:
+            is_table = True
+
+    class Order(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        account: Account = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    Order.ensure_field_metadata()
+
+    query = Order.objects.exclude(account__active=False)
+    ir = query.to_ir()
+
+    assert len(ir["joins"]) == 1
+
+    # Should have NOT wrapper
+    filter_tree = ir["filter_tree"]
+    assert filter_tree["type"] == "not"
+    inner = filter_tree["condition"]
+    assert inner["column"] == "account.active"
+    assert inner["value"] is False
+
+    clear_registry()
+
+
+def test_fk_filter_invalid_path_raises() -> None:
+    """Test that invalid FK path raises appropriate error."""
+    clear_registry()
+
+    class Category(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        name: str
+
+        class Meta:
+            is_table = True
+
+    class Product(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        category: Category = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    Product.ensure_field_metadata()
+
+    # nonexistent field in FK chain
+    with pytest.raises(FieldError):
+        Product.objects.filter(category__nonexistent=True)
+
+    # invalid lookup on FK field
+    with pytest.raises(FieldLookupError):
+        Product.objects.filter(category__name__badlookup="test")
+
+    clear_registry()
+
+
+# ================================
+# Multi-level FK traversal tests
+# ================================
+
+
+def test_multi_level_fk_traversal() -> None:
+    """Test FK traversal through multiple levels: user__profile__country__name."""
+    clear_registry()
+
+    class Country(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        name: str
+
+        class Meta:
+            is_table = True
+
+    class Profile(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        country: Country = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    class User(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        profile: Profile = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    class Post(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        title: str
+        user: User = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    Post.ensure_field_metadata()
+
+    # 3-level traversal: post -> user -> profile -> country
+    query = Post.objects.filter(user__profile__country__name="USA")
+    ir = query.to_ir()
+
+    # Should have 3 JOINs
+    assert "joins" in ir
+    assert len(ir["joins"]) == 3
+
+    # Filter should reference the deepest alias
+    filter_tree = ir["filter_tree"]
+    assert "country" in filter_tree["column"]
+    assert filter_tree["value"] == "USA"
+
+    clear_registry()
+
+
+def test_q_multiple_fk_paths() -> None:
+    """Test Q expression with multiple different FK paths."""
+    clear_registry()
+
+    from oxyde.queries.q import Q
+
+    class Author(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        age: int = 0
+
+        class Meta:
+            is_table = True
+
+    class Editor(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        name: str
+
+        class Meta:
+            is_table = True
+
+    class Article(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        title: str
+        author: Author = Field(db_on_delete="CASCADE")
+        editor: Editor = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    Article.ensure_field_metadata()
+
+    # Two different FK traversals in one Q expression
+    query = Article.objects.filter(
+        Q(author__age__gte=18) & Q(editor__name__icontains="smith")
+    )
+    ir = query.to_ir()
+
+    # Should have 2 JOINs (author and editor)
+    assert len(ir["joins"]) == 2
+    join_paths = {j["path"] for j in ir["joins"]}
+    assert join_paths == {"author", "editor"}
+
+    # Filter should be AND with two conditions
+    filter_tree = ir["filter_tree"]
+    assert filter_tree["type"] == "and"
+    assert len(filter_tree["conditions"]) == 2
+
+    clear_registry()
+
+
+def test_fk_traversal_with_isnull() -> None:
+    """Test FK traversal with isnull lookup."""
+    clear_registry()
+
+    class Manager(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        name: str
+
+        class Meta:
+            is_table = True
+
+    class Team(OxydeModel):
+        id: int | None = Field(default=None, db_pk=True)
+        manager: Manager | None = None
+
+        class Meta:
+            is_table = True
+
+    Team.ensure_field_metadata()
+
+    query = Team.objects.filter(manager__name__isnull=True)
+    ir = query.to_ir()
+
+    assert len(ir["joins"]) == 1
+    assert ir["filter_tree"]["operator"] == "IS NULL"
+
+    clear_registry()

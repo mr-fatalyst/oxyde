@@ -18,6 +18,7 @@
 //! - `op`: Operation type (Select, Insert, Update, Delete, Raw)
 //! - `table`: Target table name
 //! - `cols`: Columns to select
+//! - `col_types`: Column type hints for type-aware decoding (SELECT only)
 //! - `filter_tree`: WHERE clause as FilterNode tree
 //! - `values`/`bulk_values`: INSERT/UPDATE data
 //! - `order_by`, `limit`, `offset`: Pagination
@@ -192,6 +193,13 @@ pub struct QueryIR {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cols: Option<Vec<String>>,
 
+    /// Column type hints from Python for type-aware decoding.
+    /// Maps column name to IR type string: "int", "str", "float", "bool",
+    /// "bytes", "datetime", "date", "time", "timedelta", "decimal", "uuid".
+    /// When present, Rust can decode values without expensive type_info() calls.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub col_types: Option<HashMap<String, String>>,
+
     // Filters using FilterNode tree (supports AND/OR/NOT logic)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter_tree: Option<FilterNode>,
@@ -287,6 +295,42 @@ pub struct BulkUpdateRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BulkUpdate {
     pub rows: Vec<BulkUpdateRow>,
+}
+
+impl Default for QueryIR {
+    fn default() -> Self {
+        Self {
+            proto: IR_PROTO_VERSION,
+            op: Operation::Select,
+            table: String::new(),
+            cols: None,
+            col_types: None,
+            filter_tree: None,
+            limit: None,
+            offset: None,
+            order_by: None,
+            values: None,
+            bulk_values: None,
+            bulk_update: None,
+            model: None,
+            distinct: None,
+            column_mappings: None,
+            joins: None,
+            aggregates: None,
+            returning: None,
+            group_by: None,
+            having: None,
+            exists: None,
+            count: None,
+            on_conflict: None,
+            lock: None,
+            union_query: None,
+            union_all: None,
+            sql: None,
+            params: None,
+            pk_column: None,
+        }
+    }
 }
 
 impl QueryIR {
@@ -388,86 +432,40 @@ impl QueryIR {
     }
 }
 
-/// Serialize query results to MessagePack
-pub fn serialize_results(rows: Vec<HashMap<String, serde_json::Value>>) -> Result<Vec<u8>> {
-    rmp_serde::to_vec(&rows)
+/// Columnar result format: (column_names, rows_as_arrays)
+/// More memory-efficient than Vec<HashMap>:
+/// - Column names stored once, not per row
+/// - No HashMap overhead (~48 bytes per entry)
+/// - ~30% smaller msgpack serialization
+pub type ColumnarResult = (Vec<String>, Vec<Vec<serde_json::Value>>);
+
+/// Serialize columnar results to MessagePack
+/// Format: [columns, rows] where rows is array of arrays
+pub fn serialize_columnar_results(result: ColumnarResult) -> Result<Vec<u8>> {
+    rmp_serde::to_vec(&result)
         .map_err(|e| CodecError::SerializationError(format!("Failed to serialize: {}", e)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn test_query_ir_validation() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "users".to_string(),
-            cols: Some(vec!["id".to_string(), "name".to_string()]),
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            table: "users".into(),
+            cols: Some(vec!["id".into(), "name".into()]),
+            ..Default::default()
         };
-
         assert!(ir.validate().is_ok());
     }
 
     #[test]
     fn test_query_ir_select_without_columns_is_error() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "users".to_string(),
-            cols: None,
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            table: "users".into(),
+            ..Default::default()
         };
-
         let err = ir.validate().unwrap_err();
         assert!(matches!(err, CodecError::ValidationError(msg) if msg.contains("columns")));
     }
@@ -475,49 +473,11 @@ mod tests {
     #[test]
     fn test_query_ir_insert_requires_values() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
             op: Operation::Insert,
-            table: "users".to_string(),
-            cols: None,
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            table: "users".into(),
+            ..Default::default()
         };
-
         let err = ir.validate().unwrap_err();
         assert!(matches!(err, CodecError::ValidationError(msg) if msg.contains("INSERT")));
-    }
-
-    #[test]
-    fn test_serialize_results_roundtrip() {
-        let row = HashMap::from([
-            ("id".to_string(), json!(1)),
-            ("name".to_string(), json!("Ada")),
-        ]);
-        let bytes = serialize_results(vec![row.clone()]).unwrap();
-        let decoded: Vec<HashMap<String, serde_json::Value>> =
-            rmp_serde::from_slice(&bytes).unwrap();
-        assert_eq!(decoded, vec![row]);
     }
 }

@@ -6,12 +6,30 @@ Let's build a simple blog application to learn Oxyde's core features.
 
 ```
 blog/
-├── models.py      # Database models
-├── main.py        # Application logic
-└── blog.db        # SQLite database (auto-created)
+├── models.py          # Database models
+├── oxyde_config.py    # Oxyde configuration
+├── migrations/        # Migration files
+├── main.py            # Application logic
+└── blog.db            # SQLite database (auto-created)
 ```
 
-## Step 1: Define Models
+## Step 1: Initialize Project
+
+Create a new directory and initialize Oxyde:
+
+```bash
+mkdir blog && cd blog
+oxyde init
+```
+
+When prompted:
+
+- Models module: `models`
+- Dialect: `sqlite`
+- Database URL: `sqlite:///blog.db`
+- Migrations directory: `migrations`
+
+## Step 2: Define Models
 
 Create `models.py`:
 
@@ -19,23 +37,20 @@ Create `models.py`:
 from datetime import datetime
 from oxyde import OxydeModel, Field
 
-class Author(OxydeModel):
-    class Meta:
-        is_table = True
-        table_name = "authors"
 
+class Author(OxydeModel):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
     bio: str | None = Field(default=None)
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
 
-
-class Post(OxydeModel):
     class Meta:
         is_table = True
-        table_name = "posts"
+        table_name = "authors"
 
+
+class Post(OxydeModel):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     content: str
@@ -44,14 +59,18 @@ class Post(OxydeModel):
     author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
 
+    class Meta:
+        is_table = True
+        table_name = "posts"
+
 
 class Tag(OxydeModel):
+    id: int | None = Field(default=None, db_pk=True)
+    name: str = Field(db_unique=True)
+
     class Meta:
         is_table = True
         table_name = "tags"
-
-    id: int | None = Field(default=None, db_pk=True)
-    name: str = Field(db_unique=True)
 ```
 
 Key concepts:
@@ -61,7 +80,21 @@ Key concepts:
 - `author: "Author"` creates a foreign key relationship
 - `db_on_delete="CASCADE"` deletes posts when author is deleted
 
-## Step 2: Create the Application
+## Step 3: Create and Apply Migrations
+
+Generate migrations from models:
+
+```bash
+oxyde makemigrations
+```
+
+Apply to create tables:
+
+```bash
+oxyde migrate
+```
+
+## Step 4: Create the Application
 
 Create `main.py`:
 
@@ -70,9 +103,12 @@ import asyncio
 from oxyde import db, F, Q
 from models import Author, Post, Tag
 
+
 async def main():
-    # Connect to SQLite database
-    async with db.connect("sqlite:///blog.db"):
+    # Connect to database
+    await db.init(default="sqlite:///blog.db")
+
+    try:
         # Create sample data
         await create_sample_data()
 
@@ -81,6 +117,8 @@ async def main():
 
         # Show statistics
         await show_stats()
+    finally:
+        await db.close()
 
 
 async def create_sample_data():
@@ -196,7 +234,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## Step 3: Run the Application
+## Step 5: Run the Application
 
 ```bash
 python main.py
@@ -226,16 +264,17 @@ Average views: 50.3
 Published posts: 2
 ```
 
-## Step 4: Add Transactions
+## Step 6: Add Transactions
 
-Update `main.py` to use transactions for data integrity:
+For operations that must succeed or fail together, use transactions:
 
 ```python
-from oxyde import db, atomic
+from oxyde.db import transaction
+
 
 async def transfer_post(post_id: int, new_author_id: int):
     """Transfer a post to a different author (atomic operation)."""
-    async with atomic():
+    async with transaction.atomic():
         # Get the post
         post = await Post.objects.get(id=post_id)
 
@@ -251,7 +290,7 @@ async def transfer_post(post_id: int, new_author_id: int):
 
 If any operation fails, the entire transaction rolls back.
 
-## Step 5: Add Joins
+## Step 7: Add Joins
 
 Load related data efficiently:
 

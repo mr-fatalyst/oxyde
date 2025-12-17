@@ -47,14 +47,32 @@ if TYPE_CHECKING:
     from oxyde.models.base import OxydeModel
 
 _TABLES: dict[str, type[OxydeModel]] = {}
+_PENDING_FK_MODELS: set[type[OxydeModel]] = set()
 
 
 def _model_key(model: type[OxydeModel]) -> str:
     return f"{model.__module__}.{model.__qualname__}"
 
 
+def _resolve_pending_fk_models() -> None:
+    """Try to resolve FK fields for all pending models."""
+    resolved = set()
+    for model in _PENDING_FK_MODELS:
+        model.__fk_fields_resolved__ = False  # type: ignore[attr-defined]
+        model._resolve_fk_fields()  # type: ignore[attr-defined]
+        if getattr(model, "__fk_fields_resolved__", False):
+            resolved.add(model)
+
+    _PENDING_FK_MODELS.difference_update(resolved)
+
+
 def register_table(model: type[OxydeModel], *, overwrite: bool = False) -> None:
-    """Register an ORM model that represents a database table."""
+    """Register an ORM model that represents a database table.
+
+    Note: FK resolution is NOT done here because model_fields is not yet
+    populated when this is called from __init_subclass__. FK resolution
+    is triggered from OxydeModelMeta.__new__ after Pydantic completes.
+    """
     key = _model_key(model)
     existing = _TABLES.get(key)
     if existing is model:
@@ -62,6 +80,11 @@ def register_table(model: type[OxydeModel], *, overwrite: bool = False) -> None:
     if existing is not None and not overwrite:
         raise ValueError(f"Table '{key}' is already registered")
     _TABLES[key] = model
+
+    # Add to pending if has FK fields (will be resolved later)
+    pending_fk = getattr(model, "__pending_fk_fields__", [])
+    if pending_fk:
+        _PENDING_FK_MODELS.add(model)
 
 
 def unregister_table(model: type[OxydeModel]) -> None:
@@ -90,6 +113,16 @@ def iter_tables() -> tuple[type[OxydeModel], ...]:
 def clear_registry() -> None:
     """Reset the registry (intended for tests)."""
     _TABLES.clear()
+    _PENDING_FK_MODELS.clear()
+
+
+def resolve_pending_fk() -> None:
+    """Resolve FK fields for all pending models.
+
+    Called from OxydeModelMeta.__new__ after Pydantic completes model creation.
+    At this point model_fields is populated and FK fields can be resolved.
+    """
+    _resolve_pending_fk_models()
 
 
 __all__ = [
@@ -98,4 +131,5 @@ __all__ = [
     "registered_tables",
     "iter_tables",
     "clear_registry",
+    "resolve_pending_fk",
 ]

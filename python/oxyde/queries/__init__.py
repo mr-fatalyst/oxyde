@@ -51,11 +51,10 @@ from .base import SupportsExecute
 from .expressions import F
 from .manager import QueryManager
 from .q import Q
-from .select import Query, SelectQuery
+from .select import Query
 
 __all__ = [
     "Query",
-    "SelectQuery",
     "F",
     "Q",
     "SupportsExecute",

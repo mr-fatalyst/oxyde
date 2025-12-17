@@ -219,6 +219,33 @@ class TestSerializeValueForIR:
         assert serialized["a"] == 1
         assert "__expr__" in serialized["b"]
 
+    def test_serialize_datetime_types(self):
+        """Test serializing datetime types that msgpack cannot handle."""
+        from datetime import date, datetime, time, timedelta
+
+        dt = datetime(2024, 1, 15, 12, 30, 45)
+        assert _serialize_value_for_ir(dt) == "2024-01-15 12:30:45"
+
+        d = date(2024, 1, 15)
+        assert _serialize_value_for_ir(d) == "2024-01-15"
+
+        t = time(12, 30, 45)
+        assert _serialize_value_for_ir(t) == "12:30:45"
+
+        td = timedelta(hours=1, minutes=30)
+        assert _serialize_value_for_ir(td) == 5400.0  # total_seconds
+
+    def test_serialize_uuid_decimal(self):
+        """Test serializing UUID and Decimal types."""
+        from decimal import Decimal
+        from uuid import UUID
+
+        u = UUID("12345678-1234-5678-1234-567812345678")
+        assert _serialize_value_for_ir(u) == "12345678-1234-5678-1234-567812345678"
+
+        dec = Decimal("123.45")
+        assert _serialize_value_for_ir(dec) == "123.45"
+
 
 class TestQExpressionBasics:
     """Test basic Q() expression functionality."""
@@ -423,10 +450,10 @@ class TestQValidation:
     def test_q_with_invalid_lookup_raises(self):
         """Test Q() with invalid lookup raises error."""
         registered_tables()
-        from oxyde.exceptions import LookupError
+        from oxyde.exceptions import FieldLookupError
 
         q = Q(name__invalid="value")
-        with pytest.raises(LookupError):
+        with pytest.raises(FieldLookupError):
             q.to_filter_node(TestModel)
 
     def test_q_and_with_non_q_raises(self):

@@ -1,4 +1,9 @@
-"""Execution mixin for query building."""
+"""Execution mixin for query building.
+
+Provides fetch_models(), fetch_all(), fetch_one() and other execution methods.
+JOIN fields (author__id, author__name) are handled via extra="ignore" in
+OxydeModel.model_config - no sanitization needed.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 import msgpack
 
 from oxyde.core import ir
-from oxyde.exceptions import LookupError
+from oxyde.exceptions import FieldLookupError
 from oxyde.queries.base import (
     _TYPE_ADAPTER_CACHE,
     _TYPE_ADAPTER_LOCK,
@@ -60,7 +65,25 @@ class ExecutionMixin:
     async def fetch_all(self, client: SupportsExecute) -> list[dict[str, Any]]:
         """Execute query and return all results as dicts."""
         result_bytes = await self.fetch_msgpack(client)
-        rows = msgpack.unpackb(result_bytes, raw=False)
+        data = msgpack.unpackb(result_bytes, raw=False)
+
+        # Handle columnar format: (columns, rows) tuple from Rust
+        # This is more memory-efficient than list of dicts
+        if isinstance(data, (list, tuple)) and len(data) == 2:
+            first, second = data
+            if isinstance(first, list) and all(isinstance(c, str) for c in first):
+                # Columnar format: first is column names, second is rows
+                columns = first
+                row_values = second
+                # Convert to dicts via zip (fast C implementation)
+                rows = [dict(zip(columns, row)) for row in row_values]
+            else:
+                # Old format: list of dicts
+                rows = data
+        else:
+            # Old format or empty
+            rows = data if isinstance(data, list) else []
+
         if self._result_mode == "dict":
             return rows
         if self._result_mode == "list":
@@ -88,12 +111,25 @@ class ExecutionMixin:
         query_ir = self.to_ir()
         return await client.execute(query_ir)
 
-    async def fetch_models(self, client: SupportsExecute) -> list[OxydeModel]:
-        """Execute query and return results as model instances."""
-        result_bytes = await self.fetch_msgpack(client)
-        rows = msgpack.unpackb(result_bytes, raw=False)
-        self._sanitize_join_placeholders(rows)
+    async def fetch_rows(self, client: SupportsExecute) -> list[dict[str, Any]]:
+        """Execute query and return rows as list[dict].
 
+        Uses direct msgpack path (no batching) for maximum speed on simple queries.
+        """
+        result_bytes = await self.fetch_msgpack(client)
+        data = msgpack.unpackb(result_bytes, raw=False)
+        if isinstance(data, (list, tuple)) and len(data) == 2:
+            first, second = data
+            if isinstance(first, list) and all(isinstance(c, str) for c in first):
+                return [dict(zip(first, row)) for row in second]
+        return data if isinstance(data, list) else []
+
+    async def fetch_models(self, client: SupportsExecute) -> list[OxydeModel]:
+        """Execute query and return results as model instances.
+
+        Uses direct PyDict path (no msgpack) when available.
+        JOIN fields (author__id, author__name) are extracted and hydrated.
+        """
         # Get or create cached TypeAdapter (thread-safe)
         model_class = self.model_class
         if model_class not in _TYPE_ADAPTER_CACHE:
@@ -105,21 +141,39 @@ class ExecutionMixin:
                     _TYPE_ADAPTER_CACHE[model_class] = TypeAdapter(list[model_class])
 
         adapter = _TYPE_ADAPTER_CACHE[model_class]
+
+        # Use dedup batched execution for JOIN queries (saves ~38% memory)
+        if self._join_specs and hasattr(client, "execute_batched_dedup"):
+            result = await client.execute_batched_dedup(self.to_ir())
+            if result:
+                main_rows = result.get("main", [])
+                relations = result.get("relations", {})
+
+                # Validate main models
+                models = adapter.validate_python(main_rows)
+
+                # Hydrate relations from dedup format
+                if models and relations:
+                    self._hydrate_from_dedup(models, main_rows, relations)
+
+                if self._prefetch_paths:
+                    await self._run_prefetch(models, client)
+                return models
+            return []
+
+        # Fallback to regular fetch_rows for non-JOIN queries
+        rows = await self.fetch_rows(client)
+
+        # Validate main models (Pydantic ignores extra fields like author__id)
         models = adapter.validate_python(rows)
-        if self._join_specs:
-            self._hydrate_join_results(models, rows)
+
+        # Hydrate JOIN relations if present (old path)
+        if self._join_specs and rows:
+            self._hydrate_from_columnar(models, rows)
+
         if self._prefetch_paths:
             await self._run_prefetch(models, client)
         return models
-
-    def _sanitize_join_placeholders(self, rows: list[dict[str, Any]]) -> None:
-        """Remove join placeholder values from rows."""
-        if not rows or not self._join_specs:
-            return
-        for row in rows:
-            for spec in self._join_specs:
-                if spec.attr_name in row:
-                    row[spec.attr_name] = None
 
     def all(
         self,
@@ -127,7 +181,15 @@ class ExecutionMixin:
         using: str | None = None,
         client: SupportsExecute | None = None,
     ):
-        """Execute query and return results based on result mode."""
+        """Execute query and return results as Pydantic models.
+
+        Args:
+            using: Name of connection from registry
+            client: Explicit client for execution
+
+        Returns:
+            list[Model] - Pydantic model instances
+        """
         return self._execute(using=using, client=client)
 
     async def first(
@@ -218,6 +280,16 @@ class ExecutionMixin:
         result_bytes = await exec_client.execute(query_ir)
         result = msgpack.unpackb(result_bytes, raw=False)
 
+        # Handle columnar format: (columns, rows)
+        if isinstance(result, (list, tuple)) and len(result) == 2:
+            first, second = result
+            if isinstance(first, list) and all(isinstance(c, str) for c in first):
+                # Columnar format
+                rows = second
+                if rows:
+                    return bool(rows[0][0]) if rows[0] else False
+                return False
+
         # Result is [{exists: true/false}] or [[true/false]]
         if isinstance(result, list) and len(result) > 0:
             row = result[0]
@@ -249,35 +321,78 @@ class ExecutionMixin:
 
     # --- Join hydration methods ---
 
-    def _hydrate_join_results(
+    def _hydrate_from_columnar(
         self,
         models: list[OxydeModel],
         rows: list[dict[str, Any]],
     ) -> None:
-        """Hydrate joined relations on model instances."""
+        """Hydrate joined relations from columnar format.
+
+        Extracts related model data from prefixed columns (e.g., author__id)
+        and creates related model instances, caching by PK to avoid duplicates.
+
+        Args:
+            models: Main model instances (already validated)
+            rows: Row dicts with both main and related columns
+        """
         if not models or not self._join_specs:
             return
+
+        # Sort specs by depth (shallow first) for nested joins
         ordered_specs = sorted(
             self._join_specs,
             key=lambda spec: spec.path.count("__"),
         )
+
+        # Pre-compute prefixes and pk columns for each spec (avoid repeated string ops)
+        spec_meta = [
+            (spec, spec.result_prefix + "__", spec.result_prefix + "__id")
+            for spec in ordered_specs
+        ]
+
+        # Pre-compute which columns belong to which spec (do once, not per row)
+        # This avoids O(rows * columns * specs) startswith checks
+        first_row = rows[0] if rows else {}
+        spec_columns: dict[str, list[str]] = {}
+        for spec, prefix, _ in spec_meta:
+            cols = [k for k in first_row.keys() if k.startswith(prefix)]
+            spec_columns[spec.path] = cols
+
+        # Cache related models by (relation_path, pk) to reuse instances
+        related_cache: dict[tuple[str, Any], OxydeModel] = {}
+
+        # Hydrate each model from its corresponding row
         for model, row in zip(models, rows):
-            for spec in ordered_specs:
+            for spec, prefix, pk_col in spec_meta:
+                pk_value = row.get(pk_col)
+                cache_key = (spec.path, pk_value)
+
+                # Check cache first - avoid creating duplicate instances
+                if pk_value is not None and cache_key in related_cache:
+                    parent = self._resolve_join_parent(model, spec.parent_path)
+                    if parent is not None:
+                        setattr(parent, spec.attr_name, related_cache[cache_key])
+                    continue
+
+                # Extract related model fields using pre-computed column list
+                cols = spec_columns[spec.path]
+                prefix_len = len(prefix)
+                related_data = {col[prefix_len:]: row[col] for col in cols}
+                has_data = any(v is not None for v in related_data.values())
+
+                # Find parent model for nested joins
                 parent = self._resolve_join_parent(model, spec.parent_path)
                 if parent is None:
                     continue
-                payload: dict[str, Any] = {}
-                for field, _ in spec.columns:
-                    key = f"{spec.result_prefix}__{field}"
-                    if key in row:
-                        payload[field] = row.get(key)
-                    else:
-                        payload[field] = None
-                if all(value is None for value in payload.values()):
+
+                # Create related instance or set None
+                if has_data:
+                    related_instance = spec.target_model(**related_data)
+                    if pk_value is not None:
+                        related_cache[cache_key] = related_instance
+                    setattr(parent, spec.attr_name, related_instance)
+                else:
                     setattr(parent, spec.attr_name, None)
-                    continue
-                related = spec.target_model(**payload)
-                setattr(parent, spec.attr_name, related)
 
     def _resolve_join_parent(
         self,
@@ -293,6 +408,75 @@ class ExecutionMixin:
             if current is None:
                 return None
         return current
+
+    def _hydrate_from_dedup(
+        self,
+        models: list[OxydeModel],
+        rows: list[dict[str, Any]],
+        relations: dict[str, dict[Any, dict[str, Any]]],
+    ) -> None:
+        """Hydrate joined relations from dedup format.
+
+        The dedup format stores each related entity once:
+        relations = {"user": {1: {"id": 1, "name": "Alice"}, 2: {...}}}
+
+        Args:
+            models: Main model instances (already validated)
+            rows: Main rows (contain FK columns like user_id)
+            relations: Dict of relation_path -> {pk: related_data}
+        """
+        if not models or not self._join_specs:
+            return
+
+        # Sort specs by depth (shallow first) for nested joins
+        ordered_specs = sorted(
+            self._join_specs,
+            key=lambda spec: spec.path.count("__"),
+        )
+
+        # Cache created model instances to reuse same object
+        related_cache: dict[tuple[str, Any], OxydeModel] = {}
+
+        for model, row in zip(models, rows):
+            for spec in ordered_specs:
+                path = spec.path
+                rel_data = relations.get(path, {})
+
+                # Get FK value from main row
+                fk_col = spec.source_column  # e.g., "user_id"
+                pk_value = row.get(fk_col)
+
+                if pk_value is None:
+                    # Null FK - set relation to None
+                    parent = self._resolve_join_parent(model, spec.parent_path)
+                    if parent is not None:
+                        setattr(parent, spec.attr_name, None)
+                    continue
+
+                cache_key = (path, pk_value)
+
+                # Check if we already created this instance
+                if cache_key in related_cache:
+                    parent = self._resolve_join_parent(model, spec.parent_path)
+                    if parent is not None:
+                        setattr(parent, spec.attr_name, related_cache[cache_key])
+                    continue
+
+                # Get related data from dedup dict
+                related_row = rel_data.get(pk_value)
+                if related_row:
+                    # Create related model instance
+                    related_instance = spec.target_model(**related_row)
+                    related_cache[cache_key] = related_instance
+
+                    parent = self._resolve_join_parent(model, spec.parent_path)
+                    if parent is not None:
+                        setattr(parent, spec.attr_name, related_instance)
+                else:
+                    # No data found for this PK
+                    parent = self._resolve_join_parent(model, spec.parent_path)
+                    if parent is not None:
+                        setattr(parent, spec.attr_name, None)
 
     # --- Prefetch methods ---
 
@@ -319,13 +503,35 @@ class ExecutionMixin:
         relation_name = segments[0]
         relation = current_model._db_meta.relations.get(relation_name)
         if relation is None:
-            raise LookupError(
+            raise FieldLookupError(
                 f"{current_model.__name__} has no relation '{relation_name}'"
             )
+
+        # Handle many_to_many separately
+        if relation.kind == "many_to_many":
+            await self._prefetch_m2m(
+                parents, client, relation, current_model, relation_name
+            )
+            # Handle nested prefetch for M2M
+            if len(segments) > 1:
+                target_model = _resolve_registered_model(relation.target)
+                all_targets: list[OxydeModel] = []
+                for parent in parents:
+                    targets = getattr(parent, relation_name, [])
+                    all_targets.extend(targets)
+                if all_targets:
+                    await self._prefetch_path(
+                        all_targets, client, segments[1:], target_model
+                    )
+            return
+
+        # one_to_many handling
         if relation.kind != "one_to_many":
-            raise LookupError(f"prefetch('{relation_name}') supports one-to-many only")
+            raise FieldLookupError(
+                f"prefetch('{relation_name}') supports one-to-many and many-to-many only"
+            )
         if relation.remote_field is None:
-            raise LookupError(
+            raise FieldLookupError(
                 f"Relation '{relation_name}' is missing a remote_field definition"
             )
         target_model = _resolve_registered_model(relation.target)
@@ -376,3 +582,115 @@ class ExecutionMixin:
                     segments[1:],
                     target_model,
                 )
+
+    async def _prefetch_m2m(
+        self,
+        parents: list[OxydeModel],
+        client: SupportsExecute,
+        relation: Any,  # RelationInfo
+        source_model: type[OxydeModel],
+        relation_name: str,
+    ) -> None:
+        """Prefetch many-to-many relation."""
+        from oxyde.models.registry import registered_tables
+
+        if not parents or not relation.through:
+            return
+
+        # Find through model in registry
+        through_model: type[OxydeModel] | None = None
+        tables = registered_tables()
+        for key, model in tables.items():
+            if (
+                key.endswith(f".{relation.through}")
+                or model.__name__ == relation.through
+            ):
+                through_model = model
+                break
+
+        if through_model is None:
+            raise FieldLookupError(
+                f"Through model '{relation.through}' not found in registry"
+            )
+
+        through_model.ensure_field_metadata()
+        target_model = _resolve_registered_model(relation.target)
+
+        # Find FK fields in through model
+        source_fk_column: str | None = None
+        target_fk_column: str | None = None
+        source_key = f".{source_model.__name__}"
+        target_key = f".{target_model.__name__}"
+
+        for meta in through_model._db_meta.field_metadata.values():
+            if meta.foreign_key:
+                if meta.foreign_key.target.endswith(source_key):
+                    source_fk_column = meta.foreign_key.column_name
+                elif meta.foreign_key.target.endswith(target_key):
+                    target_fk_column = meta.foreign_key.column_name
+
+        if source_fk_column is None or target_fk_column is None:
+            raise FieldLookupError(
+                f"Through model '{relation.through}' must have FK fields "
+                f"to both '{source_model.__name__}' and '{target_model.__name__}'"
+            )
+
+        # Collect parent IDs
+        parent_pk = _primary_key_meta(source_model)
+        parent_ids = [
+            getattr(parent, parent_pk.name)
+            for parent in parents
+            if getattr(parent, parent_pk.name, None) is not None
+        ]
+        if not parent_ids:
+            return
+
+        # Deduplicate
+        unique_ids: list[Any] = []
+        seen: set[Any] = set()
+        for value in parent_ids:
+            if value not in seen:
+                seen.add(value)
+                unique_ids.append(value)
+
+        # Query through table for links
+        # Use synthetic FK column names (e.g., "post_id", "tag_id") not relation names
+        filter_kwargs = {f"{source_fk_column}__in": unique_ids}
+        links = await through_model.objects.filter(**filter_kwargs).all(client=client)
+
+        # Collect target IDs from links using FK column names
+        target_ids: list[Any] = []
+        for link in links:
+            target_id = getattr(link, target_fk_column, None)
+            if target_id is not None and target_id not in target_ids:
+                target_ids.append(target_id)
+
+        # Query target model
+        target_pk = _primary_key_meta(target_model)
+        targets_by_pk: dict[Any, OxydeModel] = {}
+        if target_ids:
+            filter_kwargs = {f"{target_pk.name}__in": target_ids}
+            targets = await target_model.objects.filter(**filter_kwargs).all(
+                client=client
+            )
+            for target in targets:
+                pk_val = getattr(target, target_pk.name)
+                targets_by_pk[pk_val] = target
+
+        # Group targets by source ID using FK column names
+        grouped: dict[Any, list[OxydeModel]] = {}
+        for link in links:
+            source_id = getattr(link, source_fk_column, None)
+            target_id = getattr(link, target_fk_column, None)
+            if source_id is not None and target_id in targets_by_pk:
+                grouped.setdefault(source_id, []).append(targets_by_pk[target_id])
+
+        # Assign to parents
+        descriptor = getattr(source_model, relation_name, None)
+        for parent in parents:
+            parent_id = getattr(parent, parent_pk.name, None)
+            values = grouped.get(parent_id, [])
+            if hasattr(descriptor, "__set__"):
+                descriptor.__set__(parent, list(values))
+            else:
+                parent.__dict__[relation_name] = list(values)

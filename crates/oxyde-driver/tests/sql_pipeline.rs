@@ -31,6 +31,7 @@ async fn sqlite_end_to_end_pipeline() {
         op: Operation::Insert,
         table: "users".into(),
         cols: None,
+        col_types: None,
         filter_tree: None,
         limit: None,
         offset: None,
@@ -66,6 +67,7 @@ async fn sqlite_end_to_end_pipeline() {
         op: Operation::Select,
         table: "users".into(),
         cols: Some(vec!["id".into(), "name".into()]),
+        col_types: None,
         filter_tree: Some(FilterNode::Condition(Filter {
             field: "id".into(),
             operator: "=".into(),
@@ -97,7 +99,7 @@ async fn sqlite_end_to_end_pipeline() {
         pk_column: None,
     };
     let (select_sql, select_params) = build_sql(&select_ir, Dialect::Sqlite).unwrap();
-    let rows = execute_query(&pool_name, &select_sql, &select_params)
+    let rows = execute_query(&pool_name, &select_sql, &select_params, None)
         .await
         .unwrap();
     assert_eq!(rows.len(), 1);

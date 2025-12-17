@@ -9,6 +9,7 @@ import msgpack
 from oxyde.core import ir
 from oxyde.queries.base import (
     SupportsExecute,
+    _build_col_types,
     _map_values_to_columns,
     _model_key,
     _resolve_execution_client,
@@ -54,10 +55,12 @@ class MutationMixin:
             await User.objects.filter(is_active=True).increment("login_count")
         """
         exec_client = await _resolve_execution_client(using, client)
+        col_types = _build_col_types(self.model_class)
         update_ir = ir.build_update_ir(
             table=self.model_class.get_table_name(),
             values={field: _serialize_value_for_ir(F(field) + by)},
             filter_tree=self._build_filter_tree(),
+            col_types=col_types,
             model=_model_key(self.model_class),
         )
         result_bytes = await exec_client.execute(update_ir)
@@ -87,6 +90,7 @@ class MutationMixin:
             await User.objects.filter(is_active=False).update(status="archived")
         """
         exec_client = await _resolve_execution_client(using, client)
+        col_types = _build_col_types(self.model_class)
         mapped_values = _map_values_to_columns(self.model_class, values)
         serialized_values = {
             key: _serialize_value_for_ir(value) for key, value in mapped_values.items()
@@ -95,6 +99,7 @@ class MutationMixin:
             table=self.model_class.get_table_name(),
             values=serialized_values,
             filter_tree=self._build_filter_tree(),
+            col_types=col_types,
             model=_model_key(self.model_class),
         )
         result_bytes = await exec_client.execute(update_ir)

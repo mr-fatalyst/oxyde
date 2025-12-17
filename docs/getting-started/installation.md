@@ -57,26 +57,6 @@ import oxyde
 print(oxyde.__version__)
 ```
 
-Or run a quick test:
-
-```python
-import asyncio
-from oxyde import OxydeModel, Field, db
-
-class Test(OxydeModel):
-    class Meta:
-        is_table = True
-
-    id: int | None = Field(default=None, db_pk=True)
-    name: str
-
-async def main():
-    async with db.connect("sqlite:///:memory:"):
-        print("Oxyde is working!")
-
-asyncio.run(main())
-```
-
 ## Database Drivers
 
 Oxyde uses SQLx under the hood. Database drivers are included — no additional installation required.
@@ -87,22 +67,6 @@ Oxyde uses SQLx under the hood. Database drivers are included — no additional 
 | SQLite | `sqlite:///path/to/file.db` or `sqlite:///:memory:` |
 | MySQL | `mysql://user:pass@host:3306/db` |
 
-## Development Setup
-
-For contributing to Oxyde:
-
-```bash
-# Install development dependencies
-cd python
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Run Rust tests
-cd ..
-cargo test --workspace
-```
 
 ## Next Steps
 

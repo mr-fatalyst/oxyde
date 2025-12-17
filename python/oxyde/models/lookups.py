@@ -58,11 +58,12 @@ Example:
 from __future__ import annotations
 
 import collections.abc
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from oxyde.exceptions import FieldError, LookupError, LookupValueError
+from oxyde.exceptions import FieldError, FieldLookupError, FieldLookupValueError
 from oxyde.models.metadata import ColumnMeta
 from oxyde.models.utils import _unpack_annotated, _unwrap_optional
 
@@ -87,6 +88,11 @@ BOOL_LOOKUPS: list[str] = []
 GENERIC_LOOKUPS: list[str] = []
 COMMON_LOOKUPS = ["in", "isnull"]
 DATE_PART_LOOKUPS = ["year", "month", "day"]
+
+# All known lookups for path parsing
+ALL_LOOKUPS = frozenset(
+    ["exact"] + STRING_LOOKUPS + NUMERIC_LOOKUPS + COMMON_LOOKUPS + DATE_PART_LOOKUPS
+)
 
 
 def _lookup_category(meta: ColumnMeta) -> str:
@@ -133,13 +139,121 @@ def _allowed_lookups_for_meta(meta: ColumnMeta) -> list[str]:
 
 
 def _split_lookup_key(key: str) -> tuple[str, str]:
-    """Split field__lookup key into field name and lookup type."""
+    """Split field__lookup key into field name and lookup type.
+
+    For simple cases like "name__contains", returns ("name", "contains").
+    For nested paths like "user__age__gte", use _parse_lookup_path instead.
+    """
     if "__" not in key:
         return key, "exact"
     field_name, lookup = key.split("__", 1)
     if not field_name:
-        raise LookupError("Lookup key must include a field name before '__'")
+        raise FieldLookupError("Lookup key must include a field name before '__'")
     return field_name, lookup
+
+
+def _parse_lookup_path(key: str) -> tuple[list[str], str]:
+    """Parse a lookup key into field path and lookup type.
+
+    Handles nested paths like "user__age__gte" -> (["user", "age"], "gte").
+
+    Args:
+        key: Lookup key like "name", "name__contains", or "user__age__gte"
+
+    Returns:
+        Tuple of (field_path, lookup_type) where field_path is a list of field names
+
+    Examples:
+        "name" -> (["name"], "exact")
+        "name__contains" -> (["name"], "contains")
+        "user__age" -> (["user", "age"], "exact")
+        "user__age__gte" -> (["user", "age"], "gte")
+        "user__profile__city__icontains" -> (["user", "profile", "city"], "icontains")
+    """
+    if "__" not in key:
+        return [key], "exact"
+
+    parts = key.split("__")
+    if not parts[0]:
+        raise FieldLookupError("Lookup key must include a field name before '__'")
+
+    # Check if last part is a known lookup
+    if parts[-1] in ALL_LOOKUPS:
+        return parts[:-1], parts[-1]
+
+    # No lookup suffix, treat entire path as field path with "exact" lookup
+    return parts, "exact"
+
+
+@dataclass
+class ResolvedPath:
+    """Result of resolving a field path through FK relationships."""
+
+    # List of (relation_name, target_model) for each FK traversal
+    joins: list[tuple[str, type[OxydeModel]]]
+    # Final field name (e.g., "age" in "user__age")
+    final_field: str
+    # Final model class where final_field is defined
+    final_model: type[OxydeModel]
+    # Column metadata for the final field
+    column_meta: ColumnMeta
+
+
+def _resolve_field_path(
+    model_class: type[OxydeModel],
+    field_path: list[str],
+) -> ResolvedPath:
+    """Resolve a field path through FK relationships.
+
+    For "user__age" on Post model:
+    1. Post.user is FK to User
+    2. User.age is the final field
+
+    Args:
+        model_class: Starting model (e.g., Post)
+        field_path: List of field names (e.g., ["user", "age"])
+
+    Returns:
+        ResolvedPath with joins info and final field metadata
+
+    Raises:
+        FieldError: If field doesn't exist
+        FieldLookupError: If path traverses non-FK field
+    """
+    from oxyde.queries.base import _resolve_registered_model
+
+    joins: list[tuple[str, type[OxydeModel]]] = []
+    current_model = model_class
+
+    # Traverse all but the last field (those must be FK fields)
+    for i, field_name in enumerate(field_path[:-1]):
+        current_model.ensure_field_metadata()
+        meta = current_model._db_meta.field_metadata.get(field_name)
+
+        if meta is None:
+            raise FieldError(f"{current_model.__name__} has no field '{field_name}'")
+
+        if meta.foreign_key is None:
+            raise FieldLookupError(
+                f"Cannot traverse '{field_name}' in path "
+                f"'{'.'.join(field_path)}': not a foreign key"
+            )
+
+        # Resolve target model
+        target_model = _resolve_registered_model(meta.foreign_key.target)
+        joins.append((field_name, target_model))
+        current_model = target_model
+
+    # Resolve the final field
+    final_field = field_path[-1]
+    column_meta = _resolve_column_meta(current_model, final_field)
+
+    return ResolvedPath(
+        joins=joins,
+        final_field=final_field,
+        final_model=current_model,
+        column_meta=column_meta,
+    )
 
 
 def _resolve_column_meta(model_class: type[OxydeModel], field_name: str) -> ColumnMeta:
@@ -186,24 +300,24 @@ def _build_lookup_conditions(
 
     if lookup in {"gt", "gte", "lt", "lte"}:
         if value is None:
-            raise LookupValueError(f"Lookup '{lookup}' requires a non-null value")
+            raise FieldLookupValueError(f"Lookup '{lookup}' requires a non-null value")
         op_map = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
         return [Condition(field_name, op_map[lookup], value, column=db_column)]
 
     if lookup == "in":
         if value is None:
-            raise LookupValueError("Lookup 'in' requires an iterable of values")
+            raise FieldLookupValueError("Lookup 'in' requires an iterable of values")
         if isinstance(value, (str, bytes)):
-            raise LookupValueError(
+            raise FieldLookupValueError(
                 "Lookup 'in' does not accept string values; use a sequence"
             )
         if not isinstance(value, collections.abc.Iterable):
-            raise LookupValueError("Lookup 'in' requires an iterable value")
+            raise FieldLookupValueError("Lookup 'in' requires an iterable value")
         return [Condition(field_name, "IN", list(value), column=db_column)]
 
     if lookup in ("between", "range"):
         if not isinstance(value, (tuple, list)) or len(value) != 2:
-            raise LookupValueError(
+            raise FieldLookupValueError(
                 f"Lookup '{lookup}' requires a tuple/list of two values"
             )
         return [
@@ -235,7 +349,7 @@ def _build_lookup_conditions(
         "iendswith",
     }:
         if not isinstance(value, str):
-            raise LookupValueError(f"Lookup '{lookup}' requires a string value")
+            raise FieldLookupValueError(f"Lookup '{lookup}' requires a string value")
 
         operator = "LIKE"
         if lookup in {"icontains", "istartswith", "iendswith"}:
@@ -258,7 +372,7 @@ def _build_lookup_conditions(
 
     if lookup == "iexact":
         if not isinstance(value, str):
-            raise LookupValueError("Lookup 'iexact' requires a string value")
+            raise FieldLookupValueError("Lookup 'iexact' requires a string value")
         return [Condition(field_name, "ILIKE", value, column=column_meta.db_column)]
 
     if lookup == "year":
@@ -270,7 +384,7 @@ def _build_lookup_conditions(
     if lookup == "day":
         return _build_day_conditions(field_name, value, column_meta)
 
-    raise LookupError(f"Unsupported lookup '{lookup}' for field '{field_name}'")
+    raise FieldLookupError(f"Unsupported lookup '{lookup}' for field '{field_name}'")
 
 
 def _ensure_date_inputs(value: Any, expected: int, label: str) -> tuple[int, ...]:
@@ -280,7 +394,7 @@ def _ensure_date_inputs(value: Any, expected: int, label: str) -> tuple[int, ...
     if isinstance(value, (tuple, list)) and len(value) == expected:
         if all(isinstance(v, int) for v in value):
             return tuple(value)  # type: ignore[return-value]
-    raise LookupValueError(f"Lookup '{label}' expects {expected} integer value(s)")
+    raise FieldLookupValueError(f"Lookup '{label}' expects {expected} integer value(s)")
 
 
 def _build_year_conditions(
@@ -297,7 +411,7 @@ def _build_year_conditions(
         start = date(year, 1, 1)
         end = date(year + 1, 1, 1)
     else:
-        raise LookupError(
+        raise FieldLookupError(
             f"Lookup 'year' is not supported for field type {meta.python_type}"
         )
     return [
@@ -314,7 +428,7 @@ def _build_month_conditions(
 
     year, month = _ensure_date_inputs(value, 2, "month")
     if not 1 <= month <= 12:
-        raise LookupValueError("Lookup 'month' requires month in range 1..12")
+        raise FieldLookupValueError("Lookup 'month' requires month in range 1..12")
     if isinstance(meta.python_type, type) and issubclass(meta.python_type, datetime):
         start = datetime(year, month, 1)
         end_month = month + 1
@@ -332,7 +446,7 @@ def _build_month_conditions(
             end_year += 1
         end = date(end_year, end_month, 1)
     else:
-        raise LookupError(
+        raise FieldLookupError(
             f"Lookup 'month' is not supported for field type {meta.python_type}"
         )
     return [
@@ -358,11 +472,11 @@ def _build_day_conditions(
             start = date(year, month, day)
             end = start + timedelta(days=1)
         else:
-            raise LookupError(
+            raise FieldLookupError(
                 f"Lookup 'day' is not supported for field type {meta.python_type}"
             )
     except ValueError as exc:  # invalid date
-        raise LookupValueError(str(exc)) from exc
+        raise FieldLookupValueError(str(exc)) from exc
     return [
         Condition(field_name, ">=", start.isoformat(), column=meta.db_column),
         Condition(field_name, "<", end.isoformat(), column=meta.db_column),
@@ -377,9 +491,13 @@ __all__ = [
     "GENERIC_LOOKUPS",
     "COMMON_LOOKUPS",
     "DATE_PART_LOOKUPS",
+    "ALL_LOOKUPS",
+    "ResolvedPath",
     "_lookup_category",
     "_allowed_lookups_for_meta",
     "_split_lookup_key",
+    "_parse_lookup_path",
+    "_resolve_field_path",
     "_resolve_column_meta",
     "_build_lookup_conditions",
     "_ensure_date_inputs",

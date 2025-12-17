@@ -1,6 +1,6 @@
 [project]
 name = "oxyde"
-version = "0.1.0"
+version = "0.2.0"
 description = "High-performance async Python ORM with Rust core"
 readme = "README.md"
 license = {text = "MIT"}
@@ -41,7 +41,7 @@ dev = [
 ]
 
 [project.scripts]
-oxyde = "oxyde.migrations.cli:app"
+oxyde = "oxyde.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/mr-fatalyst/oxyde"

@@ -42,13 +42,63 @@ Caching:
 
 from __future__ import annotations
 
+import datetime
+import decimal
 import threading
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
+import uuid
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Protocol,
+    TypeVar,
+    get_args,
+    get_origin,
+    runtime_checkable,
+)
 
 from pydantic import TypeAdapter
 
-from oxyde.exceptions import LookupError, ManagerError
+from oxyde.exceptions import FieldLookupError, ManagerError
 from oxyde.models.registry import registered_tables
+
+# Mapping from Python types to IR type hints for Rust type-aware binding/decoding
+_PYTHON_TYPE_TO_IR: dict[type, str] = {
+    int: "int",
+    str: "str",
+    float: "float",
+    bool: "bool",
+    bytes: "bytes",
+    bytearray: "bytes",
+    datetime.datetime: "datetime",
+    datetime.date: "date",
+    datetime.time: "time",
+    datetime.timedelta: "timedelta",
+    decimal.Decimal: "decimal",
+    uuid.UUID: "uuid",
+}
+
+
+def _get_ir_type(python_type: Any) -> str | None:
+    """Convert Python type to IR type hint string.
+
+    Returns None for unsupported types (fallback to dynamic decode in Rust).
+    Handles Optional[T] by unwrapping the inner type.
+    """
+    # Handle Optional[T] and Union types
+    origin = get_origin(python_type)
+    if origin is not None:
+        # For Union types (including Optional), try each arg
+        args = get_args(python_type)
+        for arg in args:
+            if arg is type(None):
+                continue
+            result = _PYTHON_TYPE_TO_IR.get(arg)
+            if result:
+                return result
+        return None
+
+    return _PYTHON_TYPE_TO_IR.get(python_type)
+
 
 if TYPE_CHECKING:
     from oxyde.models.base import OxydeModel
@@ -86,7 +136,7 @@ def _resolve_registered_model(model_key: str) -> type[OxydeModel]:
     for key, table_model in tables.items():
         if key.endswith(f".{model_key}") or table_model.__name__ == model_key:
             return table_model
-    raise LookupError(f"Related model '{model_key}' is not registered")
+    raise FieldLookupError(f"Related model '{model_key}' is not registered")
 
 
 def _primary_key_meta(model_class: type[OxydeModel]):
@@ -95,16 +145,60 @@ def _primary_key_meta(model_class: type[OxydeModel]):
     for meta in model_class._db_meta.field_metadata.values():
         if meta.primary_key:
             return meta
-    raise LookupError(f"{model_class.__name__} has no primary key field")
+    raise FieldLookupError(f"{model_class.__name__} has no primary key field")
+
+
+def _build_col_types(
+    model_class: type[OxydeModel],
+    columns: list[str] | None = None,
+) -> dict[str, str] | None:
+    """Build col_types mapping for IR from model metadata.
+
+    Args:
+        model_class: The model class to get types from
+        columns: Optional list of column names to include (None = all columns)
+
+    Returns:
+        Dict mapping column name to IR type, or None if no type hints
+    """
+    model_class.ensure_field_metadata()
+    field_metadata = model_class._db_meta.field_metadata
+    if not field_metadata:
+        return None
+
+    col_types: dict[str, str] = {}
+    for meta in field_metadata.values():
+        # Skip virtual relation fields
+        if meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
+            continue
+        # Skip if columns filter specified and this column not in it
+        if columns is not None and meta.db_column not in columns:
+            continue
+        # Use explicit db_type if specified, otherwise infer from python_type
+        if meta.db_type:
+            col_types[meta.db_column] = meta.db_type.upper()
+        else:
+            ir_type = _get_ir_type(meta.python_type)
+            if ir_type:
+                col_types[meta.db_column] = ir_type
+
+    return col_types if col_types else None
 
 
 def _collect_model_columns(model_class: type[OxydeModel]) -> list[tuple[str, str]]:
-    """Collect all (field_name, db_column) pairs from model."""
+    """Collect all (field_name, db_column) pairs from model.
+
+    Excludes virtual relation fields (db_reverse_fk, db_m2m) that don't
+    have corresponding database columns.
+    """
     model_class.ensure_field_metadata()
-    return [
-        (meta.name, meta.db_column)
-        for meta in model_class._db_meta.field_metadata.values()
-    ]
+    result = []
+    for meta in model_class._db_meta.field_metadata.values():
+        # Skip virtual relation fields (db_reverse_fk, db_m2m)
+        if meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
+            continue
+        result.append((meta.name, meta.db_column))
+    return result
 
 
 def _map_values_to_columns(

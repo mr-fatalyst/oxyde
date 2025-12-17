@@ -20,9 +20,10 @@ Every model has an `objects` manager:
 
 ```python
 class User(OxydeModel):
+    # ... fields ...
+
     class Meta:
         is_table = True
-    # ...
 
 # Access via Model.objects
 users = await User.objects.all()

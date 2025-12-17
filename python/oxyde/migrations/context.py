@@ -59,6 +59,8 @@ class MigrationContext:
         name: str,
         fields: list[dict[str, Any]],
         indexes: list[dict[str, Any]] | None = None,
+        foreign_keys: list[dict[str, Any]] | None = None,
+        checks: list[dict[str, Any]] | None = None,
     ) -> None:
         """Create a table.
 
@@ -66,6 +68,8 @@ class MigrationContext:
             name: Table name
             fields: List of field definitions
             indexes: List of index definitions (optional)
+            foreign_keys: List of foreign key definitions (optional)
+            checks: List of check constraint definitions (optional)
         """
         op = {
             "type": "create_table",
@@ -73,6 +77,8 @@ class MigrationContext:
                 "name": name,
                 "fields": fields,
                 "indexes": indexes or [],
+                "foreign_keys": foreign_keys or [],
+                "checks": checks or [],
                 "comment": None,
             },
         }
@@ -435,9 +441,14 @@ class MigrationContext:
         This is called by the executor after upgrade() completes.
 
         Transaction behavior by dialect:
-        - PostgreSQL: DDL is transactional, wrapped in BEGIN/COMMIT
-        - SQLite: DDL is transactional, wrapped in BEGIN/COMMIT
+        - PostgreSQL: DDL is transactional, uses Rust transaction API
+        - SQLite: DDL is transactional, uses Rust transaction API
         - MySQL: DDL is NOT transactional (implicit commit), no wrapping
+
+        IMPORTANT: We use the Rust transaction API (begin_transaction/execute_in_transaction)
+        instead of raw BEGIN/COMMIT SQL because the connection pool may assign different
+        connections to different queries. The Rust transaction API ensures all queries
+        in a transaction use the same connection.
         """
         if not hasattr(self, "_sql_statements"):
             return
@@ -445,29 +456,41 @@ class MigrationContext:
         if self._db_conn is None:
             raise RuntimeError("Cannot execute SQL: no database connection provided")
 
+        from oxyde.core import (
+            begin_transaction,
+            commit_transaction,
+            execute_in_transaction,
+            rollback_transaction,
+        )
         from oxyde.core.ir import build_raw_sql_ir
 
         # MySQL doesn't support transactional DDL
         use_transaction = self._dialect in ("postgres", "sqlite")
 
+        tx_id = None
         try:
             if use_transaction:
-                begin_ir = build_raw_sql_ir(sql="BEGIN")
-                await self._db_conn.execute(begin_ir)
+                tx_id = await begin_transaction(self._db_conn.name)
 
             for sql in self._sql_statements:
                 sql_ir = build_raw_sql_ir(sql=sql)
-                await self._db_conn.execute(sql_ir)
+                if tx_id is not None:
+                    import msgpack
 
-            if use_transaction:
-                commit_ir = build_raw_sql_ir(sql="COMMIT")
-                await self._db_conn.execute(commit_ir)
+                    from oxyde.db.pool import _datetime_encoder
+
+                    ir_bytes = msgpack.packb(sql_ir, default=_datetime_encoder)
+                    await execute_in_transaction(self._db_conn.name, tx_id, ir_bytes)
+                else:
+                    await self._db_conn.execute(sql_ir)
+
+            if tx_id is not None:
+                await commit_transaction(tx_id)
 
         except Exception:
-            if use_transaction:
+            if tx_id is not None:
                 try:
-                    rollback_ir = build_raw_sql_ir(sql="ROLLBACK")
-                    await self._db_conn.execute(rollback_ir)
+                    await rollback_transaction(tx_id)
                 except Exception:
                     pass  # Ignore rollback errors
             raise

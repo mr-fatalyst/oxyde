@@ -22,22 +22,17 @@ class FilteringMixin:
         """Must be implemented by the main Query class."""
         raise NotImplementedError
 
-    def _merge_filter_node(self: TQuery, node: ir.FilterNode) -> TQuery:
-        """Merge a filter node into the existing filter tree."""
-        clone = self._clone()
-        if clone._filter_tree:
-            clone._filter_tree = ir.filter_and(clone._filter_tree, node)
-        else:
-            clone._filter_tree = node
-        return clone
-
     def filter(self: TQuery, *args: Any, **kwargs: Any) -> TQuery:
         """
         Filter by Q-expressions or field lookups.
 
+        Supports filtering on related model fields via FK traversal:
+            .filter(user__age__gte=18)  # Filter by joined user.age
+
         Args:
             *args: Q expression objects for complex conditions (AND/OR/NOT)
-            **kwargs: Field lookups (e.g., name__icontains="foo", age__gte=18)
+            **kwargs: Field lookups (e.g., name__icontains="foo", age__gte=18,
+                      user__name="Alice")
 
         Returns:
             Query with filter conditions applied
@@ -47,6 +42,7 @@ class FilteringMixin:
             .filter(age__gte=18, status="active")
             .filter(Q(age__gte=18) | Q(premium=True))
             .filter(Q(name="Bob"), age__lt=30)
+            .filter(user__age__gte=18)  # FK traversal
         """
         from oxyde.queries.q import Q
 
@@ -56,7 +52,7 @@ class FilteringMixin:
         # Process Q-expressions from args
         for arg in args:
             if isinstance(arg, Q):
-                node = arg.to_filter_node(self.model_class)
+                node = arg.to_filter_node(self.model_class, clone)
                 if node:
                     conditions.append(node)
             else:
@@ -67,7 +63,7 @@ class FilteringMixin:
         # Process kwargs
         if kwargs:
             q_from_kwargs = Q(**kwargs)
-            node = q_from_kwargs.to_filter_node(self.model_class)
+            node = q_from_kwargs.to_filter_node(self.model_class, clone)
             if node:
                 conditions.append(node)
 
@@ -99,15 +95,17 @@ class FilteringMixin:
         Examples:
             .exclude(status="banned")
             .exclude(Q(age__lt=18) | Q(age__gt=65))
+            .exclude(user__age__lt=18)  # FK traversal
         """
         from oxyde.queries.q import Q
 
+        clone = self._clone()
         conditions_to_negate: list[ir.FilterNode] = []
 
         # Process Q-expressions from args
         for arg in args:
             if isinstance(arg, Q):
-                node = arg.to_filter_node(self.model_class)
+                node = arg.to_filter_node(self.model_class, clone)
                 if node:
                     conditions_to_negate.append(node)
             else:
@@ -118,12 +116,12 @@ class FilteringMixin:
         # Process kwargs
         if kwargs:
             q_from_kwargs = Q(**kwargs)
-            node = q_from_kwargs.to_filter_node(self.model_class)
+            node = q_from_kwargs.to_filter_node(self.model_class, clone)
             if node:
                 conditions_to_negate.append(node)
 
         if not conditions_to_negate:
-            return self._clone()
+            return clone
 
         # Combine conditions with AND, then negate
         if len(conditions_to_negate) == 1:
@@ -132,7 +130,13 @@ class FilteringMixin:
             combined = ir.filter_and(*conditions_to_negate)
             negated = ir.filter_not(combined)
 
-        return self._merge_filter_node(negated)
+        # Merge negated filter into clone
+        if clone._filter_tree:
+            clone._filter_tree = ir.filter_and(clone._filter_tree, negated)
+        else:
+            clone._filter_tree = negated
+
+        return clone
 
     def _build_filter_tree(self) -> ir.FilterNode | None:
         """Return the filter tree."""

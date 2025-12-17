@@ -74,12 +74,12 @@ pip install -e .
 from oxyde import OxydeModel, Field
 
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
+
+    class Meta:
+        is_table = True
 ```
 
 ### Why isn't my model creating a table?
@@ -98,13 +98,13 @@ class User(OxydeModel):
 from uuid import UUID
 
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: UUID = Field(
         db_pk=True,
         db_default="gen_random_uuid()"  # PostgreSQL
     )
+
+    class Meta:
+        is_table = True
 ```
 
 ### How do I add Pydantic validation?
@@ -201,7 +201,7 @@ await User.objects.filter(id=1).update(balance=F("balance") - 100)
 ```python
 from oxyde import db
 
-await db.init("postgresql://user:pass@localhost/mydb")
+await db.init(default="postgresql://user:pass@localhost/mydb")
 ```
 
 ### How do I configure connection pooling?
@@ -210,12 +210,12 @@ await db.init("postgresql://user:pass@localhost/mydb")
 from oxyde import db, PoolSettings
 
 await db.init(
-    "postgresql://localhost/mydb",
+    default="postgresql://localhost/mydb",
     settings=PoolSettings(
         max_connections=20,
         min_connections=5,
         acquire_timeout=30,
-    )
+    ),
 )
 ```
 
@@ -240,7 +240,7 @@ from oxyde import db
 await db.close()
 
 # With FastAPI lifespan
-app = FastAPI(lifespan=db.lifespan("postgresql://localhost/mydb"))
+app = FastAPI(lifespan=db.lifespan(default="postgresql://localhost/mydb"))
 ```
 
 ## Transactions
@@ -288,7 +288,9 @@ async with transaction.atomic():
 Use `for_update()` or `for_share()`:
 
 ```python
-async with atomic():
+from oxyde.db import transaction
+
+async with transaction.atomic():
     user = await User.objects.filter(id=1).for_update().first()
     user.balance -= 100
     await user.save()

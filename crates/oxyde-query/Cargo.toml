@@ -9,6 +9,8 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
-sea-query = "0.31"
+sea-query = { version = "0.31", features = ["with-chrono"] }
+chrono = "0.4"
+uuid = "1"
 oxyde-codec = { path = "../oxyde-codec" }
 regex = "1"

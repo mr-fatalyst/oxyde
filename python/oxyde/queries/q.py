@@ -8,6 +8,10 @@ Basic Usage:
     Q(name="Alice")         → name = 'Alice'
     Q(status__in=["a","b"]) → status IN ('a', 'b')
 
+FK Traversal:
+    Q(user__age__gte=18)    → JOIN user, WHERE user.age >= 18
+    Q(author__name="Bob")   → JOIN author, WHERE author.name = 'Bob'
+
 Combining with AND:
     Q(age__gte=18) & Q(status="active")
     → age >= 18 AND status = 'active'
@@ -29,13 +33,15 @@ Implementation:
     - _kwargs: dict of field lookups (leaf node)
     - _op + _children: boolean operation with child Q objects
 
-    to_filter_node(model_class) recursively converts Q tree to FilterNode
-    IR format that Rust understands.
+    to_filter_node(model_class, query) recursively converts Q tree to FilterNode
+    IR format that Rust understands. If query is provided and FK paths are used,
+    JOINs are automatically added to the query.
 
 Usage in Queries:
     User.objects.filter(Q(age__gte=18) | Q(premium=True))
     User.objects.filter(Q(status="active"), name__startswith="A")  # mixed
     User.objects.exclude(Q(role="bot") | Q(status="banned"))
+    Post.objects.filter(user__age__gte=18)  # FK traversal with auto-JOIN
 """
 
 from __future__ import annotations
@@ -89,21 +95,28 @@ class Q:
             )
 
     def _ensure_node(
-        self, model_class: type[OxydeModel] | None = None
+        self,
+        model_class: type[OxydeModel] | None = None,
+        query: Any = None,
     ) -> FilterNode | None:
-        """Convert kwargs to FilterNode if needed."""
+        """Convert kwargs to FilterNode if needed.
+
+        Args:
+            model_class: Model class for field resolution
+            query: Optional query object for adding JOINs when FK paths are used
+        """
         if self._node is not None:
             return self._node
         if not self._kwargs:
             return None
 
         # Import here to avoid circular dependency
-        from oxyde.exceptions import LookupError
+        from oxyde.exceptions import FieldLookupError
         from oxyde.models.lookups import (
             _allowed_lookups_for_meta,
             _build_lookup_conditions,
-            _resolve_column_meta,
-            _split_lookup_key,
+            _parse_lookup_path,
+            _resolve_field_path,
         )
 
         if model_class is None:
@@ -115,22 +128,58 @@ class Q:
         conditions: list[FilterNode] = []
 
         for key, value in self._kwargs.items():
-            field_name, lookup = _split_lookup_key(key)
-            column_meta = _resolve_column_meta(model_class, field_name)
+            field_path, lookup = _parse_lookup_path(key)
 
-            if lookup not in _allowed_lookups_for_meta(column_meta):
-                raise LookupError(
-                    f"Lookup '{lookup}' is not supported for field '{field_name}'"
+            # Single field (no FK traversal)
+            if len(field_path) == 1:
+                from oxyde.models.lookups import _resolve_column_meta
+
+                field_name = field_path[0]
+                column_meta = _resolve_column_meta(model_class, field_name)
+
+                if lookup not in _allowed_lookups_for_meta(column_meta):
+                    raise FieldLookupError(
+                        f"Lookup '{lookup}' is not supported for field '{field_name}'"
+                    )
+
+                field_conditions = _build_lookup_conditions(
+                    model_class,
+                    field_name,
+                    lookup,
+                    value,
+                    column_meta,
                 )
+                conditions.extend([c.to_ir() for c in field_conditions])
+            else:
+                # FK traversal (e.g., user__age__gte)
+                resolved = _resolve_field_path(model_class, field_path)
 
-            field_conditions = _build_lookup_conditions(
-                model_class,
-                field_name,
-                lookup,
-                value,
-                column_meta,
-            )
-            conditions.extend([c.to_ir() for c in field_conditions])
+                if lookup not in _allowed_lookups_for_meta(resolved.column_meta):
+                    raise FieldLookupError(
+                        f"Lookup '{lookup}' is not supported for field '{resolved.final_field}'"
+                    )
+
+                # Add JOINs to query if provided
+                if query is not None and resolved.joins:
+                    join_path = "__".join(name for name, _ in resolved.joins)
+                    query._add_join_path(join_path)
+
+                # Build qualified column name: "alias.column"
+                # The alias is the join path with __ replaced by _
+                alias = "_".join(name for name, _ in resolved.joins)
+                qualified_column = f"{alias}.{resolved.column_meta.db_column}"
+
+                field_conditions = _build_lookup_conditions(
+                    resolved.final_model,
+                    resolved.final_field,
+                    lookup,
+                    value,
+                    resolved.column_meta,
+                )
+                # Override column with qualified name
+                for cond in field_conditions:
+                    cond.column = qualified_column
+                conditions.extend([c.to_ir() for c in field_conditions])
 
         if not conditions:
             return None
@@ -169,12 +218,17 @@ class Q:
         result._children = [self]
         return result
 
-    def to_filter_node(self, model_class: type[OxydeModel]) -> FilterNode | None:
+    def to_filter_node(
+        self,
+        model_class: type[OxydeModel],
+        query: Any = None,
+    ) -> FilterNode | None:
         """
         Convert Q expression to FilterNode for IR.
 
         Args:
             model_class: Model class for field resolution
+            query: Optional query object for adding JOINs when FK paths are used
 
         Returns:
             FilterNode dict or None if empty
@@ -187,7 +241,7 @@ class Q:
             # Recursively resolve children
             child_nodes = []
             for child in children:
-                node = child.to_filter_node(model_class)
+                node = child.to_filter_node(model_class, query)
                 if node is not None:
                     child_nodes.append(node)
 
@@ -209,7 +263,7 @@ class Q:
                 return filter_not(child_nodes[0])
 
         # Leaf Q expression
-        return self._ensure_node(model_class)
+        return self._ensure_node(model_class, query)
 
     def __repr__(self) -> str:
         op = getattr(self, "_op", None)

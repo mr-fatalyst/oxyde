@@ -157,11 +157,11 @@ PoolSettings(
 
 ```python
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     email: str = Field(db_index=True)  # For equality lookups
     created_at: datetime = Field(db_index=True)  # For range queries
+
+    class Meta:
+        is_table = True
 ```
 
 ### Composite Indexes
@@ -170,6 +170,9 @@ class User(OxydeModel):
 from oxyde import Index
 
 class Event(OxydeModel):
+    user_id: int
+    created_at: datetime
+
     class Meta:
         is_table = True
         indexes = [
@@ -185,6 +188,9 @@ class Event(OxydeModel):
 
 ```python
 class User(OxydeModel):
+    email: str
+    deleted_at: datetime | None = None
+
     class Meta:
         is_table = True
         indexes = [

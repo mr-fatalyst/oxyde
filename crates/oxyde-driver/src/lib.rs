@@ -28,8 +28,8 @@
 //! # Query Execution
 //!
 //! ```rust,ignore
-//! // Outside transaction
-//! let rows = execute_query("default", sql, values).await?;
+//! // Outside transaction (with optional type hints for faster decoding)
+//! let rows = execute_query("default", sql, values, col_types.as_ref()).await?;
 //!
 //! // Inside transaction
 //! let rows = execute_in_transaction(tx_id, sql, values).await?;
@@ -68,12 +68,19 @@
 
 use once_cell::sync::OnceCell;
 use sea_query::Value;
-use sqlx::{mysql::MySqlPoolOptions, postgres::PgPoolOptions, sqlite::SqlitePoolOptions};
+use sqlx::{
+    mysql::MySqlPoolOptions,
+    postgres::PgPoolOptions,
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+};
 use std::collections::HashMap;
+use std::str::FromStr;
+use std::time::Instant;
 use tracing::{debug, info, warn};
 
 // Module declarations
 mod error;
+mod exec;
 mod pool;
 mod settings;
 mod transaction;
@@ -84,20 +91,42 @@ mod bind;
 mod convert;
 mod explain;
 
+// Import exec traits for internal use
+use exec::{ConnExec, PoolExec};
+
 // Public re-exports
 pub use error::{DriverError, Result};
 pub use explain::{ExplainFormat, ExplainOptions};
-pub use pool::DatabaseBackend;
+pub use pool::{DatabaseBackend, DbPool};
 pub use settings::PoolSettings;
 
-// Internal imports
+// PyO3 direct conversion (when feature enabled)
+#[cfg(feature = "pyo3")]
+pub use convert::{
+    decode_mysql_cell_to_py,
+    decode_pg_cell_to_py,
+    decode_sqlite_cell_to_py,
+    extract_mysql_columns,
+    extract_pg_columns,
+    extract_sqlite_columns,
+    mysql_rows_to_pylist,
+    pg_rows_to_pylist,
+    sqlite_rows_to_pylist,
+    // Batched conversion support
+    StreamingColumnMeta,
+};
+
+// Internal imports - use aliases to avoid conflict with pub use
+#[cfg(not(feature = "pyo3"))]
 use bind::{bind_mysql, bind_postgres, bind_sqlite};
-use convert::{convert_mysql_row, convert_pg_row, convert_sqlite_row};
+#[cfg(feature = "pyo3")]
+pub use bind::{bind_mysql, bind_postgres, bind_sqlite};
+use convert::{convert_pg_rows, convert_sqlite_rows, ColumnarResult};
 use explain::{
     build_mysql_explain_sql, build_postgres_explain_sql, build_sqlite_explain_sql,
     extract_mysql_json_plan, extract_postgres_json_plan, extract_text_plan, rows_to_objects,
 };
-use pool::{ConnectionRegistry, DbPool, PoolHandle};
+use pool::{ConnectionRegistry, PoolHandle};
 use transaction::{DbConn, TransactionInner, TransactionRegistry, TransactionState};
 
 static REGISTRY: OnceCell<ConnectionRegistry> = OnceCell::new();
@@ -237,18 +266,23 @@ async fn init_pool_inner(
                 })
             });
 
+            // Parse URL and enable automatic database file creation
+            let connect_opts = SqliteConnectOptions::from_str(url)
+                .map_err(|e| DriverError::ConnectionError(format!("Invalid SQLite URL: {}", e)))?
+                .create_if_missing(true);
+
             let pool = options
-                .connect(url)
+                .connect_with(connect_opts)
                 .await
                 .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {}", e)))?;
 
-            info!("SQLite pool created with PRAGMA settings");
+            info!("SQLite pool created with PRAGMA settings (create_if_missing=true)");
 
             DbPool::Sqlite(pool)
         }
     };
 
-    let handle = PoolHandle::new(backend, pool, settings.clone());
+    let handle = PoolHandle::new(backend, pool);
 
     if overwrite {
         // Close old pool if exists
@@ -302,6 +336,13 @@ pub async fn pool_backend(name: &str) -> Result<DatabaseBackend> {
     registry().get(name).await.map(|handle| handle.backend)
 }
 
+/// Get a clone of the connection pool by name.
+/// Used by oxyde-core-py for direct PyO3 conversion.
+#[cfg(feature = "pyo3")]
+pub async fn get_pool(name: &str) -> Result<DbPool> {
+    registry().get(name).await.map(|handle| handle.clone_pool())
+}
+
 pub async fn begin_transaction(pool_name: &str) -> Result<u64> {
     info!("Beginning transaction on pool '{}'", pool_name);
     let handle = registry().get(pool_name).await?;
@@ -342,40 +383,37 @@ pub async fn execute_query_in_transaction(
     if !tx.is_active() {
         return Err(DriverError::TransactionClosed(tx_id));
     }
-
-    // Update activity timestamp to prevent premature cleanup
     tx.update_activity();
 
     let conn = tx
         .conn
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
-    match conn {
-        DbConn::Postgres(conn) => {
-            let query = bind_postgres(sqlx::query(sql), params)?;
-            let rows = query
-                .fetch_all(conn.as_mut())
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Query failed: {}", e)))?;
-            Ok(rows.into_iter().map(convert_pg_row).collect())
-        }
-        DbConn::MySql(conn) => {
-            let query = bind_mysql(sqlx::query(sql), params)?;
-            let rows = query
-                .fetch_all(conn.as_mut())
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Query failed: {}", e)))?;
-            Ok(rows.into_iter().map(convert_mysql_row).collect())
-        }
-        DbConn::Sqlite(conn) => {
-            let query = bind_sqlite(sqlx::query(sql), params)?;
-            let rows = query
-                .fetch_all(conn.as_mut())
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Query failed: {}", e)))?;
-            Ok(rows.into_iter().map(convert_sqlite_row).collect())
-        }
+    conn.query(sql, params).await
+}
+
+/// Execute SELECT query in transaction returning columnar format (columns, rows).
+pub async fn execute_query_columnar_in_transaction(
+    tx_id: u64,
+    sql: &str,
+    params: &[Value],
+) -> Result<ColumnarResult> {
+    let registry = transaction_registry();
+    let arc = registry
+        .get(tx_id)
+        .await
+        .ok_or(DriverError::TransactionNotFound(tx_id))?;
+    let mut tx = arc.lock().await;
+    if !tx.is_active() {
+        return Err(DriverError::TransactionClosed(tx_id));
     }
+    tx.update_activity();
+
+    let conn = tx
+        .conn
+        .as_mut()
+        .ok_or(DriverError::TransactionClosed(tx_id))?;
+    conn.query_columnar(sql, params).await
 }
 
 pub async fn execute_statement_in_transaction(
@@ -392,40 +430,13 @@ pub async fn execute_statement_in_transaction(
     if !tx.is_active() {
         return Err(DriverError::TransactionClosed(tx_id));
     }
-
-    // Update activity timestamp to prevent premature cleanup
     tx.update_activity();
 
     let conn = tx
         .conn
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
-    match conn {
-        DbConn::Postgres(conn) => {
-            let query = bind_postgres(sqlx::query(sql), params)?;
-            let result = query
-                .execute(conn.as_mut())
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Statement failed: {}", e)))?;
-            Ok(result.rows_affected())
-        }
-        DbConn::MySql(conn) => {
-            let query = bind_mysql(sqlx::query(sql), params)?;
-            let result = query
-                .execute(conn.as_mut())
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Statement failed: {}", e)))?;
-            Ok(result.rows_affected())
-        }
-        DbConn::Sqlite(conn) => {
-            let query = bind_sqlite(sqlx::query(sql), params)?;
-            let result = query
-                .execute(conn.as_mut())
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Statement failed: {}", e)))?;
-            Ok(result.rows_affected())
-        }
-    }
+    conn.execute(sql, params).await
 }
 
 pub async fn commit_transaction(tx_id: u64) -> Result<()> {
@@ -563,66 +574,87 @@ pub async fn release_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Check if profiling is enabled via OXYDE_PROFILE env var
+fn is_profiling_enabled() -> bool {
+    std::env::var("OXYDE_PROFILE")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+}
+
 pub async fn execute_query(
     pool_name: &str,
     sql: &str,
     params: &[Value],
+    col_types: Option<&HashMap<String, String>>,
 ) -> Result<Vec<HashMap<String, serde_json::Value>>> {
     debug!(
-        "Executing query on '{}': {} ({} params)",
+        "Executing query on '{}': {} ({} params, col_types: {})",
+        pool_name,
+        sql,
+        params.len(),
+        col_types.is_some()
+    );
+
+    let profile = is_profiling_enabled();
+    let handle = registry().get(pool_name).await?;
+    let pool = handle.clone_pool();
+
+    let start = Instant::now();
+    let results = pool.query(sql, params, col_types).await?;
+    let elapsed_us = start.elapsed().as_micros();
+
+    if profile {
+        eprintln!(
+            "[OXYDE_PROFILE] execute_query ({}, {} rows): total={} µs",
+            pool.backend_name(),
+            results.len(),
+            elapsed_us
+        );
+    }
+    debug!(
+        "Query on '{}' ({}) returned {} rows",
+        pool_name,
+        pool.backend_name(),
+        results.len()
+    );
+    Ok(results)
+}
+
+/// Execute a SELECT query and return results in columnar format.
+/// This is more memory-efficient than execute_query for large result sets:
+/// - Column names stored once instead of per-row
+/// - No HashMap overhead per row
+/// - Smaller msgpack serialization
+pub async fn execute_query_columnar(
+    pool_name: &str,
+    sql: &str,
+    params: &[Value],
+    col_types: Option<&HashMap<String, String>>,
+) -> Result<ColumnarResult> {
+    debug!(
+        "Executing columnar query on '{}': {} ({} params)",
         pool_name,
         sql,
         params.len()
     );
 
+    let profile = is_profiling_enabled();
     let handle = registry().get(pool_name).await?;
-    match handle.clone_pool() {
-        DbPool::Postgres(pool) => {
-            let query = bind_postgres(sqlx::query(sql), params)?;
-            let rows = query
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Query failed: {}", e)))?;
+    let pool = handle.clone_pool();
 
-            let results: Vec<_> = rows.into_iter().map(convert_pg_row).collect();
-            debug!(
-                "Query on '{}' (Postgres) returned {} rows",
-                pool_name,
-                results.len()
-            );
-            Ok(results)
-        }
-        DbPool::MySql(pool) => {
-            let query = bind_mysql(sqlx::query(sql), params)?;
-            let rows = query
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Query failed: {}", e)))?;
+    let start = Instant::now();
+    let results = pool.query_columnar(sql, params, col_types).await?;
+    let elapsed_us = start.elapsed().as_micros();
 
-            let results: Vec<_> = rows.into_iter().map(convert_mysql_row).collect();
-            debug!(
-                "Query on '{}' (MySQL) returned {} rows",
-                pool_name,
-                results.len()
-            );
-            Ok(results)
-        }
-        DbPool::Sqlite(pool) => {
-            let query = bind_sqlite(sqlx::query(sql), params)?;
-            let rows = query
-                .fetch_all(&pool)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Query failed: {}", e)))?;
-
-            let results: Vec<_> = rows.into_iter().map(convert_sqlite_row).collect();
-            debug!(
-                "Query on '{}' (SQLite) returned {} rows",
-                pool_name,
-                results.len()
-            );
-            Ok(results)
-        }
+    if profile {
+        eprintln!(
+            "[OXYDE_PROFILE] execute_query_columnar ({}, {} rows): total={} µs",
+            pool.backend_name(),
+            results.1.len(),
+            elapsed_us
+        );
     }
+    Ok(results)
 }
 
 pub async fn execute_statement(pool_name: &str, sql: &str, params: &[Value]) -> Result<u64> {
@@ -634,47 +666,16 @@ pub async fn execute_statement(pool_name: &str, sql: &str, params: &[Value]) -> 
     );
 
     let handle = registry().get(pool_name).await?;
-    match handle.clone_pool() {
-        DbPool::Postgres(pool) => {
-            let query = bind_postgres(sqlx::query(sql), params)?;
-            let result = query
-                .execute(&pool)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Statement failed: {}", e)))?;
-            let affected = result.rows_affected();
-            debug!(
-                "Statement on '{}' (Postgres) affected {} rows",
-                pool_name, affected
-            );
-            Ok(affected)
-        }
-        DbPool::MySql(pool) => {
-            let query = bind_mysql(sqlx::query(sql), params)?;
-            let result = query
-                .execute(&pool)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Statement failed: {}", e)))?;
-            let affected = result.rows_affected();
-            debug!(
-                "Statement on '{}' (MySQL) affected {} rows",
-                pool_name, affected
-            );
-            Ok(affected)
-        }
-        DbPool::Sqlite(pool) => {
-            let query = bind_sqlite(sqlx::query(sql), params)?;
-            let result = query
-                .execute(&pool)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Statement failed: {}", e)))?;
-            let affected = result.rows_affected();
-            debug!(
-                "Statement on '{}' (SQLite) affected {} rows",
-                pool_name, affected
-            );
-            Ok(affected)
-        }
-    }
+    let pool = handle.clone_pool();
+    let affected = pool.execute(sql, params).await?;
+
+    debug!(
+        "Statement on '{}' ({}) affected {} rows",
+        pool_name,
+        pool.backend_name(),
+        affected
+    );
+    Ok(affected)
 }
 
 /// Execute INSERT and return generated IDs (supports any PK type: i64, UUID, String, etc.)
@@ -715,17 +716,11 @@ pub async fn execute_insert_returning(
                 DriverError::ExecutionError(format!("INSERT RETURNING failed: {}", e))
             })?;
 
-            // Extract PK values using existing row conversion
-            let ids: Vec<serde_json::Value> = rows
+            // Extract PK values using batch row conversion
+            let row_maps = convert_pg_rows(rows);
+            let ids: Vec<serde_json::Value> = row_maps
                 .into_iter()
-                .map(|row| {
-                    let row_map = convert_pg_row(row);
-                    row_map
-                        .get(pk_col)
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null)
-                })
-                .filter(|v| !v.is_null())
+                .filter_map(|row_map| row_map.get(pk_col).cloned().filter(|v| !v.is_null()))
                 .collect();
 
             debug!(
@@ -780,17 +775,11 @@ pub async fn execute_insert_returning(
             // Try RETURNING first
             match query.fetch_all(&pool).await {
                 Ok(rows) => {
-                    // RETURNING is supported - extract PK values using existing row conversion
-                    let ids: Vec<serde_json::Value> = rows
+                    // RETURNING is supported - extract PK values using batch row conversion
+                    let row_maps = convert_sqlite_rows(rows);
+                    let ids: Vec<serde_json::Value> = row_maps
                         .into_iter()
-                        .map(|row| {
-                            let row_map = convert_sqlite_row(row);
-                            row_map
-                                .get(pk_col)
-                                .cloned()
-                                .unwrap_or(serde_json::Value::Null)
-                        })
-                        .filter(|v| !v.is_null())
+                        .filter_map(|row_map| row_map.get(pk_col).cloned().filter(|v| !v.is_null()))
                         .collect();
 
                     debug!(
@@ -881,17 +870,11 @@ pub async fn execute_insert_returning_in_transaction(
                 DriverError::ExecutionError(format!("INSERT RETURNING failed: {}", e))
             })?;
 
-            // Extract PK values using existing row conversion
-            let ids: Vec<serde_json::Value> = rows
+            // Extract PK values using batch row conversion
+            let row_maps = convert_pg_rows(rows);
+            let ids: Vec<serde_json::Value> = row_maps
                 .into_iter()
-                .map(|row| {
-                    let row_map = convert_pg_row(row);
-                    row_map
-                        .get(pk_col)
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null)
-                })
-                .filter(|v| !v.is_null())
+                .filter_map(|row_map| row_map.get(pk_col).cloned().filter(|v| !v.is_null()))
                 .collect();
 
             debug!(
@@ -944,17 +927,11 @@ pub async fn execute_insert_returning_in_transaction(
 
             match query.fetch_all(conn.as_mut()).await {
                 Ok(rows) => {
-                    // RETURNING is supported - extract PK values using existing row conversion
-                    let ids: Vec<serde_json::Value> = rows
+                    // RETURNING is supported - extract PK values using batch row conversion
+                    let row_maps = convert_sqlite_rows(rows);
+                    let ids: Vec<serde_json::Value> = row_maps
                         .into_iter()
-                        .map(|row| {
-                            let row_map = convert_sqlite_row(row);
-                            row_map
-                                .get(pk_col)
-                                .cloned()
-                                .unwrap_or(serde_json::Value::Null)
-                        })
-                        .filter(|v| !v.is_null())
+                        .filter_map(|row_map| row_map.get(pk_col).cloned().filter(|v| !v.is_null()))
                         .collect();
 
                     debug!(
@@ -1011,7 +988,7 @@ pub async fn explain_query(
         DatabaseBackend::Sqlite => build_sqlite_explain_sql(sql, &options)?,
     };
 
-    let rows = execute_query(pool_name, &explain_sql, params).await?;
+    let rows = execute_query(pool_name, &explain_sql, params, None).await?;
 
     let payload = match backend {
         DatabaseBackend::Postgres => match options.format {
@@ -1210,6 +1187,7 @@ mod tests {
             "default",
             "SELECT name FROM foo WHERE id = ?",
             &[Value::from(1_i64)],
+            None,
         )
         .await
         .unwrap();
@@ -1254,6 +1232,7 @@ mod tests {
             "default",
             "SELECT name FROM foo WHERE id = ?",
             &[Value::from(10_i64)],
+            None,
         )
         .await
         .unwrap();
@@ -1297,6 +1276,7 @@ mod tests {
             "default",
             "SELECT name FROM foo WHERE id = ?",
             &[Value::from(11_i64)],
+            None,
         )
         .await
         .unwrap();

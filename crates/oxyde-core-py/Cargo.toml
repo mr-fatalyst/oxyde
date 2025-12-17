@@ -11,6 +11,8 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["extension-module"]
 extension-module = ["pyo3/extension-module"]
+mimalloc = ["dep:mimalloc"]
+jemalloc = ["dep:tikv-jemallocator"]
 
 [dependencies]
 tokio.workspace = true
@@ -22,7 +24,13 @@ pyo3-async-runtimes = { version = "0.26", features = ["tokio-runtime"] }
 rmp-serde = "1.1"
 oxyde-codec = { path = "../oxyde-codec" }
 oxyde-query = { path = "../oxyde-query" }
-oxyde-driver = { path = "../oxyde-driver" }
+oxyde-driver = { path = "../oxyde-driver", features = ["pyo3"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "postgres", "mysql"] }
 oxyde-migrate = { path = "../oxyde-migrate" }
 once_cell = "1.19"
 sea-query = "0.31"
+futures = "0.3"
+
+# Optional allocators for better memory management
+mimalloc = { version = "0.1", default-features = false, optional = true }
+tikv-jemallocator = { version = "0.6", optional = true }

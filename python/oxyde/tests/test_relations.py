@@ -85,6 +85,57 @@ class TestForeignKeyDetection:
         assert meta.foreign_key is not None
         assert meta.nullable is True
 
+    def test_db_nullable_overrides_type_hint(self):
+        """Test db_nullable explicitly overrides nullable from type hint.
+
+        Note: db_nullable applies to the FK column (author_id), not the virtual field (author).
+        """
+
+        class Author(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str
+
+            class Meta:
+                is_table = True
+
+        class Article(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            title: str
+            # author_id column: NOT NULL in DB (db_nullable=False)
+            # author field: optional in Python (| None for Pydantic)
+            author: Author | None = Field(db_nullable=False, db_on_delete="CASCADE")
+
+            class Meta:
+                is_table = True
+
+        registered_tables()
+
+        meta = Article._db_meta.field_metadata["author"]
+        assert meta.foreign_key is not None
+        assert meta.foreign_key.nullable is False  # author_id column is NOT NULL
+        assert meta.nullable is False  # ColumnMeta.nullable reflects DB column
+
+    def test_db_nullable_on_regular_field(self):
+        """Test db_nullable works on non-FK fields too."""
+
+        class Item(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            # str but db_nullable=True => NULL in DB
+            name: str = Field(db_nullable=True)
+            # str | None but db_nullable=False => NOT NULL in DB
+            code: str | None = Field(db_nullable=False)
+
+            class Meta:
+                is_table = True
+
+        registered_tables()
+
+        name_meta = Item._db_meta.field_metadata["name"]
+        assert name_meta.nullable is True  # db_nullable overrides required str
+
+        code_meta = Item._db_meta.field_metadata["code"]
+        assert code_meta.nullable is False  # db_nullable overrides optional
+
     def test_fk_column_name_can_be_overridden(self):
         """Test FK column name can be overridden with db_column."""
 
@@ -324,7 +375,7 @@ class TestJoinRelations:
 
     @pytest.mark.asyncio
     async def test_join_hydrates_related_models(self):
-        """Test that join properly hydrates related models."""
+        """Test that join properly hydrates related models from columnar format."""
 
         class Creator(OxydeModel):
             id: int | None = Field(default=None, db_pk=True)
@@ -341,24 +392,75 @@ class TestJoinRelations:
             class Meta:
                 is_table = True
 
-        rows = [
-            [
-                {
-                    "id": 1,
-                    "title": "Story 1",
-                    "creator": None,
-                    "creator__id": 10,
-                    "creator__email": "author@example.com",
-                }
-            ]
-        ]
+        # Columnar result format (as returned by Rust for all SELECT queries)
+        columnar_result = (
+            ["id", "title", "creator__id", "creator__email"],
+            [[1, "Story 1", 10, "author@example.com"]],
+        )
 
-        stub = StubExecuteClient(rows)
+        stub = StubExecuteClient([columnar_result])
         stories = await Story.objects.join("creator").fetch_models(stub)
 
         assert len(stories) == 1
         assert stories[0].creator is not None
         assert stories[0].creator.email == "author@example.com"
+
+    @pytest.mark.asyncio
+    async def test_join_creates_separate_instances(self):
+        """Test that join creates separate related model instances per row.
+
+        Unlike deduplication, each row gets its own related model instance,
+        matching Tortoise/Django behavior. This is simpler and uses less
+        memory overall due to columnar format.
+        """
+
+        class Publisher(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+
+            class Meta:
+                is_table = True
+
+        class Book(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            title: str = ""
+            publisher: Publisher | None = None
+
+            class Meta:
+                is_table = True
+
+        # 5 books from 2 publishers - each row has full publisher data
+        columnar_result = (
+            ["id", "title", "publisher__id", "publisher__name"],
+            [
+                [1, "Book 1", 1, "Penguin"],
+                [2, "Book 2", 1, "Penguin"],
+                [3, "Book 3", 1, "Penguin"],
+                [4, "Book 4", 2, "HarperCollins"],
+                [5, "Book 5", 2, "HarperCollins"],
+            ],
+        )
+
+        stub = StubExecuteClient([columnar_result])
+        books = await Book.objects.join("publisher").fetch_models(stub)
+
+        assert len(books) == 5
+
+        # Publisher instances are cached by PK - same publisher == same object
+        assert books[0].publisher.name == "Penguin"
+        assert books[3].publisher.name == "HarperCollins"
+
+        # Same publisher ID -> same instance (PK-based caching)
+        assert books[0].publisher is books[1].publisher  # Both have publisher_id=1
+        assert books[0].publisher is books[2].publisher  # Also publisher_id=1
+        assert books[3].publisher is books[4].publisher  # Both have publisher_id=2
+
+        # Different publishers -> different instances
+        assert books[0].publisher is not books[3].publisher
+
+        # Count unique instances - should be 2 (one per unique publisher PK)
+        unique_publishers = set(id(book.publisher) for book in books)
+        assert len(unique_publishers) == 2
 
 
 class TestPrefetchRelations:
@@ -560,3 +662,191 @@ class TestDbFkParameter:
         assert meta.foreign_key is not None
         assert meta.foreign_key.target_field == "uuid"
         assert meta.foreign_key.column_name == "org_uuid"  # {field_name}_{pk_field}
+
+
+class TestM2MPrefetchExecution:
+    """Test M2M prefetch execution (not just metadata)."""
+
+    @pytest.mark.asyncio
+    async def test_m2m_prefetch_populates_relation(self):
+        """Test that prefetch properly populates M2M relation."""
+
+        class Tag(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+
+            class Meta:
+                is_table = True
+
+        class Post(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            title: str = ""
+            tags: list[Tag] = Field(db_m2m=True, db_through="PostTag")
+
+            class Meta:
+                is_table = True
+
+        class PostTag(OxydeModel):
+            """Through model with proper FK fields (optional for validation)."""
+
+            id: int | None = Field(default=None, db_pk=True)
+            # FK fields optional so Pydantic accepts raw rows with just *_id
+            post: Post | None = Field(default=None, db_on_delete="CASCADE")
+            tag: Tag | None = Field(default=None, db_on_delete="CASCADE")
+
+            class Meta:
+                is_table = True
+
+        registered_tables()
+
+        # Responses: 1) main posts, 2) through table links, 3) target tags
+        post_rows = [[{"id": 1, "title": "Post 1"}]]
+        # Through table returns FK column values (post_id, tag_id)
+        link_rows = [
+            [
+                {"id": 1, "post_id": 1, "tag_id": 10},
+                {"id": 2, "post_id": 1, "tag_id": 20},
+            ]
+        ]
+        tag_rows = [
+            [
+                {"id": 10, "name": "python"},
+                {"id": 20, "name": "rust"},
+            ]
+        ]
+
+        stub = StubExecuteClient(post_rows + link_rows + tag_rows)
+        posts = await Post.objects.prefetch("tags").fetch_models(stub)
+
+        assert len(posts) == 1
+        assert len(posts[0].tags) == 2
+        tag_names = {t.name for t in posts[0].tags}
+        assert tag_names == {"python", "rust"}
+
+
+class TestDedupHydration:
+    """Test dedup format hydration for JOIN queries."""
+
+    @pytest.mark.asyncio
+    async def test_dedup_hydration_reuses_instances(self):
+        """Test that dedup format correctly hydrates and reuses related instances."""
+
+        class Author(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+
+            class Meta:
+                is_table = True
+
+        class Article(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            title: str = ""
+            author_id: int | None = None
+            author: Author | None = None
+
+            class Meta:
+                is_table = True
+
+        registered_tables()
+
+        class DedupStubClient:
+            """Stub that simulates execute_batched_dedup response."""
+
+            def __init__(self, dedup_result: dict):
+                self._result = dedup_result
+                self.calls: list = []
+
+            async def execute(self, ir: dict) -> bytes:
+                self.calls.append(ir)
+                return msgpack.packb([])
+
+            async def execute_batched_dedup(self, ir: dict) -> dict:
+                self.calls.append(ir)
+                return self._result
+
+        # Dedup format: main rows + deduplicated relations
+        dedup_result = {
+            "main": [
+                {"id": 1, "title": "Article 1", "author_id": 100},
+                {"id": 2, "title": "Article 2", "author_id": 100},
+                {"id": 3, "title": "Article 3", "author_id": 200},
+            ],
+            "relations": {
+                "author": {
+                    100: {"id": 100, "name": "Alice"},
+                    200: {"id": 200, "name": "Bob"},
+                }
+            },
+        }
+
+        stub = DedupStubClient(dedup_result)
+        articles = await Article.objects.join("author").fetch_models(stub)
+
+        assert len(articles) == 3
+
+        # Check hydration
+        assert articles[0].author is not None
+        assert articles[0].author.name == "Alice"
+        assert articles[2].author.name == "Bob"
+
+        # Check instance reuse - same author_id should be same instance
+        assert articles[0].author is articles[1].author
+
+
+class TestNestedJoinHydration:
+    """Test nested JOIN hydration (multi-level)."""
+
+    @pytest.mark.asyncio
+    async def test_nested_join_hydrates_correctly(self):
+        """Test that nested JOINs hydrate related models at multiple levels."""
+
+        class Country(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+
+            class Meta:
+                is_table = True
+
+        class Profile(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            bio: str = ""
+            country: Country | None = None
+
+            class Meta:
+                is_table = True
+
+        class User(OxydeModel):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+            profile: Profile | None = None
+
+            class Meta:
+                is_table = True
+
+        registered_tables()
+
+        # Columnar format with nested joins: user -> profile -> country
+        columnar_result = (
+            [
+                "id",
+                "name",
+                "profile__id",
+                "profile__bio",
+                "profile__country__id",
+                "profile__country__name",
+            ],
+            [[1, "Alice", 10, "Developer", 100, "USA"]],
+        )
+
+        stub = StubExecuteClient([columnar_result])
+
+        # Build query with nested joins
+        query = User.objects.join("profile").join("profile__country")
+        users = await query.fetch_models(stub)
+
+        assert len(users) == 1
+        assert users[0].name == "Alice"
+        assert users[0].profile is not None
+        assert users[0].profile.bio == "Developer"
+        assert users[0].profile.country is not None
+        assert users[0].profile.country.name == "USA"

@@ -170,9 +170,9 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
             count_query.and_where(expr);
         }
 
-        // Add joins if needed for filtering
+        // Add joins if needed for filtering (without columns - only JOIN clause)
         if let Some(joins) = &ir.joins {
-            apply_select_joins(&mut count_query, joins, &table)?;
+            apply_joins_only(&mut count_query, joins, &table)?;
         }
 
         let (sql, values) = match dialect {
@@ -232,6 +232,36 @@ fn apply_select_joins(
             let alias = Alias::new(format!("{}__{}", join.result_prefix, column.field));
             query.expr_as(expr, alias);
         }
+    }
+    Ok(())
+}
+
+/// Apply JOINs without adding columns to SELECT (for COUNT queries)
+fn apply_joins_only(
+    query: &mut sea_query::SelectStatement,
+    joins: &[JoinSpec],
+    base_table: &TableIdent,
+) -> Result<()> {
+    for join in joins {
+        let join_alias = Alias::new(join.alias.clone());
+        let mut table_ref = sea_query::TableRef::Table(SeaRc::new(TableIdent(join.table.clone())));
+        table_ref = table_ref.alias(join_alias.clone());
+        let left_col = match &join.parent {
+            Some(parent_alias) => ColumnRef::TableColumn(
+                SeaRc::new(Alias::new(parent_alias.clone())),
+                SeaRc::new(ColumnIdent(join.source_column.clone())),
+            ),
+            None => ColumnRef::TableColumn(
+                SeaRc::new(base_table.clone()),
+                SeaRc::new(ColumnIdent(join.source_column.clone())),
+            ),
+        };
+        let right_col = ColumnRef::TableColumn(
+            SeaRc::new(join_alias.clone()),
+            SeaRc::new(ColumnIdent(join.target_column.clone())),
+        );
+        query.left_join(table_ref, Expr::col(left_col).equals(right_col));
+        // Note: no columns added - only JOIN clause for filtering
     }
     Ok(())
 }

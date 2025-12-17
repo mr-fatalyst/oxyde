@@ -57,6 +57,8 @@ Complete API reference.
 <tr><td><code>annotate()</code></td><td><code>.annotate(n=Count("posts"))</code></td><td><code>Query</code></td><td>Computed fields</td></tr>
 <tr><td><code>union()</code></td><td><code>.union(other_qs)</code></td><td><code>Query</code></td><td>UNION</td></tr>
 <tr><td><code>for_update()</code></td><td><code>.for_update()</code></td><td><code>Query</code></td><td>Row lock</td></tr>
+<tr><td><code>values()</code></td><td><code>.values("id", "name")</code></td><td><code>Query</code></td><td>Result as dicts</td></tr>
+<tr><td><code>values_list()</code></td><td><code>.values_list("id", flat=True)</code></td><td><code>Query</code></td><td>Result as tuples/list</td></tr>
 <tr><th colspan="4">Terminal Methods</th></tr>
 <tr><td><code>all()</code></td><td><code>await qs.all()</code></td><td><code>list[Model]</code></td><td>Execute SELECT</td></tr>
 <tr><td><code>first()</code></td><td><code>await qs.first()</code></td><td><code>Model | None</code></td><td>First row</td></tr>
@@ -70,8 +72,6 @@ Complete API reference.
 <tr><td><code>avg()</code></td><td><code>await qs.avg("age")</code></td><td><code>float</code></td><td>AVG</td></tr>
 <tr><td><code>max()</code></td><td><code>await qs.max("price")</code></td><td><code>Any</code></td><td>MAX</td></tr>
 <tr><td><code>min()</code></td><td><code>await qs.min("price")</code></td><td><code>Any</code></td><td>MIN</td></tr>
-<tr><td><code>values()</code></td><td><code>await qs.values("id", "name")</code></td><td><code>list[dict]</code></td><td>Dict projection</td></tr>
-<tr><td><code>values_list()</code></td><td><code>await qs.values_list("id", flat=True)</code></td><td><code>list</code></td><td>Tuple projection</td></tr>
 <tr><th colspan="4">Debug & Introspection</th></tr>
 <tr><td><code>sql()</code></td><td><code>qs.sql()</code></td><td><code>(str, list)</code></td><td>SQL + params</td></tr>
 <tr><td><code>query()</code></td><td><code>qs.query()</code></td><td><code>dict</code></td><td>Query IR</td></tr>
@@ -85,7 +85,7 @@ Complete API reference.
 <tr><td><code>Coalesce</code></td><td><code>Coalesce("nick", "name")</code></td><td>—</td><td>First non-NULL</td></tr>
 <tr><td><code>RawSQL</code></td><td><code>RawSQL("LOWER(name)")</code></td><td>—</td><td>Raw SQL</td></tr>
 <tr><th colspan="4">Transactions</th></tr>
-<tr><td><code>atomic()</code></td><td><code>async with atomic(): ...</code></td><td>—</td><td>Nested savepoints</td></tr>
+<tr><td><code>transaction.atomic()</code></td><td><code>async with transaction.atomic(): ...</code></td><td>—</td><td>Nested savepoints</td></tr>
 </tbody>
 </table>
 </div>
@@ -218,16 +218,16 @@ has_active = await User.objects.filter(is_active=True).exists()
 ### Values & Values List
 
 ```python
-# Dictionaries instead of models
-users_data = await User.objects.filter(is_active=True).values("id", "name", "email")
+# Dictionaries instead of models (values is a builder, requires .all())
+users_data = await User.objects.filter(is_active=True).values("id", "name", "email").all()
 # [{"id": 1, "name": "John", "email": "..."}, ...]
 
 # Flat list
-user_ids = await User.objects.filter(is_active=True).values_list("id", flat=True)
+user_ids = await User.objects.filter(is_active=True).values_list("id", flat=True).all()
 # [1, 2, 3, 4, ...]
 
 # Tuples
-user_pairs = await User.objects.values_list("id", "name")
+user_pairs = await User.objects.values_list("id", "name").all()
 # [(1, "John"), (2, "Jane"), ...]
 ```
 
@@ -240,7 +240,7 @@ premium = User.objects.filter(status="premium")
 combined = await active.union(premium).all()
 
 # Distinct
-unique_statuses = await Post.objects.distinct().values_list("status", flat=True)
+unique_statuses = await Post.objects.distinct().values_list("status", flat=True).all()
 
 # First / Last
 newest = await Post.objects.order_by("-created_at").first()

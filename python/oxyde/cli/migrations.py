@@ -1,14 +1,19 @@
-"""CLI commands for Oxyde migrations."""
+"""Migration commands (makemigrations, migrate, showmigrations, sqlmigrate)."""
 
+import asyncio
+import json
 from pathlib import Path
 
 import typer
 
-app = typer.Typer(
-    name="oxyde",
-    help="Oxyde ORM - Database migration and management tool",
-    no_args_is_help=True,
+from oxyde.cli.app import (
+    app,
+    ensure_migrations_dir,
+    init_databases,
+    load_config_or_exit,
+    require_databases,
 )
+from oxyde.migrations.config import import_models
 
 
 @app.command()
@@ -17,10 +22,6 @@ def makemigrations(
     dry_run: bool = typer.Option(
         False, help="Show what would be created without actually creating"
     ),
-    migrations_dir: str = typer.Option("migrations", help="Migrations directory"),
-    dialect: str = typer.Option(
-        "sqlite", help="Database dialect (sqlite, postgres, mysql)"
-    ),
 ):
     """
     Create migration files by comparing current models with replayed migrations.
@@ -28,8 +29,6 @@ def makemigrations(
     Scans all OxydeModel subclasses, replays existing migrations,
     computes diff, and generates a new migration file if changes detected.
     """
-    import json
-
     from oxyde.core import migration_compute_diff
     from oxyde.migrations import (
         extract_current_schema,
@@ -37,16 +36,32 @@ def makemigrations(
         replay_migrations,
     )
 
+    # Load config
+    config = load_config_or_exit()
+
     typer.echo("📝 Creating migrations...")
     typer.echo()
 
+    # Import models
+    typer.echo("0️⃣  Loading models...")
+    imported = import_models(config.models)
+    if imported == 0:
+        typer.secho("   ❌ No modules imported", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    typer.echo(f"   ✅ Imported {imported} module(s)")
+
     # Step 1: Extract current schema from models
+    typer.echo()
     typer.echo("1️⃣  Extracting schema from models...")
     try:
-        current_schema = extract_current_schema(dialect=dialect)
+        current_schema = extract_current_schema(dialect=config.dialect)
         table_count = len(current_schema["tables"])
         tables = ", ".join(current_schema["tables"].keys())
-        typer.echo(f"   ✅ Found {table_count} table(s): {tables}")
+        if table_count > 0:
+            typer.echo(f"   ✅ Found {table_count} table(s): {tables}")
+        else:
+            typer.secho("   ⚠️  No tables found", fg=typer.colors.YELLOW)
+            typer.echo("   Make sure your models have 'class Meta: is_table = True'")
     except Exception as e:
         typer.secho(f"   ❌ Error extracting schema: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
@@ -54,15 +69,13 @@ def makemigrations(
     # Step 2: Replay existing migrations
     typer.echo()
     typer.echo("2️⃣  Replaying existing migrations...")
-    migrations_path = Path(migrations_dir)
+    migrations_path = ensure_migrations_dir(config.migrations_dir, dry_run=dry_run)
+
     if not migrations_path.exists():
-        typer.echo(f"   📁 Creating migrations directory: {migrations_path.absolute()}")
-        if not dry_run:
-            migrations_path.mkdir(parents=True, exist_ok=True)
         old_schema = {"version": 1, "tables": {}}
     else:
         try:
-            old_schema = replay_migrations(migrations_dir)
+            old_schema = replay_migrations(config.migrations_dir)
             migration_count = len(list(migrations_path.glob("[0-9]*.py")))
             typer.echo(f"   ✅ Replayed {migration_count} migration(s)")
         except Exception as e:
@@ -115,7 +128,7 @@ def makemigrations(
         try:
             filepath = generate_migration_file(
                 operations,
-                migrations_dir=migrations_dir,
+                migrations_dir=config.migrations_dir,
                 name=name,
             )
             typer.echo()
@@ -143,35 +156,37 @@ def makemigrations(
                 typer.echo("   ⚠️  No models to generate stubs for")
         except Exception as e:
             typer.secho(
-                f"   ⚠️  Warning: Could not generate stubs: {e}", fg=typer.colors.YELLOW
+                f"   ⚠️  Warning: Could not generate stubs: {e}",
+                fg=typer.colors.YELLOW,
             )
             # Don't fail migration on stub generation errors
 
 
 @app.command()
 def migrate(
-    target: str | None = typer.Option(None, help="Target migration name"),
+    target: str | None = typer.Argument(None, help="Target migration name (e.g. 0001)"),
     fake: bool = typer.Option(
         False, help="Mark migrations as applied without running SQL"
     ),
-    migrations_dir: str = typer.Option("migrations", help="Migrations directory"),
     db_alias: str = typer.Option("default", help="Database connection alias"),
 ):
     """
     Apply all pending migrations.
 
     Runs all migrations that haven't been applied yet.
-    Use --target to migrate to a specific migration.
+    Specify migration name to migrate to a specific version.
     """
-    import asyncio
-
     from oxyde.migrations import (
         apply_migrations,
         get_applied_migrations,
         get_pending_migrations,
     )
 
-    typer.echo("🚀 Applying migrations...")
+    # Load config
+    config = load_config_or_exit()
+    require_databases(config, db_alias)
+
+    typer.echo("⏳ Applying migrations...")
     typer.echo()
 
     if fake:
@@ -181,14 +196,81 @@ def migrate(
         )
         typer.echo()
 
-    try:
+    async def run_migrate():
+        from oxyde.migrations import get_migration_files, rollback_migrations
+
+        # Initialize database connection
+        await init_databases({db_alias: config.databases[db_alias]})
+
         # Get current state
-        applied = asyncio.run(get_applied_migrations(db_alias))
-        pending = get_pending_migrations(migrations_dir, applied)
+        applied = await get_applied_migrations(db_alias)
+        all_migrations = get_migration_files(config.migrations_dir)
+
+        # If target specified, check if we need to rollback
+        if target:
+            # Special case: "zero" means rollback all migrations
+            if target.lower() == "zero":
+                if not applied:
+                    typer.secho("✨ No migrations to roll back", fg=typer.colors.GREEN)
+                    return "rollback", []
+
+                typer.echo(f"Rolling back all {len(applied)} migration(s)...")
+                typer.echo()
+
+                rolled_back = await rollback_migrations(
+                    steps=len(applied),
+                    migrations_dir=config.migrations_dir,
+                    db_alias=db_alias,
+                    fake=fake,
+                )
+                return "rollback", rolled_back
+
+            # Find target migration index
+            target_idx = -1
+            for i, m in enumerate(all_migrations):
+                if m.stem == target or m.stem.startswith(target):
+                    target_idx = i
+                    break
+
+            if target_idx == -1:
+                typer.secho(f"❌ Migration '{target}' not found", fg=typer.colors.RED)
+                return None, []
+
+            # Find current position (last applied migration)
+            current_idx = -1
+            for i, m in enumerate(all_migrations):
+                if m.stem in applied:
+                    current_idx = i
+
+            # If target is before current position, rollback
+            if target_idx < current_idx:
+                steps = current_idx - target_idx
+                typer.echo(f"Rolling back {steps} migration(s) to reach {target}...")
+                typer.echo()
+
+                rolled_back = await rollback_migrations(
+                    steps=steps,
+                    migrations_dir=config.migrations_dir,
+                    db_alias=db_alias,
+                    fake=fake,
+                )
+                return "rollback", rolled_back
+
+        # Forward migration
+        pending = get_pending_migrations(config.migrations_dir, applied)
 
         if not pending:
             typer.secho("✨ No pending migrations", fg=typer.colors.GREEN)
-            return
+            return "apply", []
+
+        # Filter pending if target specified
+        if target:
+            filtered = []
+            for m in pending:
+                filtered.append(m)
+                if m.stem == target or m.stem.startswith(target):
+                    break
+            pending = filtered
 
         # Show what will be applied
         typer.echo(f"Found {len(pending)} pending migration(s):")
@@ -203,23 +285,38 @@ def migrate(
         else:
             typer.echo("Migrating to latest...")
 
-        applied_migrations = asyncio.run(
-            apply_migrations(
-                migrations_dir=migrations_dir,
-                db_alias=db_alias,
-                target=target,
-                fake=fake,
-            )
+        applied_migrations = await apply_migrations(
+            migrations_dir=config.migrations_dir,
+            db_alias=db_alias,
+            target=target,
+            fake=fake,
         )
 
-        typer.echo()
-        typer.secho(
-            f"✅ Applied {len(applied_migrations)} migration(s)",
-            fg=typer.colors.GREEN,
-            bold=True,
-        )
-        for name in applied_migrations:
-            typer.echo(f"   - {name}")
+        return "apply", applied_migrations
+
+    try:
+        result = asyncio.run(run_migrate())
+        if result is None:
+            raise typer.Exit(1)
+
+        action, migrations = result
+
+        if migrations:
+            typer.echo()
+            if action == "rollback":
+                typer.secho(
+                    f"✅ Rolled back {len(migrations)} migration(s)",
+                    fg=typer.colors.GREEN,
+                    bold=True,
+                )
+            else:
+                typer.secho(
+                    f"✅ Applied {len(migrations)} migration(s)",
+                    fg=typer.colors.GREEN,
+                    bold=True,
+                )
+            for name in migrations:
+                typer.echo(f"   - {name}")
 
     except Exception as e:
         typer.secho(f"❌ Error applying migrations: {e}", fg=typer.colors.RED)
@@ -228,26 +325,33 @@ def migrate(
 
 @app.command()
 def showmigrations(
-    migrations_dir: str = typer.Option("migrations", help="Migrations directory"),
     db_alias: str = typer.Option("default", help="Database connection alias"),
 ):
     """
     Show list of all migrations with their status (applied/pending).
     """
-    import asyncio
-
     from oxyde.migrations import get_applied_migrations, get_migration_files
+
+    # Load config
+    config = load_config_or_exit()
+    require_databases(config, db_alias)
 
     typer.echo("📋 Migrations status:")
     typer.echo()
 
-    try:
+    async def run_show():
+        # Initialize database connection
+        await init_databases({db_alias: config.databases[db_alias]})
+
         # Get applied migrations
-        applied = asyncio.run(get_applied_migrations(db_alias))
-        applied_set = set(applied)
+        applied = await get_applied_migrations(db_alias)
+        return set(applied)
+
+    try:
+        applied_set = asyncio.run(run_show())
 
         # Get all migration files
-        all_migrations = get_migration_files(migrations_dir)
+        all_migrations = get_migration_files(config.migrations_dir)
 
         if not all_migrations:
             typer.secho("No migrations found", fg=typer.colors.YELLOW)
@@ -274,10 +378,6 @@ def showmigrations(
 @app.command()
 def sqlmigrate(
     name: str,
-    migrations_dir: str = typer.Option("migrations", help="Migrations directory"),
-    dialect: str = typer.Option(
-        "sqlite", help="Database dialect (sqlite, postgres, mysql)"
-    ),
 ):
     """
     Print the SQL for a specific migration.
@@ -285,19 +385,19 @@ def sqlmigrate(
     Args:
         name: Name of the migration file (e.g., 0001_initial)
     """
-    import json
-    from pathlib import Path
-
     from oxyde.core import migration_to_sql
     from oxyde.migrations.context import MigrationContext
     from oxyde.migrations.executor import import_migration_module
+
+    # Load config
+    config = load_config_or_exit()
 
     typer.echo(f"📝 SQL for migration: {name}")
     typer.echo()
 
     try:
         # Find migration file
-        migration_path = Path(migrations_dir) / f"{name}.py"
+        migration_path = Path(config.migrations_dir) / f"{name}.py"
         if not migration_path.exists():
             typer.secho(f"❌ Migration not found: {name}", fg=typer.colors.RED)
             raise typer.Exit(1)
@@ -310,7 +410,7 @@ def sqlmigrate(
             raise typer.Exit(1)
 
         # Create context in collect mode to get operations
-        ctx = MigrationContext(mode="collect", dialect=dialect)
+        ctx = MigrationContext(mode="collect", dialect=config.dialect)
         module.upgrade(ctx)
 
         operations = ctx.get_collected_operations()
@@ -321,10 +421,10 @@ def sqlmigrate(
 
         # Convert operations to SQL
         operations_json = json.dumps(operations)
-        sql_statements = migration_to_sql(operations_json, dialect)
+        sql_statements = migration_to_sql(operations_json, config.dialect)
 
         # Print SQL
-        typer.secho(f"-- Generated SQL ({dialect}):", fg=typer.colors.CYAN)
+        typer.secho(f"-- Generated SQL ({config.dialect}):", fg=typer.colors.CYAN)
         typer.echo()
         for sql in sql_statements:
             typer.echo(sql)
@@ -333,125 +433,3 @@ def sqlmigrate(
     except Exception as e:
         typer.secho(f"❌ Error generating SQL: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
-
-
-@app.command()
-def rollback(
-    steps: int = typer.Option(1, help="Number of migrations to roll back"),
-    migrations_dir: str = typer.Option("migrations", help="Migrations directory"),
-    db_alias: str = typer.Option("default", help="Database connection alias"),
-    fake: bool = typer.Option(False, help="Remove from history without running SQL"),
-):
-    """
-    Roll back the last N migrations.
-
-    Args:
-        steps: Number of migrations to roll back (default: 1)
-    """
-    import asyncio
-
-    from oxyde.migrations import get_applied_migrations, rollback_migrations
-
-    typer.echo(f"🔙 Rolling back {steps} migration(s)...")
-    typer.echo()
-
-    if fake:
-        typer.secho(
-            "⚠️  [FAKE MODE] Removing from history without executing SQL",
-            fg=typer.colors.YELLOW,
-        )
-        typer.echo()
-
-    try:
-        # Get applied migrations
-        applied = asyncio.run(get_applied_migrations(db_alias))
-
-        if not applied:
-            typer.secho("✨ No migrations to roll back", fg=typer.colors.YELLOW)
-            return
-
-        # Show what will be rolled back
-        to_rollback = applied[-steps:] if steps < len(applied) else applied
-        typer.echo(f"Will roll back {len(to_rollback)} migration(s):")
-        for name in reversed(to_rollback):
-            typer.echo(f"  - {name}")
-
-        typer.echo()
-
-        # Roll back migrations
-        rolled_back = asyncio.run(
-            rollback_migrations(
-                steps=steps,
-                migrations_dir=migrations_dir,
-                db_alias=db_alias,
-                fake=fake,
-            )
-        )
-
-        typer.echo()
-        typer.secho(
-            f"✅ Rolled back {len(rolled_back)} migration(s)",
-            fg=typer.colors.GREEN,
-            bold=True,
-        )
-        for name in rolled_back:
-            typer.echo(f"   - {name}")
-
-    except Exception as e:
-        typer.secho(f"❌ Error rolling back migrations: {e}", fg=typer.colors.RED)
-        raise typer.Exit(1)
-
-
-@app.command(name="generate-stubs")
-def generate_stubs():
-    """
-    Generate .pyi stub files for all registered table models.
-
-    Creates type stub files with autocomplete support for QuerySet filter/exclude
-    methods with all field lookups (contains, gt, gte, etc.).
-    """
-    from oxyde.codegen import generate_stubs_for_models, write_stubs
-    from oxyde.models.registry import registered_tables
-
-    typer.echo("🔧 Generating type stubs...")
-    typer.echo()
-
-    try:
-        # Get all registered table models
-        models = list(registered_tables().values())
-
-        if not models:
-            typer.secho("⚠️  No table models found", fg=typer.colors.YELLOW)
-            typer.echo("Make sure your models are imported and registered")
-            return
-
-        typer.echo(f"Found {len(models)} table model(s):")
-        for model in models:
-            typer.echo(f"  - {model.__module__}.{model.__name__}")
-
-        typer.echo()
-        typer.echo("Generating stubs...")
-
-        # Generate stubs
-        stub_mapping = generate_stubs_for_models(models)
-
-        # Write to disk
-        write_stubs(stub_mapping)
-
-        typer.echo()
-        typer.secho(
-            f"✅ Generated {len(stub_mapping)} stub file(s)",
-            fg=typer.colors.GREEN,
-            bold=True,
-        )
-
-    except Exception as e:
-        typer.secho(f"❌ Error generating stubs: {e}", fg=typer.colors.RED)
-        import traceback
-
-        traceback.print_exc()
-        raise typer.Exit(1)
-
-
-if __name__ == "__main__":
-    app()

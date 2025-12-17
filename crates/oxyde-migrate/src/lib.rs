@@ -100,7 +100,11 @@ pub type Result<T> = std::result::Result<T, MigrateError>;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FieldDef {
     pub name: String,
-    pub field_type: String,
+    /// Python type name for cross-dialect type generation (e.g., "int", "str", "bytes")
+    pub python_type: String,
+    /// Explicit db_type from user (e.g., "JSONB", "VARCHAR(255)")
+    #[serde(default)]
+    pub db_type: Option<String>,
     pub nullable: bool,
     pub primary_key: bool,
     pub unique: bool,
@@ -197,8 +201,9 @@ pub enum MigrationOp {
     },
     DropTable {
         name: String,
-        /// Full table definition for reverse migration
-        table: TableDef,
+        /// Full table definition for reverse migration (optional for forward migration)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        table: Option<TableDef>,
     },
     RenameTable {
         old_name: String,
@@ -211,8 +216,9 @@ pub enum MigrationOp {
     DropColumn {
         table: String,
         field: String,
-        /// Full field definition for reverse migration
-        field_def: FieldDef,
+        /// Full field definition for reverse migration (optional for forward migration)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        field_def: Option<FieldDef>,
     },
     RenameColumn {
         table: String,
@@ -271,44 +277,112 @@ pub enum MigrationOp {
     },
 }
 
-/// Build full MySQL column definition from FieldDef
-fn build_mysql_column_def(field: &FieldDef, dialect: Dialect) -> String {
-    let mut col_def = format!("{} {}", field.name, field.field_type);
-
-    if field.primary_key {
-        col_def.push_str(" PRIMARY KEY");
+/// Generate SQL type from Python type name for a given dialect.
+///
+/// This is used when db_type is not explicitly specified by the user.
+fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: bool) -> String {
+    match dialect {
+        Dialect::Sqlite => match python_type {
+            "int" => "INTEGER".to_string(),
+            "str" => "TEXT".to_string(),
+            "float" => "REAL".to_string(),
+            "bool" => "INTEGER".to_string(),
+            "bytes" => "BLOB".to_string(),
+            "datetime" => "TEXT".to_string(),
+            "date" => "TEXT".to_string(),
+            "time" => "TEXT".to_string(),
+            "timedelta" => "TEXT".to_string(),
+            "uuid" => "TEXT".to_string(),
+            "decimal" => "NUMERIC".to_string(),
+            _ => "TEXT".to_string(),
+        },
+        Dialect::Postgres => match python_type {
+            "int" if is_pk => "SERIAL".to_string(),
+            "int" => "BIGINT".to_string(),
+            "str" => "TEXT".to_string(),
+            "float" => "DOUBLE PRECISION".to_string(),
+            "bool" => "BOOLEAN".to_string(),
+            "bytes" => "BYTEA".to_string(),
+            "datetime" => "TIMESTAMP".to_string(),
+            "date" => "DATE".to_string(),
+            "time" => "TIME".to_string(),
+            "timedelta" => "INTERVAL".to_string(),
+            "uuid" => "UUID".to_string(),
+            "decimal" => "NUMERIC".to_string(),
+            _ => "TEXT".to_string(),
+        },
+        Dialect::Mysql => match python_type {
+            "int" => "BIGINT".to_string(),
+            "str" => "TEXT".to_string(),
+            "float" => "DOUBLE".to_string(),
+            "bool" => "TINYINT".to_string(),
+            "bytes" => "BLOB".to_string(),
+            "datetime" => "DATETIME".to_string(),
+            "date" => "DATE".to_string(),
+            "time" => "TIME".to_string(),
+            "timedelta" => "TIME".to_string(),
+            "uuid" => "CHAR(36)".to_string(),
+            "decimal" => "DECIMAL".to_string(),
+            _ => "TEXT".to_string(),
+        },
     }
-
-    if field.auto_increment {
-        col_def.push_str(" AUTO_INCREMENT");
-    }
-
-    if !field.nullable && !field.primary_key {
-        col_def.push_str(" NOT NULL");
-    }
-
-    if field.unique && !field.primary_key {
-        col_def.push_str(" UNIQUE");
-    }
-
-    if let Some(default) = &field.default {
-        col_def.push_str(&format!(" DEFAULT {}", default));
-    }
-
-    // For MySQL CHANGE, we need to handle the case where name might differ
-    // This function returns definition with the field's name
-    let _ = dialect; // dialect parameter for future use
-    col_def
 }
 
-/// Build SQLite column definition from FieldDef
-fn build_sqlite_column_def(field: &FieldDef) -> String {
-    let mut col_def = format!("{} {}", field.name, field.field_type);
+/// Translate database-specific types for cross-platform compatibility.
+///
+/// E.g., SERIAL/BIGSERIAL (PostgreSQL) → INT/BIGINT (MySQL) → INTEGER (SQLite)
+fn translate_db_type(db_type: &str, dialect: Dialect) -> String {
+    let db_type_upper = db_type.to_uppercase();
+
+    match dialect {
+        Dialect::Sqlite => match db_type_upper.as_str() {
+            "SERIAL" | "BIGSERIAL" => "INTEGER".to_string(),
+            _ => db_type.to_string(),
+        },
+        Dialect::Mysql => match db_type_upper.as_str() {
+            "SERIAL" => "INT".to_string(),
+            "BIGSERIAL" => "BIGINT".to_string(),
+            _ => db_type.to_string(),
+        },
+        Dialect::Postgres => db_type.to_string(),
+    }
+}
+
+/// Resolve the SQL type for a field based on dialect.
+///
+/// Priority:
+/// 1. If db_type is set (user explicit) → translate for dialect
+/// 2. Generate from python_type for dialect
+fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
+    // 1. Explicit db_type from user - translate if needed
+    if let Some(db_type) = &field.db_type {
+        return translate_db_type(db_type, dialect);
+    }
+
+    // 2. Generate from python_type
+    python_type_to_sql(&field.python_type, dialect, field.primary_key)
+}
+
+/// Build column definition from FieldDef for any dialect
+fn build_column_def(field: &FieldDef, dialect: Dialect) -> String {
+    let sql_type = resolve_field_type(field, dialect);
+    let mut col_def = format!("{} {}", field.name, sql_type);
 
     if field.primary_key {
         col_def.push_str(" PRIMARY KEY");
-        if field.auto_increment {
-            col_def.push_str(" AUTOINCREMENT");
+    }
+
+    // Handle auto_increment per dialect
+    if field.auto_increment {
+        match dialect {
+            Dialect::Sqlite => {
+                if field.primary_key {
+                    col_def.push_str(" AUTOINCREMENT");
+                }
+            }
+            Dialect::Mysql => col_def.push_str(" AUTO_INCREMENT"),
+            // Postgres uses SERIAL/BIGSERIAL types, no separate keyword needed
+            Dialect::Postgres => {}
         }
     }
 
@@ -359,9 +433,9 @@ fn sqlite_table_rebuild(
     for field in fields {
         if field.name == altered_column {
             // Use the new field definition
-            table_parts.push(build_sqlite_column_def(new_field));
+            table_parts.push(build_column_def(new_field, Dialect::Sqlite));
         } else {
-            table_parts.push(build_sqlite_column_def(field));
+            table_parts.push(build_column_def(field, Dialect::Sqlite));
         }
         column_names.push(field.name.clone());
     }
@@ -429,39 +503,11 @@ impl MigrationOp {
     pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
         match self {
             MigrationOp::CreateTable { table } => {
-                let mut fields_sql = Vec::new();
-
-                for field in &table.fields {
-                    let mut field_sql = format!("{} {}", field.name, field.field_type);
-
-                    if field.primary_key {
-                        field_sql.push_str(" PRIMARY KEY");
-                    }
-
-                    // Handle auto_increment flag (set from Python based on type mapping logic)
-                    if field.auto_increment {
-                        match dialect {
-                            Dialect::Sqlite => field_sql.push_str(" AUTOINCREMENT"),
-                            Dialect::Mysql => field_sql.push_str(" AUTO_INCREMENT"),
-                            // Postgres uses SERIAL/BIGSERIAL types, no separate keyword needed
-                            Dialect::Postgres => {}
-                        }
-                    }
-
-                    if !field.nullable {
-                        field_sql.push_str(" NOT NULL");
-                    }
-
-                    if field.unique && !field.primary_key {
-                        field_sql.push_str(" UNIQUE");
-                    }
-
-                    if let Some(default) = &field.default {
-                        field_sql.push_str(&format!(" DEFAULT {}", default));
-                    }
-
-                    fields_sql.push(field_sql);
-                }
+                let mut fields_sql: Vec<String> = table
+                    .fields
+                    .iter()
+                    .map(|field| build_column_def(field, dialect))
+                    .collect();
 
                 // For SQLite: FK and CHECK constraints must be inline in CREATE TABLE
                 // (SQLite doesn't support ALTER TABLE ADD CONSTRAINT)
@@ -553,7 +599,8 @@ impl MigrationOp {
                 _ => vec![format!("ALTER TABLE {} RENAME TO {}", old_name, new_name)],
             }),
             MigrationOp::AddColumn { table, field } => {
-                let mut field_sql = format!("{} {}", field.name, field.field_type);
+                let sql_type = resolve_field_type(field, dialect);
+                let mut field_sql = format!("{} {}", field.name, sql_type);
 
                 if !field.nullable {
                     field_sql.push_str(" NOT NULL");
@@ -590,7 +637,7 @@ impl MigrationOp {
                             // Build full definition with new name
                             let mut renamed_field = field.clone();
                             renamed_field.name = new_name.clone();
-                            let col_def = build_mysql_column_def(&renamed_field, dialect);
+                            let col_def = build_column_def(&renamed_field, dialect);
                             vec![format!(
                                 "ALTER TABLE {} CHANGE {} {}",
                                 table, old_name, col_def
@@ -627,11 +674,15 @@ impl MigrationOp {
                         // PostgreSQL: multiple ALTER statements for type, null, default
                         let mut stmts = Vec::new();
 
+                        // Resolve types for comparison and SQL generation
+                        let old_sql_type = resolve_field_type(old_field, dialect);
+                        let new_sql_type = resolve_field_type(new_field, dialect);
+
                         // Change type if different
-                        if old_field.field_type != new_field.field_type {
+                        if old_sql_type != new_sql_type {
                             stmts.push(format!(
                                 "ALTER TABLE {} ALTER COLUMN {} TYPE {}",
-                                table, new_field.name, new_field.field_type
+                                table, new_field.name, new_sql_type
                             ));
                         }
 
@@ -684,7 +735,7 @@ impl MigrationOp {
                     }
                     Dialect::Mysql => {
                         // MySQL: MODIFY COLUMN with full column definition
-                        let col_def = build_mysql_column_def(new_field, dialect);
+                        let col_def = build_column_def(new_field, dialect);
                         Ok(vec![format!(
                             "ALTER TABLE {} MODIFY COLUMN {}",
                             table, col_def
@@ -904,7 +955,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Vec<MigrationOp> {
         if !new.tables.contains_key(name) {
             ops.push(MigrationOp::DropTable {
                 name: name.clone(),
-                table: old_table.clone(),
+                table: Some(old_table.clone()),
             });
         }
     }
@@ -928,7 +979,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Vec<MigrationOp> {
                     ops.push(MigrationOp::DropColumn {
                         table: name.clone(),
                         field: old_field.name.clone(),
-                        field_def: old_field.clone(),
+                        field_def: Some(old_field.clone()),
                     });
                 }
             }
@@ -937,8 +988,13 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Vec<MigrationOp> {
             for new_field in &new_table.fields {
                 if let Some(old_field) = old_table.fields.iter().find(|f| f.name == new_field.name)
                 {
-                    // Check if any relevant attribute changed
-                    let type_changed = old_field.field_type != new_field.field_type;
+                    // Check if type changed using python_type or db_type
+                    let type_changed = if old_field.python_type != new_field.python_type {
+                        true
+                    } else {
+                        old_field.db_type != new_field.db_type
+                    };
+
                     let nullable_changed = old_field.nullable != new_field.nullable;
                     let default_changed = old_field.default != new_field.default;
                     let unique_changed = old_field.unique != new_field.unique;
@@ -1034,705 +1090,77 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Vec<MigrationOp> {
     ops
 }
 
+/// Unit tests for private helper functions.
+/// Integration tests for public API are in tests/migration_tests.rs
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn sample_field(name: &str) -> FieldDef {
-        FieldDef {
-            name: name.to_string(),
-            field_type: "text".into(),
-            nullable: false,
-            primary_key: false,
-            unique: false,
-            default: None,
-            auto_increment: false,
-        }
-    }
-
-    fn sample_table() -> TableDef {
-        TableDef {
-            name: "users".into(),
-            fields: vec![
-                FieldDef {
-                    name: "id".into(),
-                    field_type: "integer".into(),
-                    nullable: false,
-                    primary_key: true,
-                    unique: true,
-                    default: None,
-                    auto_increment: false,
-                },
-                sample_field("email"),
-            ],
-            indexes: vec![IndexDef {
-                name: "users_email_idx".into(),
-                fields: vec!["email".into()],
-                unique: true,
-                method: Some("btree".into()),
-            }],
-            foreign_keys: vec![],
-            checks: vec![],
-            comment: Some("User accounts".into()),
-        }
-    }
-
     #[test]
-    fn test_snapshot_serialization_roundtrip() {
-        let mut snapshot = Snapshot::new();
-        snapshot.add_table(sample_table());
-
-        let json = snapshot.to_json().unwrap();
-        let deserialized = Snapshot::from_json(&json).unwrap();
-        assert_eq!(snapshot, deserialized);
-    }
-
-    #[test]
-    fn test_migration_create_table_generates_sql() {
-        let sql = MigrationOp::CreateTable {
-            table: sample_table(),
-        }
-        .to_sql(Dialect::Postgres)
-        .unwrap();
-
-        assert!(sql[0].contains("CREATE TABLE users"));
-        assert!(sql[1].contains("CREATE UNIQUE INDEX users_email_idx"));
-    }
-
-    #[test]
-    fn test_sqlite_create_table_with_fk_inline() {
-        // SQLite should have FK constraints inline in CREATE TABLE, not as ALTER TABLE
-        let table = TableDef {
-            name: "posts".into(),
-            fields: vec![
-                FieldDef {
-                    name: "id".into(),
-                    field_type: "INTEGER".into(),
-                    nullable: false,
-                    primary_key: true,
-                    unique: false,
-                    default: None,
-                    auto_increment: true,
-                },
-                FieldDef {
-                    name: "author_id".into(),
-                    field_type: "INTEGER".into(),
-                    nullable: false,
-                    primary_key: false,
-                    unique: false,
-                    default: None,
-                    auto_increment: false,
-                },
-            ],
-            indexes: vec![],
-            foreign_keys: vec![ForeignKeyDef {
-                name: "fk_posts_author".into(),
-                columns: vec!["author_id".into()],
-                ref_table: "users".into(),
-                ref_columns: vec!["id".into()],
-                on_delete: Some("CASCADE".into()),
-                on_update: None,
-            }],
-            checks: vec![CheckDef {
-                name: "valid_author".into(),
-                expression: "author_id > 0".into(),
-            }],
-            comment: None,
-        };
-
-        let sql = MigrationOp::CreateTable { table }
-            .to_sql(Dialect::Sqlite)
-            .unwrap();
-
-        // Should have only 1 statement (CREATE TABLE with inline FK and CHECK)
+    fn test_python_type_to_sql_all_dialects() {
+        // Test int type across dialects
+        assert_eq!(python_type_to_sql("int", Dialect::Sqlite, false), "INTEGER");
         assert_eq!(
-            sql.len(),
-            1,
-            "SQLite should not generate ALTER TABLE for FK"
+            python_type_to_sql("int", Dialect::Postgres, false),
+            "BIGINT"
         );
+        assert_eq!(python_type_to_sql("int", Dialect::Postgres, true), "SERIAL"); // PK
+        assert_eq!(python_type_to_sql("int", Dialect::Mysql, false), "BIGINT");
 
-        let create_stmt = &sql[0];
-        assert!(
-            create_stmt.contains("FOREIGN KEY (author_id) REFERENCES users (id)"),
-            "FK should be inline: {}",
-            create_stmt
-        );
-        assert!(
-            create_stmt.contains("ON DELETE CASCADE"),
-            "ON DELETE should be present: {}",
-            create_stmt
-        );
-        assert!(
-            create_stmt.contains("CHECK (author_id > 0)"),
-            "CHECK should be inline: {}",
-            create_stmt
-        );
-        assert!(
-            !create_stmt.contains("ALTER TABLE"),
-            "Should not contain ALTER TABLE: {}",
-            create_stmt
-        );
-    }
-
-    #[test]
-    fn test_postgres_create_table_with_fk_as_alter() {
-        // PostgreSQL should have FK constraints as separate ALTER TABLE
-        let table = TableDef {
-            name: "posts".into(),
-            fields: vec![FieldDef {
-                name: "id".into(),
-                field_type: "INTEGER".into(),
-                nullable: false,
-                primary_key: true,
-                unique: false,
-                default: None,
-                auto_increment: false,
-            }],
-            indexes: vec![],
-            foreign_keys: vec![ForeignKeyDef {
-                name: "fk_posts_author".into(),
-                columns: vec!["author_id".into()],
-                ref_table: "users".into(),
-                ref_columns: vec!["id".into()],
-                on_delete: Some("CASCADE".into()),
-                on_update: None,
-            }],
-            checks: vec![],
-            comment: None,
-        };
-
-        let sql = MigrationOp::CreateTable { table }
-            .to_sql(Dialect::Postgres)
-            .unwrap();
-
-        // Should have 2 statements (CREATE TABLE + ALTER TABLE for FK)
+        // Test bool type
         assert_eq!(
-            sql.len(),
-            2,
-            "PostgreSQL should generate ALTER TABLE for FK"
+            python_type_to_sql("bool", Dialect::Sqlite, false),
+            "INTEGER"
         );
-        assert!(sql[1].contains("ALTER TABLE posts ADD CONSTRAINT"));
-        assert!(sql[1].contains("FOREIGN KEY"));
+        assert_eq!(
+            python_type_to_sql("bool", Dialect::Postgres, false),
+            "BOOLEAN"
+        );
+        assert_eq!(python_type_to_sql("bool", Dialect::Mysql, false), "TINYINT");
+
+        // Test datetime type
+        assert_eq!(
+            python_type_to_sql("datetime", Dialect::Sqlite, false),
+            "TEXT"
+        );
+        assert_eq!(
+            python_type_to_sql("datetime", Dialect::Postgres, false),
+            "TIMESTAMP"
+        );
+        assert_eq!(
+            python_type_to_sql("datetime", Dialect::Mysql, false),
+            "DATETIME"
+        );
+
+        // Test uuid type
+        assert_eq!(python_type_to_sql("uuid", Dialect::Sqlite, false), "TEXT");
+        assert_eq!(python_type_to_sql("uuid", Dialect::Postgres, false), "UUID");
+        assert_eq!(
+            python_type_to_sql("uuid", Dialect::Mysql, false),
+            "CHAR(36)"
+        );
+
+        // Test bytes type
+        assert_eq!(python_type_to_sql("bytes", Dialect::Sqlite, false), "BLOB");
+        assert_eq!(
+            python_type_to_sql("bytes", Dialect::Postgres, false),
+            "BYTEA"
+        );
+        assert_eq!(python_type_to_sql("bytes", Dialect::Mysql, false), "BLOB");
     }
 
     #[test]
-    fn test_sqlite_add_foreign_key_returns_error() {
-        let fk = ForeignKeyDef {
-            name: "fk_test".into(),
-            columns: vec!["user_id".into()],
-            ref_table: "users".into(),
-            ref_columns: vec!["id".into()],
-            on_delete: None,
-            on_update: None,
-        };
-
-        let result = MigrationOp::AddForeignKey {
-            table: "posts".into(),
-            fk,
-        }
-        .to_sql(Dialect::Sqlite);
-
-        assert!(result.is_err(), "SQLite AddForeignKey should return error");
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("SQLite does not support ALTER TABLE ADD FOREIGN KEY"),
-            "Error message should mention limitation: {}",
-            err
-        );
-    }
-
-    #[test]
-    fn test_sqlite_add_check_returns_error() {
-        let check = CheckDef {
-            name: "valid_age".into(),
-            expression: "age >= 0".into(),
-        };
-
-        let result = MigrationOp::AddCheck {
-            table: "users".into(),
-            check,
-        }
-        .to_sql(Dialect::Sqlite);
-
-        assert!(result.is_err(), "SQLite AddCheck should return error");
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("SQLite does not support ALTER TABLE ADD CHECK"),
-            "Error message should mention limitation: {}",
-            err
-        );
-    }
-
-    #[test]
-    fn test_migration_add_column_sql() {
-        let sql = MigrationOp::AddColumn {
-            table: "users".into(),
-            field: sample_field("name"),
-        }
-        .to_sql(Dialect::Postgres)
-        .unwrap();
+    fn test_translate_db_type_serial() {
+        // SERIAL is PostgreSQL-specific, should translate for other dialects
+        assert_eq!(translate_db_type("SERIAL", Dialect::Postgres), "SERIAL");
+        assert_eq!(translate_db_type("SERIAL", Dialect::Sqlite), "INTEGER");
+        assert_eq!(translate_db_type("SERIAL", Dialect::Mysql), "INT");
 
         assert_eq!(
-            sql,
-            vec!["ALTER TABLE users ADD COLUMN name text NOT NULL".to_string()]
+            translate_db_type("BIGSERIAL", Dialect::Postgres),
+            "BIGSERIAL"
         );
-    }
-
-    #[test]
-    fn test_dialect_specific_sql() {
-        // Test SQLite AUTOINCREMENT
-        let pk_field = FieldDef {
-            name: "id".into(),
-            field_type: "INTEGER".into(),
-            nullable: false,
-            primary_key: true,
-            unique: false,
-            default: None,
-            auto_increment: true,
-        };
-        let table = TableDef {
-            name: "test".into(),
-            fields: vec![pk_field],
-            indexes: vec![],
-            foreign_keys: vec![],
-            checks: vec![],
-            comment: None,
-        };
-        let sql = MigrationOp::CreateTable {
-            table: table.clone(),
-        }
-        .to_sql(Dialect::Sqlite)
-        .unwrap();
-        assert!(sql[0].contains("AUTOINCREMENT"));
-
-        // Test MySQL AUTO_INCREMENT
-        let sql = MigrationOp::CreateTable {
-            table: table.clone(),
-        }
-        .to_sql(Dialect::Mysql)
-        .unwrap();
-        assert!(sql[0].contains("AUTO_INCREMENT"));
-
-        // Test DROP INDEX MySQL vs others
-        let dummy_index_def = IndexDef {
-            name: "idx_name".into(),
-            fields: vec!["name".into()],
-            unique: false,
-            method: None,
-        };
-        let drop_idx_mysql = MigrationOp::DropIndex {
-            table: "users".into(),
-            index: "idx_name".into(),
-            index_def: dummy_index_def.clone(),
-        }
-        .to_sql(Dialect::Mysql)
-        .unwrap();
-        assert!(drop_idx_mysql[0].contains("ON users"));
-
-        let drop_idx_pg = MigrationOp::DropIndex {
-            table: "users".into(),
-            index: "idx_name".into(),
-            index_def: dummy_index_def,
-        }
-        .to_sql(Dialect::Postgres)
-        .unwrap();
-        assert!(!drop_idx_pg[0].contains("ON users"));
-    }
-
-    #[test]
-    fn test_compute_diff_detects_new_table_and_column() {
-        let old = Snapshot::new();
-        let mut new_snapshot = Snapshot::new();
-        let mut table = sample_table();
-        table.fields.push(sample_field("name"));
-        new_snapshot.add_table(table);
-
-        let ops = compute_diff(&old, &new_snapshot);
-        assert!(matches!(ops[0], MigrationOp::CreateTable { .. }));
-    }
-
-    #[test]
-    fn test_sqlite_alter_column_returns_error_without_schema() {
-        let old_field = FieldDef {
-            name: "age".into(),
-            field_type: "INTEGER".into(),
-            nullable: true,
-            primary_key: false,
-            unique: false,
-            default: None,
-            auto_increment: false,
-        };
-        let new_field = FieldDef {
-            name: "age".into(),
-            field_type: "TEXT".into(), // type change
-            nullable: true,
-            primary_key: false,
-            unique: false,
-            default: None,
-            auto_increment: false,
-        };
-
-        let result = MigrationOp::AlterColumn {
-            table: "users".into(),
-            old_field,
-            new_field,
-            table_fields: None, // No schema - should error
-            table_indexes: None,
-            table_foreign_keys: None,
-            table_checks: None,
-        }
-        .to_sql(Dialect::Sqlite);
-
-        assert!(
-            result.is_err(),
-            "SQLite AlterColumn without schema should return error"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("SQLite does not support ALTER COLUMN"),
-            "Error should mention SQLite limitation: {}",
-            err
-        );
-    }
-
-    #[test]
-    fn test_sqlite_alter_column_with_schema_generates_rebuild() {
-        let old_field = FieldDef {
-            name: "age".into(),
-            field_type: "INTEGER".into(),
-            nullable: true,
-            primary_key: false,
-            unique: false,
-            default: None,
-            auto_increment: false,
-        };
-        let new_field = FieldDef {
-            name: "age".into(),
-            field_type: "TEXT".into(), // type change
-            nullable: false,           // nullable change
-            primary_key: false,
-            unique: false,
-            default: None,
-            auto_increment: false,
-        };
-
-        // Full table schema
-        let table_fields = vec![
-            FieldDef {
-                name: "id".into(),
-                field_type: "INTEGER".into(),
-                nullable: false,
-                primary_key: true,
-                unique: false,
-                default: None,
-                auto_increment: true,
-            },
-            old_field.clone(),
-            FieldDef {
-                name: "name".into(),
-                field_type: "TEXT".into(),
-                nullable: false,
-                primary_key: false,
-                unique: false,
-                default: None,
-                auto_increment: false,
-            },
-        ];
-
-        let table_indexes = vec![IndexDef {
-            name: "users_name_idx".into(),
-            fields: vec!["name".into()],
-            unique: false,
-            method: None,
-        }];
-
-        let result = MigrationOp::AlterColumn {
-            table: "users".into(),
-            old_field,
-            new_field,
-            table_fields: Some(table_fields),
-            table_indexes: Some(table_indexes),
-            table_foreign_keys: None,
-            table_checks: None,
-        }
-        .to_sql(Dialect::Sqlite);
-
-        assert!(
-            result.is_ok(),
-            "SQLite AlterColumn with schema should succeed"
-        );
-        let stmts = result.unwrap();
-
-        // Verify rebuild sequence
-        assert!(
-            stmts[0].contains("PRAGMA foreign_keys=OFF"),
-            "Should disable FK: {}",
-            stmts[0]
-        );
-        assert!(
-            stmts[1].contains("CREATE TABLE _new_users"),
-            "Should create temp table: {}",
-            stmts[1]
-        );
-        assert!(
-            stmts[1].contains("age TEXT NOT NULL"),
-            "Should have altered column: {}",
-            stmts[1]
-        );
-        assert!(
-            stmts[2].contains("INSERT INTO _new_users"),
-            "Should copy data: {}",
-            stmts[2]
-        );
-        assert!(
-            stmts[3].contains("DROP TABLE users"),
-            "Should drop old table: {}",
-            stmts[3]
-        );
-        assert!(
-            stmts[4].contains("RENAME TO users"),
-            "Should rename temp table: {}",
-            stmts[4]
-        );
-        assert!(
-            stmts[5].contains("CREATE INDEX users_name_idx"),
-            "Should recreate index: {}",
-            stmts[5]
-        );
-        assert!(
-            stmts[6].contains("PRAGMA foreign_keys=ON"),
-            "Should enable FK: {}",
-            stmts[6]
-        );
-    }
-
-    #[test]
-    fn test_rename_column_mysql_with_field_def() {
-        let field_def = FieldDef {
-            name: "old_name".into(),
-            field_type: "VARCHAR(255)".into(),
-            nullable: false,
-            primary_key: false,
-            unique: true,
-            default: Some("'default'".into()),
-            auto_increment: false,
-        };
-
-        let sql = MigrationOp::RenameColumn {
-            table: "users".into(),
-            old_name: "old_name".into(),
-            new_name: "new_name".into(),
-            field_def: Some(field_def),
-        }
-        .to_sql(Dialect::Mysql)
-        .unwrap();
-
-        assert_eq!(sql.len(), 1, "Should produce single SQL statement");
-        let stmt = &sql[0];
-        assert!(stmt.contains("CHANGE"), "Should use CHANGE: {}", stmt);
-        assert!(
-            stmt.contains("old_name"),
-            "Should reference old name: {}",
-            stmt
-        );
-        assert!(
-            stmt.contains("new_name"),
-            "Should contain new name: {}",
-            stmt
-        );
-        assert!(
-            stmt.contains("VARCHAR(255)"),
-            "Should preserve type: {}",
-            stmt
-        );
-        assert!(
-            stmt.contains("NOT NULL"),
-            "Should preserve NOT NULL: {}",
-            stmt
-        );
-        assert!(stmt.contains("UNIQUE"), "Should preserve UNIQUE: {}", stmt);
-        assert!(
-            stmt.contains("DEFAULT"),
-            "Should preserve DEFAULT: {}",
-            stmt
-        );
-    }
-
-    #[test]
-    fn test_rename_column_mysql_without_field_def_fallback() {
-        let sql = MigrationOp::RenameColumn {
-            table: "users".into(),
-            old_name: "old_name".into(),
-            new_name: "new_name".into(),
-            field_def: None, // No field_def - should use fallback
-        }
-        .to_sql(Dialect::Mysql)
-        .unwrap();
-
-        assert_eq!(sql.len(), 2, "Should produce warning + SQL");
-        assert!(
-            sql[0].contains("WARNING"),
-            "First line should be warning: {}",
-            sql[0]
-        );
-        assert!(sql[1].contains("CHANGE"), "Should use CHANGE: {}", sql[1]);
-        assert!(
-            sql[1].contains("TEXT"),
-            "Fallback should use TEXT: {}",
-            sql[1]
-        );
-    }
-
-    #[test]
-    fn test_compute_diff_detects_alter_column() {
-        // Create old snapshot with a table
-        let mut old = Snapshot::new();
-        let old_table = TableDef {
-            name: "users".into(),
-            fields: vec![
-                FieldDef {
-                    name: "id".into(),
-                    field_type: "INTEGER".into(),
-                    nullable: false,
-                    primary_key: true,
-                    unique: false,
-                    default: None,
-                    auto_increment: true,
-                },
-                FieldDef {
-                    name: "email".into(),
-                    field_type: "VARCHAR(100)".into(),
-                    nullable: false,
-                    primary_key: false,
-                    unique: true,
-                    default: None,
-                    auto_increment: false,
-                },
-            ],
-            indexes: vec![],
-            foreign_keys: vec![],
-            checks: vec![],
-            comment: None,
-        };
-        old.add_table(old_table);
-
-        // Create new snapshot with modified email field
-        let mut new_snapshot = Snapshot::new();
-        let new_table = TableDef {
-            name: "users".into(),
-            fields: vec![
-                FieldDef {
-                    name: "id".into(),
-                    field_type: "INTEGER".into(),
-                    nullable: false,
-                    primary_key: true,
-                    unique: false,
-                    default: None,
-                    auto_increment: true,
-                },
-                FieldDef {
-                    name: "email".into(),
-                    field_type: "VARCHAR(255)".into(), // Changed type
-                    nullable: true,                    // Changed nullable
-                    primary_key: false,
-                    unique: true,
-                    default: None,
-                    auto_increment: false,
-                },
-            ],
-            indexes: vec![],
-            foreign_keys: vec![],
-            checks: vec![],
-            comment: None,
-        };
-        new_snapshot.add_table(new_table);
-
-        let ops = compute_diff(&old, &new_snapshot);
-
-        // Should detect AlterColumn for email field
-        assert_eq!(ops.len(), 1, "Should have exactly one operation");
-        match &ops[0] {
-            MigrationOp::AlterColumn {
-                table,
-                old_field,
-                new_field,
-                ..
-            } => {
-                assert_eq!(table, "users");
-                assert_eq!(old_field.name, "email");
-                assert_eq!(old_field.field_type, "VARCHAR(100)");
-                assert_eq!(new_field.field_type, "VARCHAR(255)");
-                assert!(!old_field.nullable);
-                assert!(new_field.nullable);
-            }
-            other => panic!("Expected AlterColumn, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn test_postgres_alter_column_unique_constraint() {
-        // Test adding unique constraint
-        let old_field = FieldDef {
-            name: "email".into(),
-            field_type: "TEXT".into(),
-            nullable: false,
-            primary_key: false,
-            unique: false,
-            default: None,
-            auto_increment: false,
-        };
-        let new_field = FieldDef {
-            name: "email".into(),
-            field_type: "TEXT".into(),
-            nullable: false,
-            primary_key: false,
-            unique: true, // Changed to unique
-            default: None,
-            auto_increment: false,
-        };
-
-        let sql = MigrationOp::AlterColumn {
-            table: "users".into(),
-            old_field: old_field.clone(),
-            new_field: new_field.clone(),
-            table_fields: None,
-            table_indexes: None,
-            table_foreign_keys: None,
-            table_checks: None,
-        }
-        .to_sql(Dialect::Postgres)
-        .unwrap();
-
-        assert_eq!(sql.len(), 1, "Should have one statement");
-        assert!(
-            sql[0].contains("ADD CONSTRAINT"),
-            "Should add constraint: {}",
-            sql[0]
-        );
-        assert!(
-            sql[0].contains("UNIQUE"),
-            "Should be UNIQUE constraint: {}",
-            sql[0]
-        );
-
-        // Test removing unique constraint
-        let sql = MigrationOp::AlterColumn {
-            table: "users".into(),
-            old_field: new_field,
-            new_field: old_field,
-            table_fields: None,
-            table_indexes: None,
-            table_foreign_keys: None,
-            table_checks: None,
-        }
-        .to_sql(Dialect::Postgres)
-        .unwrap();
-
-        assert_eq!(sql.len(), 1, "Should have one statement");
-        assert!(
-            sql[0].contains("DROP CONSTRAINT"),
-            "Should drop constraint: {}",
-            sql[0]
-        );
+        assert_eq!(translate_db_type("BIGSERIAL", Dialect::Sqlite), "INTEGER");
+        assert_eq!(translate_db_type("BIGSERIAL", Dialect::Mysql), "BIGINT");
     }
 }

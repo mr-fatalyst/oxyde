@@ -1,56 +1,22 @@
 # Oxyde ORM
 
-High-performance async Python ORM with Rust core.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mr-fatalyst/oxyde/master/logo.png" alt="Logo" width="200">
+</p>
 
-Oxyde combines Python's expressiveness with Rust's performance. Models are defined using Pydantic v2, queries execute in native Rust. Communication happens via MessagePack protocol with ~2KB binary payloads.
+<p align="center"> <b>Oxyde ORM</b> is a type-safe, Pydantic-centric asynchronous ORM with a high-performance Rust core designed for clarity, speed, and reliability. </p>
 
-```python
-from oxyde import OxydeModel, Field, db, Q, F
+<p align="center"> Inspired by the elegance of <a href="https://www.djangoproject.com/">Django’s ORM</a>, Oxyde focuses on explicitness over magic, providing a modern developer-friendly workflow with predictable behavior and strong typing throughout. </p>
 
-class User(OxydeModel):
-    class Meta:
-        is_table = True
+<p align="center">
+  <img src="https://img.shields.io/github/license/mr-fatalyst/oxyde">
+  <img src="https://github.com/mr-fatalyst/oxyde/actions/workflows/test.yml/badge.svg">
+  <img src="https://img.shields.io/pypi/v/oxyde">
+  <img src="https://img.shields.io/pypi/pyversions/oxyde">
+  <img src="https://static.pepy.tech/badge/oxyde" alt="PyPI Downloads">
+</p>
 
-    id: int | None = Field(default=None, db_pk=True)
-    email: str = Field(db_unique=True)
-    age: int = Field(ge=0, le=150)
-
-async def main():
-    await db.init(default="postgresql://localhost/mydb")
-
-    # Create
-    user = await User.objects.create(email="alice@example.com", age=30)
-
-    # Query with Django-style filters
-    users = await User.objects.filter(age__gte=18).limit(10).all()
-
-    # Atomic update
-    await User.objects.filter(id=1).update(views=F("views") + 1)
-
-    await db.close()
-```
-
-## Features
-
-- **Django-style API** — Familiar `Model.objects.filter()` syntax
-- **Pydantic v2 models** — Full validation, type hints, serialization
-- **Async-first** — Built for modern async Python with `asyncio`
-- **Rust performance** — SQL generation and execution in native Rust
-- **Multi-database** — PostgreSQL, SQLite, MySQL support
-- **Transactions** — `atomic()` context manager with savepoints
-- **Migrations** — Django-style `makemigrations` and `migrate` CLI
-
-## Database Support
-
-| Database   | Min Version | Status | Notes |
-|------------|-------------|--------|-------|
-| PostgreSQL | 8.2+ | Full | RETURNING, UPSERT, FOR UPDATE/SHARE, JSON, Arrays |
-| SQLite     | 3.35+ | Full | RETURNING, UPSERT, WAL mode by default |
-| MySQL      | 5.7+ | Full | UPSERT via ON DUPLICATE KEY, FOR UPDATE/SHARE |
-
-> **SQLite < 3.35**: Falls back to `last_insert_rowid()` which may return incorrect IDs with concurrent inserts.
->
-> **MySQL**: No RETURNING clause — uses `last_insert_id()`. Bulk INSERT returns calculated ID range which may be incorrect with concurrent inserts.
+---
 
 ## Quick Links
 
@@ -90,6 +56,16 @@ async def main():
 
 </div>
 
+## Features
+
+- **Django-style API** — Familiar `Model.objects.filter()` syntax
+- **Pydantic v2 models** — Full validation, type hints, serialization
+- **Async-first** — Built for modern async Python with `asyncio`
+- **Rust performance** — SQL generation and execution in native Rust
+- **Multi-database** — PostgreSQL, SQLite, MySQL support
+- **Transactions** — `transaction.atomic()` context manager with savepoints
+- **Migrations** — Django-style `makemigrations` and `migrate` CLI
+
 ## Why Oxyde?
 
 ### Performance
@@ -117,7 +93,21 @@ await User.objects.filter(age__gte=18).exclude(status="banned").order_by("-creat
 No sync wrappers or thread pools. Oxyde is async from the ground up:
 
 ```python
-async with atomic():
+from oxyde.db import transaction
+
+async with transaction.atomic():
     user = await User.objects.create(name="Alice")
     await Profile.objects.create(user_id=user.id)
 ```
+
+## Database Support
+
+| Database   | Min Version | Status | Notes |
+|------------|-------------|--------|-------|
+| PostgreSQL | 12+ | Full | RETURNING, UPSERT, FOR UPDATE/SHARE, JSON, Arrays |
+| SQLite     | 3.35+ | Full | RETURNING, UPSERT, WAL mode by default |
+| MySQL      | 8.0+ | Full | UPSERT via ON DUPLICATE KEY, FOR UPDATE/SHARE |
+
+> **SQLite < 3.35**: Falls back to `last_insert_rowid()` which may return incorrect IDs with concurrent inserts.
+>
+> **MySQL**: No RETURNING clause — uses `last_insert_id()`. Bulk INSERT returns calculated ID range which may be incorrect with concurrent inserts.

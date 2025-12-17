@@ -3,6 +3,5 @@
 pub mod handle;
 pub mod registry;
 
-pub(crate) use handle::DbPool;
-pub use handle::{DatabaseBackend, PoolHandle};
+pub use handle::{DatabaseBackend, DbPool, PoolHandle};
 pub(crate) use registry::ConnectionRegistry;

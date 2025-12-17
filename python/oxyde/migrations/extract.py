@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from pydantic.fields import PydanticUndefined
 
-from oxyde.migrations.types import get_sql_type
 from oxyde.models.registry import iter_tables, registered_tables
 
 
@@ -124,6 +123,39 @@ def _serialize_default(value: Any, dialect: str) -> str | None:
     return str_val
 
 
+def _get_python_type_name(python_type: type) -> str:
+    """Get canonical name for Python type.
+
+    Used for cross-dialect type generation in migrations.
+
+    Args:
+        python_type: Python type (int, str, bytes, etc.)
+
+    Returns:
+        Canonical type name string
+    """
+    # Map types to canonical names
+    type_names = {
+        int: "int",
+        str: "str",
+        float: "float",
+        bool: "bool",
+        bytes: "bytes",
+        datetime: "datetime",
+        date: "date",
+        time: "time",
+        timedelta: "timedelta",
+        UUID: "uuid",
+        Decimal: "decimal",
+    }
+
+    if python_type in type_names:
+        return type_names[python_type]
+
+    # For dict, list, etc. - use the type name
+    return python_type.__name__.lower()
+
+
 def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
     """Extract current schema from registered models.
 
@@ -144,6 +176,9 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
             }
         }
     """
+    # Import here to avoid circular dependency
+    from oxyde.models.base import OxydeModel
+
     tables = {}
 
     for model_cls in iter_tables():
@@ -154,6 +189,17 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
         # Extract fields
         fields = []
         for field_name, field_meta in meta.field_metadata.items():
+            # Skip virtual relation fields - these are for ORM, not actual DB columns:
+            # 1. FK fields (python_type is OxydeModel) - real column is synthetic field
+            # 2. Reverse FK fields (db_reverse_fk) - no DB column, just relation
+            # 3. M2M fields (db_m2m) - no DB column, uses junction table
+            if isinstance(field_meta.python_type, type) and issubclass(
+                field_meta.python_type, OxydeModel
+            ):
+                continue
+            if field_meta.extra.get("reverse_fk") or field_meta.extra.get("m2m"):
+                continue
+
             # Determine Python type for SQL mapping
             # For FK fields, use int (references PK which is typically int)
             if field_meta.foreign_key is not None:
@@ -162,15 +208,6 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
                 python_type_for_sql = int
             else:
                 python_type_for_sql = field_meta.python_type
-
-            # Determine SQL type using new unified logic
-            # Priority: db_type > int PK (auto-increment) > standard mapping
-            sql_type = get_sql_type(
-                python_type=python_type_for_sql,
-                dialect=dialect,
-                is_pk=field_meta.primary_key,
-                db_type=field_meta.db_type,
-            )
 
             # Determine if this field needs AUTO_INCREMENT (MySQL only)
             # AUTO_INCREMENT is needed when:
@@ -202,10 +239,14 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
                 # Serialize Python value to SQL
                 default_val = _serialize_default(field_meta.default, dialect)
 
+            # Get python type name for cross-dialect type generation
+            python_type_name = _get_python_type_name(python_type_for_sql)
+
             fields.append(
                 {
                     "name": field_meta.db_column,
-                    "field_type": sql_type,
+                    "python_type": python_type_name,
+                    "db_type": field_meta.db_type,  # explicit user override
                     "nullable": field_meta.nullable,
                     "primary_key": field_meta.primary_key,
                     "unique": field_meta.unique,
@@ -281,4 +322,4 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
     }
 
 
-__all__ = ["extract_current_schema", "get_sql_type"]
+__all__ = ["extract_current_schema"]

@@ -46,7 +46,13 @@ Internal Structure:
 
 from __future__ import annotations
 
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from typing import Any
+from uuid import UUID
+
+# Types that msgpack cannot serialize - convert to str
+_STRINGIFY_TYPES = (datetime, date, time, UUID, Decimal)
 
 
 class _Expression:
@@ -143,7 +149,7 @@ class F:
 
 
 def _serialize_value_for_ir(value: Any) -> Any:
-    """Serialize values for IR, handling expressions."""
+    """Serialize values for IR, handling expressions and non-msgpack types."""
     if isinstance(value, _Expression):
         return {"__expr__": value._expr}
     if isinstance(value, F):
@@ -152,6 +158,11 @@ def _serialize_value_for_ir(value: Any) -> Any:
         return [_serialize_value_for_ir(item) for item in value]
     if isinstance(value, dict):
         return {key: _serialize_value_for_ir(val) for key, val in value.items()}
+    # Types that msgpack cannot serialize
+    if isinstance(value, _STRINGIFY_TYPES):
+        return str(value)
+    if isinstance(value, timedelta):
+        return value.total_seconds()
     return value
 
 

@@ -5,7 +5,7 @@ use sea_query::{Expr, MysqlQueryBuilder, PostgresQueryBuilder, Query, SqliteQuer
 
 use crate::error::Result;
 use crate::filter::build_filter_node;
-use crate::utils::{json_to_simple_expr, json_to_value, ColumnIdent, TableIdent};
+use crate::utils::{json_to_simple_expr, json_to_value_typed, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build UPDATE query from QueryIR
@@ -19,12 +19,23 @@ pub fn build_update(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
     let mut query = Query::update();
     query.table(table);
 
+    // Helper to get column type from col_types
+    let get_col_type = |col: &str| -> Option<&str> {
+        ir.col_types
+            .as_ref()
+            .and_then(|ct| ct.get(col).map(|s| s.as_str()))
+    };
+
     if let Some(values) = &ir.values {
         for (col, val) in values {
             if let Some(expr) = json_to_simple_expr(val)? {
                 query.value(ColumnIdent(col.clone()), expr);
             } else {
-                query.value(ColumnIdent(col.clone()), Expr::val(json_to_value(val)));
+                let col_type = get_col_type(col);
+                query.value(
+                    ColumnIdent(col.clone()),
+                    Expr::val(json_to_value_typed(val, col_type)),
+                );
             }
         }
     }

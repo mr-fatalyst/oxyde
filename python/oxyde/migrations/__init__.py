@@ -16,7 +16,7 @@ from oxyde.migrations.executor import (
     rollback_migration,
     rollback_migrations,
 )
-from oxyde.migrations.extract import extract_current_schema, get_sql_type
+from oxyde.migrations.extract import extract_current_schema
 from oxyde.migrations.generator import generate_migration_file
 from oxyde.migrations.replay import SchemaState, replay_migrations
 from oxyde.migrations.tracker import (
@@ -35,7 +35,6 @@ from oxyde.migrations.types import (
 
 __all__ = [
     "extract_current_schema",
-    "get_sql_type",
     "SchemaState",
     "replay_migrations",
     "MigrationContext",

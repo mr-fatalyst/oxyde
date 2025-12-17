@@ -108,15 +108,17 @@ pub fn build_sql(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value>)>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxyde_codec::{Filter, FilterNode, JoinColumn, JoinSpec, Operation, IR_PROTO_VERSION};
+    use oxyde_codec::{
+        ConflictAction, Filter, FilterNode, JoinColumn, JoinSpec, OnConflict, Operation, QueryIR,
+    };
     use serde_json::json;
     use std::collections::HashMap;
 
     /// Helper to create a simple condition filter node
     fn filter_cond(field: &str, operator: &str, value: serde_json::Value) -> FilterNode {
         FilterNode::Condition(Filter {
-            field: field.to_string(),
-            operator: operator.to_string(),
+            field: field.into(),
+            operator: operator.into(),
             value,
             column: None,
         })
@@ -130,46 +132,21 @@ mod tests {
         value: serde_json::Value,
     ) -> FilterNode {
         FilterNode::Condition(Filter {
-            field: field.to_string(),
-            operator: operator.to_string(),
+            field: field.into(),
+            operator: operator.into(),
             value,
-            column: Some(column.to_string()),
+            column: Some(column.into()),
         })
     }
 
     #[test]
     fn test_select_query() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "users".to_string(),
-            cols: Some(vec!["id".to_string(), "name".to_string()]),
-            filter_tree: None,
+            table: "users".into(),
+            cols: Some(vec!["id".into(), "name".into()]),
             limit: Some(10),
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
         assert!(sql.contains("SELECT"));
         assert!(sql.contains("users"));
@@ -179,36 +156,11 @@ mod tests {
     #[test]
     fn test_select_with_params() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "users".to_string(),
-            cols: Some(vec!["id".to_string()]),
+            table: "users".into(),
+            cols: Some(vec!["id".into()]),
             filter_tree: Some(filter_cond("id", "=", json!(42))),
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
         assert!(sql.contains("$1"));
         assert_eq!(params.len(), 1);
@@ -221,36 +173,11 @@ mod tests {
     #[test]
     fn test_mysql_placeholders() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "widgets".to_string(),
-            cols: Some(vec!["id".to_string()]),
+            table: "widgets".into(),
+            cols: Some(vec!["id".into()]),
             filter_tree: Some(filter_cond("slug", "=", json!("foo"))),
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, params) = build_sql(&ir, Dialect::Mysql).unwrap();
         assert!(sql.contains("?"));
         assert_eq!(params.len(), 1);
@@ -259,40 +186,11 @@ mod tests {
     #[test]
     fn test_sqlite_placeholders() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
             op: Operation::Insert,
-            table: "widgets".to_string(),
-            cols: None,
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: {
-                let mut values = HashMap::new();
-                values.insert("name".to_string(), serde_json::json!("foo"));
-                Some(values)
-            },
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            table: "widgets".into(),
+            values: Some(HashMap::from([("name".into(), json!("foo"))])),
+            ..Default::default()
         };
-
         let (sql, params) = build_sql(&ir, Dialect::Sqlite).unwrap();
         assert!(sql.contains("?"));
         assert_eq!(params.len(), 1);
@@ -301,36 +199,11 @@ mod tests {
     #[test]
     fn test_select_ilike_lookup() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "articles".to_string(),
-            cols: Some(vec!["id".to_string()]),
+            table: "articles".into(),
+            cols: Some(vec!["id".into()]),
             filter_tree: Some(filter_cond("title", "ILIKE", json!("%rust%"))),
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
         assert!(sql.to_uppercase().contains("LIKE"));
         assert_eq!(params.len(), 1);
@@ -343,36 +216,11 @@ mod tests {
     #[test]
     fn test_select_between_lookup() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "numbers".to_string(),
-            cols: Some(vec!["value".to_string()]),
+            table: "numbers".into(),
+            cols: Some(vec!["value".into()]),
             filter_tree: Some(filter_cond("value", "BETWEEN", json!([1, 5]))),
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
         assert!(sql.to_uppercase().contains("BETWEEN"));
         assert!(sql.contains("$1") && sql.contains("$2"));
@@ -381,75 +229,23 @@ mod tests {
     #[test]
     fn test_select_is_null_lookup() {
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "entries".to_string(),
-            cols: Some(vec!["id".to_string()]),
+            table: "entries".into(),
+            cols: Some(vec!["id".into()]),
             filter_tree: Some(filter_cond("deleted_at", "IS NULL", json!(null))),
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
         assert!(sql.to_uppercase().contains("IS NULL"));
     }
 
     #[test]
     fn test_column_mappings_emit_aliases() {
-        let mut mappings = HashMap::new();
-        mappings.insert("title".to_string(), "title_text".to_string());
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "posts".to_string(),
-            cols: Some(vec!["title".to_string()]),
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: Some(mappings),
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            table: "posts".into(),
+            cols: Some(vec!["title".into()]),
+            column_mappings: Some(HashMap::from([("title".into(), "title_text".into())])),
+            ..Default::default()
         };
-
         let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
         assert!(
             sql.contains("\"title_text\" AS \"title\""),
@@ -479,38 +275,12 @@ mod tests {
                 },
             ],
         };
-
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "posts".to_string(),
-            cols: Some(vec!["title".to_string()]),
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
+            table: "posts".into(),
+            cols: Some(vec!["title".into()]),
             joins: Some(vec![join]),
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
         let upper = sql.to_uppercase();
         assert!(upper.contains("LEFT JOIN"), "{}", sql);
@@ -522,47 +292,17 @@ mod tests {
 
     #[test]
     fn test_on_conflict_update_requires_values() {
-        use oxyde_codec::{ConflictAction, OnConflict};
-
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
             op: Operation::Insert,
-            table: "users".to_string(),
-            cols: None,
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: Some({
-                let mut m = HashMap::new();
-                m.insert("email".to_string(), json!("test@example.com"));
-                m
-            }),
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
+            table: "users".into(),
+            values: Some(HashMap::from([("email".into(), json!("test@example.com"))])),
             on_conflict: Some(OnConflict {
-                columns: vec!["email".to_string()],
+                columns: vec!["email".into()],
                 action: ConflictAction::Update,
                 update_values: None, // No values - should fail
             }),
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let result = build_sql(&ir, Dialect::Postgres);
         assert!(
             result.is_err(),
@@ -578,45 +318,18 @@ mod tests {
 
     #[test]
     fn test_ilike_uses_column_alias() {
-        // When filter.column is set, ILIKE should use it instead of filter.field
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
-            op: Operation::Select,
-            table: "products".to_string(),
-            cols: Some(vec!["id".to_string(), "name".to_string()]),
+            table: "products".into(),
+            cols: Some(vec!["id".into(), "name".into()]),
             filter_tree: Some(filter_with_column(
                 "name",
                 "product_name",
                 "ILIKE",
                 json!("%test%"),
             )),
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: None,
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
-            on_conflict: None,
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
-        // Should use "product_name" (column alias), not "name" (field)
         assert!(
             sql.contains("product_name") || sql.contains("\"product_name\""),
             "ILIKE should use column alias 'product_name', got: {}",
@@ -626,53 +339,24 @@ mod tests {
 
     #[test]
     fn test_mysql_on_duplicate_key_update() {
-        use oxyde_codec::{ConflictAction, OnConflict};
-
-        // Test MySQL UPSERT with update values
-        let mut values = HashMap::new();
-        values.insert("id".to_string(), json!(1));
-        values.insert("name".to_string(), json!("test"));
-        values.insert("count".to_string(), json!(10));
-
-        let mut update_values = HashMap::new();
-        update_values.insert("name".to_string(), json!("updated"));
-        update_values.insert("count".to_string(), json!(20));
-
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
             op: Operation::Insert,
-            table: "items".to_string(),
-            cols: None,
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: Some(values),
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
+            table: "items".into(),
+            values: Some(HashMap::from([
+                ("id".into(), json!(1)),
+                ("name".into(), json!("test")),
+                ("count".into(), json!(10)),
+            ])),
             on_conflict: Some(OnConflict {
-                columns: vec!["id".to_string()],
+                columns: vec!["id".into()],
                 action: ConflictAction::Update,
-                update_values: Some(update_values),
+                update_values: Some(HashMap::from([
+                    ("name".into(), json!("updated")),
+                    ("count".into(), json!(20)),
+                ])),
             }),
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, params) = build_sql(&ir, Dialect::Mysql).unwrap();
         assert!(
             sql.contains("ON DUPLICATE KEY UPDATE"),
@@ -684,48 +368,20 @@ mod tests {
 
     #[test]
     fn test_mysql_on_duplicate_key_nothing() {
-        use oxyde_codec::{ConflictAction, OnConflict};
-
-        // Test MySQL UPSERT with do nothing (no-op update)
-        let mut values = HashMap::new();
-        values.insert("id".to_string(), json!(1));
-        values.insert("name".to_string(), json!("test"));
-
         let ir = QueryIR {
-            proto: IR_PROTO_VERSION,
             op: Operation::Insert,
-            table: "items".to_string(),
-            cols: None,
-            filter_tree: None,
-            limit: None,
-            offset: None,
-            order_by: None,
-            values: Some(values),
-            bulk_values: None,
-            bulk_update: None,
-            model: None,
-            distinct: None,
-            column_mappings: None,
-            joins: None,
-            aggregates: None,
-            returning: None,
-            group_by: None,
-            having: None,
-            exists: None,
-            count: None,
+            table: "items".into(),
+            values: Some(HashMap::from([
+                ("id".into(), json!(1)),
+                ("name".into(), json!("test")),
+            ])),
             on_conflict: Some(OnConflict {
-                columns: vec!["id".to_string()],
+                columns: vec!["id".into()],
                 action: ConflictAction::Nothing,
                 update_values: None,
             }),
-            lock: None,
-            union_query: None,
-            union_all: None,
-            sql: None,
-            params: None,
-            pk_column: None,
+            ..Default::default()
         };
-
         let (sql, _) = build_sql(&ir, Dialect::Mysql).unwrap();
         assert!(
             sql.contains("ON DUPLICATE KEY UPDATE"),

@@ -32,7 +32,7 @@ Public API:
         NotFoundError: Raised when get() finds no results.
         MultipleObjectsReturned: Raised when get() finds multiple results.
         IntegrityError: Raised on constraint violations.
-        FieldError, LookupError, ManagerError: Validation errors.
+        FieldError, FieldLookupError, ManagerError: Validation errors.
 
 Example:
     from oxyde import OxydeModel, Field, db
@@ -61,9 +61,9 @@ from oxyde.db import (
 )
 from oxyde.exceptions import (
     FieldError,
+    FieldLookupError,
+    FieldLookupValueError,
     IntegrityError,
-    LookupError,
-    LookupValueError,
     ManagerError,
     MultipleObjectsReturned,
     NotFoundError,
@@ -85,7 +85,7 @@ from oxyde.queries import (
     Sum,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "OxydeModel",
@@ -103,8 +103,8 @@ __all__ = [
     "QueryManager",
     "OxydeError",
     "FieldError",
-    "LookupError",
-    "LookupValueError",
+    "FieldLookupError",
+    "FieldLookupValueError",
     "ManagerError",
     "NotFoundError",
     "MultipleObjectsReturned",

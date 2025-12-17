@@ -274,18 +274,26 @@ active = await User.objects.filter(deleted_at__isnull=True).all()
 all_users = await User.objects.all()
 ```
 
-## Known Limitations
+## Related Field Lookups (FK Traversal)
 
-### No Related Field Lookups
-
-Oxyde does not support Django-style `filter(author__age__gte=18)`. Use subqueries instead:
+Oxyde supports Django-style filtering through foreign key relationships:
 
 ```python
-# Instead of: Post.objects.filter(author__age__gte=18)
+# Filter posts by author's age (auto-joins author table)
+posts = await Post.objects.filter(author__age__gte=18).all()
 
-adult_ids = await Author.objects.filter(age__gte=18).values_list("id", flat=True).all()
-posts = await Post.objects.filter(author_id__in=adult_ids).all()
+# Filter by nested FK
+posts = await Post.objects.filter(author__company__name="Acme").all()
+
+# Combine with Q expressions
+posts = await Post.objects.filter(
+    Q(author__age__gte=18) | Q(author__role="admin")
+).all()
 ```
+
+This automatically adds the necessary JOINs to the query.
+
+## Known Limitations
 
 ### Ambiguous Columns with JOIN
 

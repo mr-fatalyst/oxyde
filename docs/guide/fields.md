@@ -8,12 +8,12 @@ The `Field()` function configures both Pydantic validation and database schema.
 from oxyde import OxydeModel, Field
 
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(max_length=100)
     email: str = Field(db_unique=True, db_index=True)
+
+    class Meta:
+        is_table = True
 ```
 
 ## Field() Parameters
@@ -27,6 +27,7 @@ class User(OxydeModel):
 | `db_index_name` | `str` | Auto | Custom index name |
 | `db_index_method` | `str` | `"btree"` | Index method: btree, hash, gin, gist |
 | `db_unique` | `bool` | `False` | UNIQUE constraint |
+| `db_nullable` | `bool` | None | Override NULL/NOT NULL (None = infer from type) |
 | `db_column` | `str` | Field name | Database column name |
 | `db_type` | `str` | Auto | SQL type override |
 | `db_default` | `str` | None | SQL DEFAULT expression |
@@ -145,14 +146,12 @@ Foreign keys are defined by type annotation:
 
 ```python
 class Post(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     title: str
+    author: "Author" | None = Field(default=None, db_on_delete="CASCADE")  # FK to Author
 
-    # FK to Author (creates author_id column)
-    author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+    class Meta:
+        is_table = True
 ```
 
 ### FK to Non-PK Field
@@ -195,14 +194,12 @@ Define on the "one" side of a one-to-many relationship:
 
 ```python
 class Author(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
+    posts: list["Post"] = Field(db_reverse_fk="author")  # Virtual field - not stored in DB
 
-    # Virtual field - not stored in DB
-    posts: list["Post"] = Field(db_reverse_fk="author")
+    class Meta:
+        is_table = True
 ```
 
 Use with `prefetch()`:
@@ -217,31 +214,29 @@ for author in authors:
 
 ```python
 class Post(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     title: str
-
-    # M2M through junction table
     tags: list["Tag"] = Field(db_m2m=True, db_through="PostTag")
+
+    class Meta:
+        is_table = True
 
 
 class Tag(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(db_unique=True)
 
-
-class PostTag(OxydeModel):
     class Meta:
         is_table = True
 
+
+class PostTag(OxydeModel):
     id: int | None = Field(default=None, db_pk=True)
     post: "Post" | None = Field(default=None, db_on_delete="CASCADE")
     tag: "Tag" | None = Field(default=None, db_on_delete="CASCADE")
+
+    class Meta:
+        is_table = True
 ```
 
 ## Pydantic Validation
@@ -297,10 +292,6 @@ from uuid import UUID, uuid4
 from oxyde import OxydeModel, Field
 
 class Product(OxydeModel):
-    class Meta:
-        is_table = True
-        table_name = "products"
-
     # Primary key
     id: UUID = Field(default_factory=uuid4, db_pk=True)
 
@@ -322,6 +313,10 @@ class Product(OxydeModel):
 
     # Foreign key
     category: "Category" | None = Field(default=None, db_on_delete="SET NULL")
+
+    class Meta:
+        is_table = True
+        table_name = "products"
 ```
 
 ## Next Steps

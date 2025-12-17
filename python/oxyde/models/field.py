@@ -28,6 +28,8 @@ Attribute Categories:
         db_fk: Target field for FK (default: auto-detect PK of related model)
         db_on_delete: CASCADE | SET NULL | RESTRICT | NO ACTION
         db_on_update: CASCADE | SET NULL | RESTRICT | NO ACTION
+        db_nullable: Override NULL/NOT NULL in DB. If None: infer from type hint
+                     (X | None = nullable)
 
     Relations (virtual, not stored in DB):
         db_reverse_fk: Field name on related model for reverse lookup
@@ -78,6 +80,7 @@ class OxydeFieldInfo(FieldInfo):
         "db_fk",
         "db_on_delete",
         "db_on_update",
+        "db_nullable",
         "db_reverse_fk",
         "db_m2m",
         "db_through",
@@ -104,6 +107,7 @@ class OxydeFieldInfo(FieldInfo):
         db_on_update: Literal[
             "CASCADE", "SET NULL", "RESTRICT", "NO ACTION"
         ] = "CASCADE",
+        db_nullable: bool | None = None,
         db_reverse_fk: str | None = None,
         db_m2m: bool = False,
         db_through: str | None = None,
@@ -126,6 +130,7 @@ class OxydeFieldInfo(FieldInfo):
                    For primitive type hint: "table.column" format.
             db_on_delete: Foreign key ON DELETE action
             db_on_update: Foreign key ON UPDATE action
+            db_nullable: Override NULL/NOT NULL in DB. None = infer from type hint.
             db_reverse_fk: Reverse FK field name for loading relations
             db_m2m: Mark this field as many-to-many relation
             db_through: M2M through table name
@@ -147,6 +152,7 @@ class OxydeFieldInfo(FieldInfo):
         self.db_fk = db_fk
         self.db_on_delete = db_on_delete
         self.db_on_update = db_on_update
+        self.db_nullable = db_nullable
         self.db_reverse_fk = db_reverse_fk
         self.db_m2m = db_m2m
         self.db_through = db_through

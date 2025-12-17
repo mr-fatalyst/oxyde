@@ -68,22 +68,29 @@ def _operation_to_python(op: dict[str, Any], indent: str = "    ") -> str:
 
     if op_type == "create_table":
         table = op["table"]
-        fields_repr = _python_repr(table["fields"], indent=len(indent) + 11)
-
-        indexes = table.get("indexes", [])
         tname = table["name"]
-        if indexes:
-            indexes_repr = _python_repr(indexes, indent=len(indent) + 13)
-            return (
-                f'{indent}ctx.create_table(\n{indent}    "{tname}",\n'
-                f"{indent}    fields={fields_repr},\n"
-                f"{indent}    indexes={indexes_repr},\n{indent})"
-            )
-        else:
-            return (
-                f'{indent}ctx.create_table(\n{indent}    "{tname}",\n'
-                f"{indent}    fields={fields_repr},\n{indent})"
-            )
+        # Use consistent indentation for all kwargs
+        inner_indent = len(indent) + 4
+
+        lines = [f"{indent}ctx.create_table(", f'{indent}    "{tname}",']
+
+        fields_repr = _python_repr(table["fields"], indent=inner_indent)
+        lines.append(f"{indent}    fields={fields_repr},")
+
+        if indexes := table.get("indexes", []):
+            indexes_repr = _python_repr(indexes, indent=inner_indent)
+            lines.append(f"{indent}    indexes={indexes_repr},")
+
+        if foreign_keys := table.get("foreign_keys", []):
+            fk_repr = _python_repr(foreign_keys, indent=inner_indent)
+            lines.append(f"{indent}    foreign_keys={fk_repr},")
+
+        if checks := table.get("checks", []):
+            checks_repr = _python_repr(checks, indent=inner_indent)
+            lines.append(f"{indent}    checks={checks_repr},")
+
+        lines.append(f"{indent})")
+        return "\n".join(lines)
 
     elif op_type == "drop_table":
         return f'{indent}ctx.drop_table("{op["name"]}")'
@@ -103,9 +110,36 @@ def _operation_to_python(op: dict[str, Any], indent: str = "    ") -> str:
         return f'{indent}ctx.rename_column("{t}", "{old}", "{new}")'
 
     elif op_type == "alter_column":
-        changes = op.get("changes", {})
+        # Handle both formats:
+        # 1. Rust format: old_field/new_field FieldDef dicts
+        # 2. Python format: column + changes dict
+        if "old_field" in op and "new_field" in op:
+            # Rust format - extract column and build changes
+            old_field = op["old_field"]
+            new_field = op["new_field"]
+            column = new_field["name"]
+            changes = {}
+
+            # Compare fields and build changes dict
+            if old_field.get("field_type") != new_field.get("field_type"):
+                changes["type"] = new_field["field_type"]
+            if old_field.get("python_type") != new_field.get("python_type"):
+                changes["python_type"] = new_field.get("python_type")
+            if old_field.get("db_type") != new_field.get("db_type"):
+                changes["db_type"] = new_field.get("db_type")
+            if old_field.get("nullable") != new_field.get("nullable"):
+                changes["nullable"] = new_field["nullable"]
+            if old_field.get("default") != new_field.get("default"):
+                changes["default"] = new_field.get("default")
+            if old_field.get("unique") != new_field.get("unique"):
+                changes["unique"] = new_field["unique"]
+        else:
+            # Python format - use as-is
+            column = op["column"]
+            changes = op.get("changes", {})
+
         ch_repr = ", ".join(f"{k}={_python_repr(v)}" for k, v in changes.items())
-        return f'{indent}ctx.alter_column("{op["table"]}", "{op["column"]}", {ch_repr})'
+        return f'{indent}ctx.alter_column("{op["table"]}", "{column}", {ch_repr})'
 
     elif op_type == "create_index":
         index_repr = _python_repr(op["index"])

@@ -1,4 +1,4 @@
-"""Generator for .pyi stub files with type hints for model QuerySets."""
+"""Generator for .pyi stub files with type hints for model Queries."""
 
 from __future__ import annotations
 
@@ -42,6 +42,9 @@ def _get_python_type_name(python_type: Any) -> str:
         return "Decimal"
     elif python_type is UUID:
         return "UUID"
+    elif isinstance(python_type, type) and issubclass(python_type, OxydeModel):
+        # FK field pointing to another model
+        return python_type.__name__
     else:
         # For complex types, use string representation
         return str(python_type).replace("typing.", "")
@@ -80,6 +83,7 @@ def _get_field_info(model_class: type[OxydeModel]) -> dict[str, tuple[Any, bool]
     Get field info from model_fields, returns dict of field_name -> (python_type, is_pk).
 
     Uses model_fields (Pydantic) as primary source, with _db_meta as fallback for PK info.
+    Excludes virtual fields (reverse FK, m2m) that don't map to DB columns.
     """
     from oxyde.models.field import OxydeFieldInfo
     from oxyde.models.utils import _unpack_annotated, _unwrap_optional
@@ -87,6 +91,13 @@ def _get_field_info(model_class: type[OxydeModel]) -> dict[str, tuple[Any, bool]
     result = {}
 
     for field_name, field_info in model_class.model_fields.items():
+        # Skip virtual fields (reverse FK, m2m) - they don't map to DB columns
+        if isinstance(field_info, OxydeFieldInfo):
+            if getattr(field_info, "db_reverse_fk", None) or getattr(
+                field_info, "db_m2m", False
+            ):
+                continue
+
         # Get python type from annotation
         annotation = field_info.annotation
         base_hint, _ = _unpack_annotated(annotation)
@@ -193,6 +204,52 @@ def _generate_create_params(model_class: type[OxydeModel]) -> str:
     return "\n".join(lines)
 
 
+def _generate_model_class_stub(model_class: type[OxydeModel]) -> str:
+    """Generate stub class definition for model (to avoid circular imports in .pyi)."""
+    from oxyde.models.field import OxydeFieldInfo
+    from oxyde.models.utils import _unpack_annotated, _unwrap_optional
+
+    model_name = model_class.__name__
+    lines = [f"class {model_name}(OxydeModel):"]
+
+    # Add Meta class if present
+    if hasattr(model_class, "Meta"):
+        lines.append("    class Meta:")
+        meta = model_class.Meta
+        if hasattr(meta, "is_table"):
+            lines.append("        is_table: bool")
+        if hasattr(meta, "table_name"):
+            lines.append("        table_name: str")
+        if hasattr(meta, "schema"):
+            lines.append("        schema: str")
+        if hasattr(meta, "database"):
+            lines.append("        database: str")
+
+    # Add field annotations (exclude virtual fields like reverse FK, m2m)
+    for field_name, field_info in model_class.model_fields.items():
+        # Skip virtual fields (reverse FK, m2m) - they don't map to DB columns
+        if isinstance(field_info, OxydeFieldInfo):
+            if getattr(field_info, "db_reverse_fk", None) or getattr(
+                field_info, "db_m2m", False
+            ):
+                continue
+
+        annotation = field_info.annotation
+        base_hint, _ = _unpack_annotated(annotation)
+        python_type, is_optional = _unwrap_optional(base_hint)
+        type_name = _get_python_type_name(python_type)
+
+        if is_optional:
+            lines.append(f"    {field_name}: {type_name} | None")
+        else:
+            lines.append(f"    {field_name}: {type_name}")
+
+    # Add objects manager with proper type
+    lines.append(f'    objects: "{model_name}Manager"')
+
+    return "\n".join(lines)
+
+
 def generate_model_stub(model_class: type[OxydeModel]) -> str:
     """Generate .pyi stub content for a single model (without imports)."""
     model_name = model_class.__name__
@@ -201,100 +258,87 @@ def generate_model_stub(model_class: type[OxydeModel]) -> str:
     filter_params = _generate_filter_params(model_class)
     order_by_literal = _generate_order_by_literal(model_class)
     field_literal = _generate_field_literal(model_class)
-    update_params = _generate_update_params(model_class)
     create_params = _generate_create_params(model_class)
 
     queryset_class = f"""
-class {model_name}QuerySet(QuerySet[{model_name}]):
-    \"\"\"Type-safe QuerySet for {model_name} model.\"\"\"
+class {model_name}Query(Query[{model_name}]):
+    \"\"\"Type-safe Query for {model_name} model.\"\"\"
+
+    # Query building methods (sync, return Query)
 
     def filter(
         self,
-        *,
+        *args: Any,
 {filter_params}
-    ) -> "{model_name}QuerySet":
-        \"\"\"Filter queryset by field lookups.\"\"\"
+    ) -> "{model_name}Query":
+        \"\"\"Filter by Q-expressions or field lookups.\"\"\"
         ...
 
     def exclude(
         self,
-        *,
+        *args: Any,
 {filter_params}
-    ) -> "{model_name}QuerySet":
+    ) -> "{model_name}Query":
         \"\"\"Exclude objects matching field lookups.\"\"\"
         ...
 
-    def get(
-        self,
-        *,
-{filter_params}
-    ) -> {model_name}:
-        \"\"\"Get single object matching lookups.\"\"\"
-        ...
-
-    def get_or_none(
-        self,
-        *,
-{filter_params}
-    ) -> {model_name} | None:
-        \"\"\"Get object or None if not found.\"\"\"
-        ...
-
-    def order_by(self, *fields: {order_by_literal}) -> "{model_name}QuerySet":
+    def order_by(self, *fields: {order_by_literal}) -> "{model_name}Query":
         \"\"\"Order results by fields.\"\"\"
         ...
 
-    def limit(self, n: int) -> "{model_name}QuerySet":
+    def limit(self, n: int) -> "{model_name}Query":
         \"\"\"Limit number of results.\"\"\"
         ...
 
-    def offset(self, n: int) -> "{model_name}QuerySet":
+    def offset(self, n: int) -> "{model_name}Query":
         \"\"\"Skip first n results.\"\"\"
         ...
 
-    def distinct(self, value: bool = True) -> "{model_name}QuerySet":
+    def distinct(self, value: bool = True) -> "{model_name}Query":
         \"\"\"Return distinct results.\"\"\"
         ...
 
-    def select(self, *fields: {field_literal}) -> "{model_name}QuerySet":
+    def select(self, *fields: {field_literal}) -> "{model_name}Query":
         \"\"\"Select specific fields.\"\"\"
         ...
 
-    def join(self, *paths: str) -> "{model_name}QuerySet":
+    def join(self, *paths: str) -> "{model_name}Query":
         \"\"\"Perform LEFT JOIN for relations.\"\"\"
         ...
 
-    def prefetch(self, *paths: str) -> "{model_name}QuerySet":
+    def prefetch(self, *paths: str) -> "{model_name}Query":
         \"\"\"Prefetch related objects (separate queries).\"\"\"
         ...
 
-    def for_update(self) -> "{model_name}QuerySet":
+    def for_update(self) -> "{model_name}Query":
         \"\"\"Add FOR UPDATE lock to query.\"\"\"
         ...
 
-    def for_share(self) -> "{model_name}QuerySet":
+    def for_share(self) -> "{model_name}Query":
         \"\"\"Add FOR SHARE lock to query.\"\"\"
         ...
 
-    def annotate(self, **annotations: Any) -> "{model_name}QuerySet":
+    def annotate(self, **annotations: Any) -> "{model_name}Query":
         \"\"\"Add computed fields using aggregate functions.\"\"\"
         ...
 
-    def group_by(self, *fields: {field_literal}) -> "{model_name}QuerySet":
+    def group_by(self, *fields: {field_literal}) -> "{model_name}Query":
         \"\"\"Add GROUP BY clause.\"\"\"
         ...
 
-    def having(self, *q_exprs: Any, **kwargs: Any) -> "{model_name}QuerySet":
+    def having(self, *q_exprs: Any, **kwargs: Any) -> "{model_name}Query":
         \"\"\"Add HAVING clause for filtering grouped results.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> "{model_name}QuerySet":
+    def values(self, *fields: {field_literal}) -> "{model_name}Query":
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    def values_list(self, *fields: {field_literal}, flat: bool = False) -> "{model_name}QuerySet":
+    def values_list(self, *fields: {field_literal}, flat: bool = False) -> "{model_name}Query":
         \"\"\"Return tuples/values instead of models.\"\"\"
         ...
+
+    # Terminal methods (async, execute query)
 
     async def all(
         self,
@@ -332,13 +376,44 @@ class {model_name}QuerySet(QuerySet[{model_name}]):
         \"\"\"Count matching objects.\"\"\"
         ...
 
-    async def exists(
+    async def sum(
         self,
+        field: str,
         *,
         client: Any | None = None,
         using: str | None = None,
-    ) -> bool:
-        \"\"\"Check if any objects match.\"\"\"
+    ) -> Any:
+        \"\"\"Calculate sum of field values.\"\"\"
+        ...
+
+    async def avg(
+        self,
+        field: str,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> Any:
+        \"\"\"Calculate average of field values.\"\"\"
+        ...
+
+    async def max(
+        self,
+        field: str,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> Any:
+        \"\"\"Get maximum field value.\"\"\"
+        ...
+
+    async def min(
+        self,
+        field: str,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> Any:
+        \"\"\"Get minimum field value.\"\"\"
         ...
 
     async def update(
@@ -346,9 +421,20 @@ class {model_name}QuerySet(QuerySet[{model_name}]):
         *,
         client: Any | None = None,
         using: str | None = None,
-{update_params}
+        **values: Any,
     ) -> int:
         \"\"\"Update matching objects.\"\"\"
+        ...
+
+    async def increment(
+        self,
+        field: str,
+        by: int | float = 1,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> int:
+        \"\"\"Atomically increment a field value.\"\"\"
         ...
 
     async def delete(
@@ -366,56 +452,64 @@ class {model_name}QuerySet(QuerySet[{model_name}]):
 class {model_name}Manager(QueryManager[{model_name}]):
     \"\"\"Type-safe Manager for {model_name} model.\"\"\"
 
+    # Query building methods (sync, return Query)
+
+    def query(self) -> {model_name}Query:
+        \"\"\"Return a Query builder for this model.\"\"\"
+        ...
+
     def filter(
         self,
-        *,
+        *args: Any,
 {filter_params}
-    ) -> {model_name}QuerySet:
-        \"\"\"Filter queryset by field lookups.\"\"\"
+    ) -> {model_name}Query:
+        \"\"\"Filter by Q-expressions or field lookups.\"\"\"
         ...
 
     def exclude(
         self,
-        *,
+        *args: Any,
 {filter_params}
-    ) -> {model_name}QuerySet:
+    ) -> {model_name}Query:
         \"\"\"Exclude objects matching field lookups.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> {model_name}QuerySet:
+    def values(self, *fields: {field_literal}) -> {model_name}Query:
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}QuerySet:
+    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}Query:
         \"\"\"Return tuples/values instead of models.\"\"\"
         ...
 
-    def distinct(self, distinct: bool = True) -> {model_name}QuerySet:
+    def distinct(self, distinct: bool = True) -> {model_name}Query:
         \"\"\"Return distinct results.\"\"\"
         ...
 
-    def join(self, *paths: str) -> {model_name}QuerySet:
+    def join(self, *paths: str) -> {model_name}Query:
         \"\"\"Perform LEFT JOIN for relations.\"\"\"
         ...
 
-    def prefetch(self, *paths: str) -> {model_name}QuerySet:
+    def prefetch(self, *paths: str) -> {model_name}Query:
         \"\"\"Prefetch related objects (separate queries).\"\"\"
         ...
 
-    def for_update(self) -> {model_name}QuerySet:
+    def for_update(self) -> {model_name}Query:
         \"\"\"Add FOR UPDATE lock to query.\"\"\"
         ...
 
-    def for_share(self) -> {model_name}QuerySet:
+    def for_share(self) -> {model_name}Query:
         \"\"\"Add FOR SHARE lock to query.\"\"\"
         ...
+
+    # Terminal methods (async, execute query)
 
     async def get(
         self,
         *,
         client: Any | None = None,
         using: str | None = None,
-{filter_params}
+        **filters: Any,
     ) -> {model_name}:
         \"\"\"Get single object matching lookups.\"\"\"
         ...
@@ -425,7 +519,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         *,
         client: Any | None = None,
         using: str | None = None,
-{filter_params}
+        **filters: Any,
     ) -> {model_name} | None:
         \"\"\"Get object or None if not found.\"\"\"
         ...
@@ -436,7 +530,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         defaults: dict[str, Any] | None = None,
         client: Any | None = None,
         using: str | None = None,
-{filter_params}
+        **filters: Any,
     ) -> tuple[{model_name}, bool]:
         \"\"\"Get object or create if not found. Returns (object, created).\"\"\"
         ...
@@ -478,6 +572,46 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Count all objects.\"\"\"
         ...
 
+    async def sum(
+        self,
+        field: str,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> Any:
+        \"\"\"Calculate sum of field values.\"\"\"
+        ...
+
+    async def avg(
+        self,
+        field: str,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> Any:
+        \"\"\"Calculate average of field values.\"\"\"
+        ...
+
+    async def max(
+        self,
+        field: str,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> Any:
+        \"\"\"Get maximum field value.\"\"\"
+        ...
+
+    async def min(
+        self,
+        field: str,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> Any:
+        \"\"\"Get minimum field value.\"\"\"
+        ...
+
     async def create(
         self,
         *,
@@ -498,6 +632,17 @@ class {model_name}Manager(QueryManager[{model_name}]):
         using: str | None = None,
     ) -> list[{model_name}]:
         \"\"\"Bulk create objects.\"\"\"
+        ...
+
+    async def bulk_update(
+        self,
+        objects: list[{model_name}],
+        fields: list[str],
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> int:
+        \"\"\"Bulk update objects.\"\"\"
         ...
 """
 
@@ -580,10 +725,7 @@ def generate_stubs_for_models(
     for file_path, file_model_list in file_models.items():
         stub_content_parts = []
 
-        # Get unique module names for imports
-        module_names = {m.__module__ for m in file_model_list}
-
-        # Common imports
+        # Common imports (no model imports - we define them in stub to avoid circular imports)
         imports = [
             "# Auto-generated by oxyde generate-stubs",
             "# DO NOT EDIT - This file will be overwritten",
@@ -593,28 +735,18 @@ def generate_stubs_for_models(
             "from decimal import Decimal",
             "from uuid import UUID",
             "",
+            "from oxyde import OxydeModel",
+            "from oxyde.queries import Query, QueryManager",
+            "",
         ]
-
-        # Import models from their module
-        for module_name in sorted(module_names):
-            module_model_names = [
-                m.__name__ for m in file_model_list if m.__module__ == module_name
-            ]
-            imports.append(
-                f"from {module_name} import {', '.join(sorted(module_model_names))}"
-            )
-
-        imports.extend(
-            [
-                "from oxyde.queries.queryset import QuerySet",
-                "from oxyde.queries.manager import QueryManager",
-                "",
-            ]
-        )
 
         stub_content_parts.append("\n".join(imports))
 
-        # Generate stub for each model
+        # Generate model class stubs first (to define the types)
+        for model in file_model_list:
+            stub_content_parts.append(_generate_model_class_stub(model))
+
+        # Generate Query and Manager stubs for each model
         for model in file_model_list:
             stub_content_parts.append(generate_model_stub(model))
 

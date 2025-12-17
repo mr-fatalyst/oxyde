@@ -133,6 +133,18 @@ class AggregationMixin:
         result_bytes = await exec_client.execute(query_ir)
         result = msgpack.unpackb(result_bytes, raw=False)
 
+        # Handle columnar format: (columns, rows)
+        if isinstance(result, (list, tuple)) and len(result) == 2:
+            first, second = result
+            if isinstance(first, list) and all(isinstance(c, str) for c in first):
+                # Columnar format
+                columns = first
+                rows = second
+                if rows:
+                    row_dict = dict(zip(columns, rows[0]))
+                    return row_dict.get(result_key)
+                return None
+
         if isinstance(result, list) and len(result) > 0:
             row = result[0]
             if isinstance(row, dict):
@@ -168,6 +180,18 @@ class AggregationMixin:
 
         result_bytes = await exec_client.execute(query_ir)
         result = msgpack.unpackb(result_bytes, raw=False)
+
+        # Handle columnar format: (columns, rows)
+        if isinstance(result, (list, tuple)) and len(result) == 2:
+            first, second = result
+            if isinstance(first, list) and all(isinstance(c, str) for c in first):
+                # Columnar format
+                columns = first
+                rows = second
+                if rows:
+                    row_dict = dict(zip(columns, rows[0]))
+                    return row_dict.get("_count", 0) or 0
+                return 0
 
         # Result is [{"_count": N}]
         if isinstance(result, list) and len(result) > 0:

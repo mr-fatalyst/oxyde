@@ -201,6 +201,16 @@ class QueryManager(_QueryManagerBase):
         using: str | None = None,
         mode: str = "models",
     ) -> Any:
+        """Execute query and return all results.
+
+        Args:
+            client: Explicit client for execution
+            using: Name of connection from registry
+            mode: Result mode ("models", "dict", "list", "msgpack")
+
+        Returns:
+            list[Model], list[dict], etc. depending on mode
+        """
         query = self._query()
         exec_client = await self._resolve_client(client, using)
         return await self._execute_query(query, exec_client, mode)
@@ -509,11 +519,13 @@ class QueryManager(_QueryManagerBase):
 
         # Use IR directly for bulk update
         from oxyde.core import ir
-        from oxyde.queries.base import _model_key
+        from oxyde.queries.base import _build_col_types, _model_key
 
+        col_types = _build_col_types(self.model_class)
         update_ir = ir.build_update_ir(
             table=self.model_class.get_table_name(),
             bulk_update=bulk_entries,
+            col_types=col_types,
             model=_model_key(self.model_class),
         )
 

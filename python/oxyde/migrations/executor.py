@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import msgpack
+
 from oxyde.db.registry import get_connection as _get_connection_async
 from oxyde.migrations.context import MigrationContext
 from oxyde.migrations.replay import (
@@ -27,6 +29,33 @@ if TYPE_CHECKING:
 
 # Advisory lock key for migrations (arbitrary unique number)
 MIGRATION_LOCK_KEY = 0x4F587944  # "OxyD" in hex
+
+
+def _parse_query_result(result_bytes: bytes) -> list[dict[str, Any]]:
+    """Parse MessagePack query result into list of dicts.
+
+    Args:
+        result_bytes: Raw MessagePack bytes from query
+
+    Returns:
+        List of row dicts with column names as keys
+    """
+    if not result_bytes:
+        return []
+
+    result = msgpack.unpackb(result_bytes, raw=False)
+
+    # Format: [columns, rows] where columns is list of names, rows is list of lists
+    if isinstance(result, list) and len(result) == 2:
+        columns, rows = result
+        if isinstance(columns, list) and isinstance(rows, list):
+            return [dict(zip(columns, row)) for row in rows]
+
+    # Fallback: already list of dicts
+    if isinstance(result, list) and all(isinstance(r, dict) for r in result):
+        return result
+
+    return []
 
 
 def _check_migration_dependency(
@@ -70,8 +99,8 @@ async def _acquire_migration_lock(db_conn: AsyncDatabase, dialect: str) -> bool:
         # PostgreSQL: pg_try_advisory_lock returns true if acquired
         sql = f"SELECT pg_try_advisory_lock({MIGRATION_LOCK_KEY})"
         ir = build_raw_sql_ir(sql=sql)
-        result = await db_conn.execute(ir)
-        # Result is list of dicts like [{"pg_try_advisory_lock": True}]
+        result_bytes = await db_conn.execute(ir)
+        result = _parse_query_result(result_bytes)
         if result and len(result) > 0:
             return result[0].get("pg_try_advisory_lock", False)
         return False
@@ -80,7 +109,8 @@ async def _acquire_migration_lock(db_conn: AsyncDatabase, dialect: str) -> bool:
         # MySQL: GET_LOCK returns 1 if acquired, 0 if timeout, NULL if error
         sql = "SELECT GET_LOCK('oxyde_migration', 0)"
         ir = build_raw_sql_ir(sql=sql)
-        result = await db_conn.execute(ir)
+        result_bytes = await db_conn.execute(ir)
+        result = _parse_query_result(result_bytes)
         if result and len(result) > 0:
             val = list(result[0].values())[0]
             return val == 1
@@ -210,7 +240,10 @@ async def apply_migrations(
     if target:
         target_index = None
         for i, migration_path in enumerate(pending):
-            if migration_path.stem == target:
+            # Match by exact name or prefix (e.g. "0001" matches "0001_create_users_table")
+            if migration_path.stem == target or migration_path.stem.startswith(
+                target + "_"
+            ):
                 target_index = i
                 break
 

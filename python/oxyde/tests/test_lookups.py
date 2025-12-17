@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from oxyde import Field, OxydeModel
-from oxyde.exceptions import FieldError, LookupError, LookupValueError
+from oxyde.exceptions import FieldError, FieldLookupError, FieldLookupValueError
 from oxyde.models.lookups import (
     _allowed_lookups_for_meta,
     _lookup_category,
@@ -79,7 +79,7 @@ class TestSplitLookupKey:
 
     def test_empty_field_raises(self):
         """Test that empty field name raises error."""
-        with pytest.raises(LookupError):
+        with pytest.raises(FieldLookupError):
             _split_lookup_key("__exact")
 
 
@@ -247,10 +247,10 @@ class TestStringLookups:
         """Test that string lookups require string values."""
         registered_tables()
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(name__contains=123)
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(name__iexact=123)
 
 
@@ -288,20 +288,20 @@ class TestNumericLookups:
         """Test that between requires a tuple/list of 2 values."""
         registered_tables()
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(age__between=18)
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(age__between=(18,))
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(age__between=(18, 25, 30))
 
     def test_comparison_requires_non_null(self):
         """Test that comparison lookups require non-null values."""
         registered_tables()
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(age__gt=None)
 
 
@@ -338,17 +338,17 @@ class TestCommonLookups:
         """Test that in lookup requires an iterable."""
         registered_tables()
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(age__in=18)
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(age__in=None)
 
     def test_in_rejects_string(self):
         """Test that in lookup rejects string (which is iterable but wrong)."""
         registered_tables()
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(name__in="test")
 
     def test_isnull_true(self):
@@ -427,24 +427,24 @@ class TestDatePartLookups:
         """Test that month lookup requires (year, month) tuple."""
         registered_tables()
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(created_at__month=3)
 
     def test_day_requires_tuple(self):
         """Test that day lookup requires (year, month, day) tuple."""
         registered_tables()
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(created_at__day=(2024, 3))
 
     def test_month_validates_range(self):
         """Test that month value is validated."""
         registered_tables()
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(created_at__month=(2024, 13))
 
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(created_at__month=(2024, 0))
 
     def test_day_validates_date(self):
@@ -452,7 +452,7 @@ class TestDatePartLookups:
         registered_tables()
 
         # Feb 30 doesn't exist
-        with pytest.raises(LookupValueError):
+        with pytest.raises(FieldLookupValueError):
             TestModel.objects.filter(created_at__day=(2024, 2, 30))
 
     def test_date_part_lookups_on_date_field(self):
@@ -468,24 +468,24 @@ class TestInvalidLookups:
     """Test error handling for invalid lookups."""
 
     def test_unknown_lookup_raises(self):
-        """Test that unknown lookup raises LookupError."""
+        """Test that unknown lookup raises FieldLookupError."""
         registered_tables()
 
-        with pytest.raises(LookupError):
+        with pytest.raises(FieldLookupError):
             TestModel.objects.filter(name__unknown="test")
 
     def test_string_lookup_on_numeric_field_raises(self):
         """Test that string lookup on numeric field raises error."""
         registered_tables()
 
-        with pytest.raises(LookupError):
+        with pytest.raises(FieldLookupError):
             TestModel.objects.filter(age__contains="18")
 
     def test_date_part_lookup_on_string_field_raises(self):
         """Test that date part lookup on string field raises error."""
         registered_tables()
 
-        with pytest.raises(LookupError):
+        with pytest.raises(FieldLookupError):
             TestModel.objects.filter(name__year=2024)
 
     def test_nonexistent_field_raises(self):
@@ -518,7 +518,7 @@ class TestMultipleFilters:
     def test_chained_filter_calls(self):
         """Test chaining filter() calls."""
         registered_tables()
-        # Manager.filter() returns SelectQuery, chain with filter()
+        # Manager.filter() returns Query, chain with filter()
         query = TestModel.objects.filter(name__icontains="test").filter(age__gte=18)
         ir = query.to_ir()
         conditions = get_and_conditions(ir)

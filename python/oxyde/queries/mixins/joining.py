@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-from oxyde.exceptions import LookupError
+from oxyde.exceptions import FieldLookupError
 from oxyde.queries.base import (
     TQuery,
     _collect_model_columns,
@@ -107,7 +107,7 @@ class JoiningMixin:
             current_model.ensure_field_metadata()
             column_meta = current_model._db_meta.field_metadata.get(segment)
             if column_meta is None or column_meta.foreign_key is None:
-                raise LookupError(
+                raise FieldLookupError(
                     f"{current_model.__name__}.{segment} is not a joinable relation"
                 )
             target_model = _resolve_registered_model(column_meta.foreign_key.target)

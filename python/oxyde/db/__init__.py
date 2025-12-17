@@ -52,7 +52,7 @@ Connection Resolution:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any
 
 from . import transaction
@@ -168,7 +168,7 @@ def lifespan(
     *,
     settings: PoolSettings | None = None,
     **databases: str,
-) -> Callable[[Any], AsyncIterator[None]]:
+) -> Callable[[Any], AbstractAsyncContextManager[None]]:
     """
     Create a lifespan context manager for FastAPI/Starlette.
 

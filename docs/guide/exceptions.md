@@ -19,10 +19,10 @@ except OxydeError as e:
 
 ```
 OxydeError (base)
-├── FieldError           - Invalid field definition or access
-├── LookupError          - Unknown lookup operator
-│   └── LookupValueError - Invalid value for lookup
-└── ManagerError         - Query execution errors
+├── FieldError                - Invalid field definition or access
+├── FieldLookupError          - Unknown lookup operator
+│   └── FieldLookupValueError - Invalid value for lookup
+└── ManagerError              - Query execution errors
     ├── NotFoundError         - get() returned no rows
     ├── MultipleObjectsReturned - get() returned multiple rows
     └── IntegrityError        - Constraint violation
@@ -80,11 +80,11 @@ except FieldError as e:
 
 ## Lookup Errors
 
-### LookupError
+### FieldLookupError
 
 ```python
-class LookupError(OxydeError):
-    """Raised when an unsupported lookup is requested."""
+class FieldLookupError(OxydeError):
+    """Raised when an unsupported field lookup is requested."""
 ```
 
 **When raised:**
@@ -94,15 +94,15 @@ class LookupError(OxydeError):
 ```python
 try:
     await User.objects.filter(name__unknown="value").all()
-except LookupError as e:
+except FieldLookupError as e:
     print(f"Lookup error: {e}")
     # "Unsupported lookup 'unknown' for field 'name'"
 ```
 
-### LookupValueError
+### FieldLookupValueError
 
 ```python
-class LookupValueError(LookupError):
+class FieldLookupValueError(FieldLookupError):
     """Raised when the lookup value is not compatible with the operator."""
 ```
 
@@ -117,7 +117,7 @@ class LookupValueError(LookupError):
 ```python
 try:
     await User.objects.filter(id__in="not_a_list").all()
-except LookupValueError as e:
+except FieldLookupValueError as e:
     print(f"Value error: {e}")
     # "Lookup 'in' does not accept string values; use a sequence"
 ```
@@ -125,7 +125,7 @@ except LookupValueError as e:
 ```python
 try:
     await User.objects.filter(age__gte=None).all()
-except LookupValueError as e:
+except FieldLookupValueError as e:
     print(f"Value error: {e}")
     # "Lookup 'gte' requires a non-null value"
 ```
@@ -133,7 +133,7 @@ except LookupValueError as e:
 ```python
 try:
     await User.objects.filter(age__between=(18,)).all()
-except LookupValueError as e:
+except FieldLookupValueError as e:
     print(f"Value error: {e}")
     # "Lookup 'between' requires a tuple/list of two values"
 ```
@@ -342,8 +342,8 @@ async def get_user_with_fallback(user_id: int) -> User | None:
 from oxyde import (
     OxydeError,
     FieldError,
-    LookupError,
-    LookupValueError,
+    FieldLookupError,
+    FieldLookupValueError,
     ManagerError,
     NotFoundError,
     MultipleObjectsReturned,
@@ -357,8 +357,8 @@ Or import from exceptions module:
 from oxyde.exceptions import (
     OxydeError,
     FieldError,
-    LookupError,
-    LookupValueError,
+    FieldLookupError,
+    FieldLookupValueError,
     ManagerError,
     NotFoundError,
     MultipleObjectsReturned,

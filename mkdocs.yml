@@ -31,6 +31,8 @@ theme:
     - search.highlight
     - content.code.copy
     - content.code.annotate
+  logo: img/favicon.png
+  favicon: img/favicon.png
 
 markdown_extensions:
   - pymdownx.highlight:

@@ -4,7 +4,21 @@ use oxyde_codec::{Filter, FilterNode};
 use sea_query::{BinOper, Expr, Func, SimpleExpr, Value};
 
 use crate::error::{QueryError, Result};
-use crate::utils::{json_to_value, ColumnIdent};
+use crate::utils::{json_to_value, ColumnIdent, TableIdent};
+
+/// Create column expression, handling "table.column" format for joins
+fn make_col_expr(col_name: &str) -> Expr {
+    if let Some((table, column)) = col_name.split_once('.') {
+        // "user.age" -> ("user", "age") -> "user"."age"
+        Expr::col((
+            TableIdent(table.to_string()),
+            ColumnIdent(column.to_string()),
+        ))
+    } else {
+        // Simple column name
+        Expr::col(ColumnIdent(col_name.to_string()))
+    }
+}
 
 /// Build WHERE clause from FilterNode tree
 pub fn build_filter_node(node: &FilterNode) -> Result<SimpleExpr> {
@@ -48,7 +62,7 @@ pub fn build_filter_node(node: &FilterNode) -> Result<SimpleExpr> {
 /// Apply filter to expression
 pub fn apply_filter(filter: &Filter) -> Result<SimpleExpr> {
     let col_name = filter.column.as_ref().unwrap_or(&filter.field);
-    let col = Expr::col(ColumnIdent(col_name.clone()));
+    let col = make_col_expr(col_name);
     let val = json_to_value(&filter.value);
 
     let expr = match filter.operator.as_str() {
@@ -70,7 +84,7 @@ pub fn apply_filter(filter: &Filter) -> Result<SimpleExpr> {
             })?;
             let lowered = text.to_lowercase();
             // Use col_name (respects filter.column alias) instead of filter.field
-            let lower_col = Func::lower(Expr::col(ColumnIdent(col_name.clone())));
+            let lower_col = Func::lower(make_col_expr(col_name));
             Expr::expr(lower_col).binary(BinOper::Like, Expr::val(Value::from(lowered)))
         }
         "IN" => {

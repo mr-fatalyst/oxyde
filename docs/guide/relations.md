@@ -10,12 +10,12 @@ Foreign keys are defined using type annotations:
 
 ```python
 class Post(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     title: str
     author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+
+    class Meta:
+        is_table = True
 ```
 
 This creates:
@@ -41,15 +41,15 @@ Reference a different field:
 
 ```python
 class Resource(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     tenant: "Tenant" | None = Field(
         default=None,
         db_fk="uuid",  # Target Tenant.uuid instead of Tenant.id
         db_on_delete="CASCADE"
     )
+
+    class Meta:
+        is_table = True
 ```
 
 This creates column `tenant_uuid` referencing `Tenant.uuid`.
@@ -93,8 +93,18 @@ Without `join()`, accessing `post.author` would require another query.
 ### Multiple Joins
 
 ```python
-# Load author and category
-posts = await Post.objects.join("author").join("category").all()
+posts = await Post.objects.join("author", "category").all()
+```
+
+### Nested Joins
+
+Use `__` to traverse relations:
+
+```python
+# Post -> Author -> Company
+posts = await Post.objects.join("author__company").all()
+for post in posts:
+    print(f"{post.title} by {post.author.name} at {post.author.company.name}")
 ```
 
 ## Reverse Relations
@@ -105,23 +115,21 @@ On the "one" side of a one-to-many:
 
 ```python
 class Author(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
+    posts: list["Post"] = Field(db_reverse_fk="author")  # Virtual field for reverse relation
 
-    # Virtual field for reverse relation
-    posts: list["Post"] = Field(db_reverse_fk="author")
+    class Meta:
+        is_table = True
 
 
 class Post(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     title: str
     author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+
+    class Meta:
+        is_table = True
 ```
 
 ### prefetch()
@@ -148,34 +156,43 @@ Use a junction table:
 
 ```python
 class Post(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     title: str
     tags: list["Tag"] = Field(db_m2m=True, db_through="PostTag")
 
-
-class Tag(OxydeModel):
     class Meta:
         is_table = True
 
+
+class Tag(OxydeModel):
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(db_unique=True)
 
-
-class PostTag(OxydeModel):
     class Meta:
         is_table = True
 
+
+class PostTag(OxydeModel):
     id: int | None = Field(default=None, db_pk=True)
     post: "Post" | None = Field(default=None, db_on_delete="CASCADE")
     tag: "Tag" | None = Field(default=None, db_on_delete="CASCADE")
+
+    class Meta:
+        is_table = True
 ```
 
 ### Working with M2M
 
-Currently, M2M relations must be managed through the junction table:
+M2M relations are supported by `prefetch()`. The through model must have FK fields to both models:
+
+```python
+# Load posts with their tags
+posts = await Post.objects.prefetch("tags").all()
+for post in posts:
+    print(f"{post.title}: {[t.name for t in post.tags]}")
+```
+
+You can also work with the junction table directly:
 
 ```python
 # Add tag to post
@@ -184,7 +201,7 @@ await PostTag.objects.create(post_id=post.id, tag_id=tag.id)
 # Remove tag from post
 await PostTag.objects.filter(post_id=post.id, tag_id=tag.id).delete()
 
-# Get all tags for a post
+# Get all tags for a post (alternative approach)
 post_tags = await PostTag.objects.filter(post_id=post.id).join("tag").all()
 tags = [pt.tag for pt in post_tags]
 ```
@@ -205,25 +222,25 @@ Oxyde automatically creates FK columns:
 
 ```python
 class Category(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
     parent: "Category" | None = Field(default=None, db_on_delete="SET NULL")
+
+    class Meta:
+        is_table = True
 ```
 
 ### Polymorphic Relations (Manual)
 
 ```python
 class Comment(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     content: str
     commentable_type: str  # "post" or "photo"
     commentable_id: int
+
+    class Meta:
+        is_table = True
 
 # Query
 post_comments = await Comment.objects.filter(
@@ -236,13 +253,13 @@ post_comments = await Comment.objects.filter(
 
 ```python
 class Post(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     title: str
     deleted_at: datetime | None = Field(default=None)
     author: "Author" | None = Field(default=None, db_on_delete="SET NULL")
+
+    class Meta:
+        is_table = True
 
 # Query active posts with author
 posts = await Post.objects.filter(
@@ -257,25 +274,25 @@ from datetime import datetime
 from oxyde import OxydeModel, Field, db
 
 class Author(OxydeModel):
-    class Meta:
-        is_table = True
-        table_name = "authors"
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
     posts: list["Post"] = Field(db_reverse_fk="author")
 
-
-class Post(OxydeModel):
     class Meta:
         is_table = True
-        table_name = "posts"
+        table_name = "authors"
 
+
+class Post(OxydeModel):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     content: str
     author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
+
+    class Meta:
+        is_table = True
+        table_name = "posts"
 
 
 async def main():
@@ -308,21 +325,9 @@ async def main():
 
 ## Limitations
 
-### No Nested Joins
+### No M2M in join()
 
-Oxyde doesn't support nested joins like `join("author.company")`. Query separately:
-
-```python
-# Instead of: Post.objects.join("author.company")
-
-posts = await Post.objects.join("author").all()
-author_ids = [p.author_id for p in posts if p.author_id]
-companies = await Company.objects.filter(id__in=author_ids).all()
-```
-
-### No Automatic M2M Loading
-
-M2M relations require manual junction table queries.
+M2M relations are supported by `prefetch()` but not by `join()`. Use `prefetch()` for M2M.
 
 ## Next Steps
 

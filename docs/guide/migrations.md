@@ -25,13 +25,9 @@ oxyde makemigrations --name "add_user_profile"
 
 # Dry run (show without creating)
 oxyde makemigrations --dry-run
-
-# Custom migrations directory
-oxyde makemigrations --migrations-dir ./db/migrations
-
-# Specify dialect
-oxyde makemigrations --dialect postgres
 ```
+
+Configuration (migrations directory, dialect) is set in `oxyde_config.py`.
 
 ### migrate
 
@@ -41,14 +37,17 @@ Apply pending migrations:
 # Apply all pending
 oxyde migrate
 
-# Custom migrations directory
-oxyde migrate --migrations-dir ./db/migrations
-
 # Target specific migration
-oxyde migrate 0003
+oxyde migrate 0003_add_posts
 
-# Rollback to specific migration
-oxyde migrate 0001
+# Migrate to "zero" (rollback all)
+oxyde migrate zero
+
+# Mark as applied without running (fake)
+oxyde migrate 0003_add_posts --fake
+
+# Use specific database alias
+oxyde migrate --db-alias analytics
 ```
 
 ### showmigrations
@@ -57,25 +56,31 @@ List migration status:
 
 ```bash
 oxyde showmigrations
+
+# Use specific database alias
+oxyde showmigrations --db-alias analytics
 ```
 
 Output:
 
 ```
-[X] 0001_initial.py
-[X] 0002_add_profile.py
-[ ] 0003_add_tags.py
+📋 Migrations status:
+
+  [✓] 0001_initial
+  [✓] 0002_add_profile
+  [ ] 0003_add_tags
+
+Total: 3 migration(s)
+Applied: 2
+Pending: 1
 ```
 
-- `[X]` = Applied
-- `[ ]` = Pending
-
-### sqlmigration
+### sqlmigrate
 
 Show SQL for a migration without running it:
 
 ```bash
-oxyde sqlmigration myapp 0001
+oxyde sqlmigrate 0001_initial
 ```
 
 ## Migration Files
@@ -93,129 +98,152 @@ migrations/
 
 ```python
 # 0001_initial.py
+"""Auto-generated migration.
 
-dependencies = []
+Created: 2024-01-15 10:30:00
+"""
 
-operations = [
-    {
-        "type": "create_table",
-        "table": {
-            "name": "users",
-            "columns": [
-                {"name": "id", "type": "INTEGER", "pk": True},
-                {"name": "name", "type": "TEXT", "nullable": False},
-                {"name": "email", "type": "TEXT", "unique": True},
-            ],
-            "indexes": [
-                {"name": "ix_users_email", "columns": ["email"]},
-            ],
-        },
-    },
-]
+depends_on = None
+
+
+def upgrade(ctx):
+    """Apply migration."""
+    ctx.create_table(
+        "users",
+        fields=[
+            {"name": "id", "field_type": "INTEGER", "primary_key": True},
+            {"name": "name", "field_type": "TEXT", "nullable": False},
+            {"name": "email", "field_type": "TEXT", "unique": True},
+        ],
+        indexes=[
+            {"name": "ix_users_email", "columns": ["email"]},
+        ],
+    )
+
+
+def downgrade(ctx):
+    """Revert migration."""
+    ctx.drop_table("users")
 ```
 
 ## Supported Operations
 
+All operations are called on the `ctx` (MigrationContext) object passed to `upgrade()` and `downgrade()`.
+
 ### Create Table
 
 ```python
-{
-    "type": "create_table",
-    "table": {
-        "name": "users",
-        "columns": [
-            {"name": "id", "type": "INTEGER", "pk": True},
-            {"name": "name", "type": "TEXT"},
-        ],
-    },
-}
+ctx.create_table(
+    "users",
+    fields=[
+        {"name": "id", "field_type": "INTEGER", "primary_key": True},
+        {"name": "name", "field_type": "TEXT", "nullable": False},
+        {"name": "email", "field_type": "TEXT", "unique": True},
+    ],
+    indexes=[
+        {"name": "ix_users_email", "columns": ["email"]},
+    ],
+)
 ```
 
 ### Drop Table
 
 ```python
-{
-    "type": "drop_table",
-    "name": "old_users",
-}
+ctx.drop_table("old_users")
+```
+
+### Rename Table
+
+```python
+ctx.rename_table("old_name", "new_name")
 ```
 
 ### Add Column
 
 ```python
-{
-    "type": "add_column",
-    "table": "users",
-    "field": {
-        "name": "age",
-        "type": "INTEGER",
-        "nullable": True,
-    },
-}
+ctx.add_column("users", {
+    "name": "age",
+    "field_type": "INTEGER",
+    "nullable": True,
+})
 ```
 
 ### Drop Column
 
 ```python
-{
-    "type": "drop_column",
-    "table": "users",
-    "field": "old_field",
-}
+ctx.drop_column("users", "old_field")
+```
+
+### Rename Column
+
+```python
+ctx.rename_column("users", "old_name", "new_name")
 ```
 
 ### Alter Column
 
 ```python
-{
-    "type": "alter_column",
-    "table": "users",
-    "field": "name",
-    "changes": {
-        "nullable": False,
-        "type": "VARCHAR(255)",
-    },
-}
+ctx.alter_column("users", "name", nullable=False, type="VARCHAR(255)")
 ```
 
-### Add Index
+### Create Index
 
 ```python
-{
-    "type": "add_index",
-    "table": "users",
-    "index": {
-        "name": "ix_users_email",
-        "columns": ["email"],
-        "unique": True,
-    },
-}
+ctx.create_index("users", {
+    "name": "ix_users_email",
+    "columns": ["email"],
+    "unique": True,
+})
 ```
 
 ### Drop Index
 
 ```python
-{
-    "type": "drop_index",
-    "name": "ix_users_old",
-}
+ctx.drop_index("users", "ix_users_old")
 ```
 
 ### Add Foreign Key
 
 ```python
-{
-    "type": "add_foreign_key",
-    "table": "posts",
-    "constraint": {
-        "name": "fk_posts_author",
-        "column": "author_id",
-        "references_table": "users",
-        "references_column": "id",
-        "on_delete": "CASCADE",
-    },
-}
+ctx.add_foreign_key(
+    "posts",
+    "fk_posts_author",
+    ["author_id"],
+    "users",
+    ["id"],
+    on_delete="CASCADE",
+    on_update="NO ACTION",
+)
 ```
+
+### Drop Foreign Key
+
+```python
+ctx.drop_foreign_key("posts", "fk_posts_author")
+```
+
+### Add Check Constraint
+
+```python
+ctx.add_check("users", "chk_age_positive", "age >= 0")
+```
+
+### Drop Check Constraint
+
+```python
+ctx.drop_check("users", "chk_age_positive")
+```
+
+### Execute Raw SQL
+
+For data migrations or unsupported operations:
+
+```python
+ctx.execute("UPDATE users SET status = 'active' WHERE status IS NULL")
+```
+
+!!! warning "Raw SQL"
+    `ctx.execute()` runs arbitrary SQL. Use carefully and ensure it's compatible with your target database.
 
 ## Workflow Example
 
@@ -226,12 +254,12 @@ operations = [
 from oxyde import OxydeModel, Field
 
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
+
+    class Meta:
+        is_table = True
 ```
 
 ### 2. Generate Initial Migration
@@ -252,13 +280,13 @@ oxyde migrate
 
 ```python
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
     age: int | None = Field(default=None)  # New field
+
+    class Meta:
+        is_table = True
 ```
 
 ### 5. Generate Migration for Change
@@ -297,34 +325,42 @@ oxyde migrate
 
 ## Migration Dependencies
 
-Specify dependencies for ordering:
+Dependencies are specified via `depends_on` at the top of the file:
 
 ```python
 # 0003_add_posts.py
+"""Auto-generated migration.
 
-dependencies = ["0002_add_age"]
+Created: 2024-01-15 11:00:00
+"""
 
-operations = [
-    {
-        "type": "create_table",
-        "table": {
-            "name": "posts",
-            "columns": [
-                {"name": "id", "type": "INTEGER", "pk": True},
-                {"name": "title", "type": "TEXT"},
-                {"name": "author_id", "type": "INTEGER"},
-            ],
-            "foreign_keys": [
-                {
-                    "column": "author_id",
-                    "references_table": "users",
-                    "references_column": "id",
-                    "on_delete": "CASCADE",
-                },
-            ],
-        },
-    },
-]
+depends_on = "0002_add_age"
+
+
+def upgrade(ctx):
+    """Apply migration."""
+    ctx.create_table(
+        "posts",
+        fields=[
+            {"name": "id", "field_type": "INTEGER", "primary_key": True},
+            {"name": "title", "field_type": "TEXT", "nullable": False},
+            {"name": "author_id", "field_type": "INTEGER", "nullable": False},
+        ],
+    )
+    ctx.add_foreign_key(
+        "posts",
+        "fk_posts_author",
+        ["author_id"],
+        "users",
+        ["id"],
+        on_delete="CASCADE",
+    )
+
+
+def downgrade(ctx):
+    """Revert migration."""
+    ctx.drop_foreign_key("posts", "fk_posts_author")
+    ctx.drop_table("posts")
 ```
 
 ## Best Practices
@@ -334,7 +370,7 @@ operations = [
 Always review generated SQL before applying:
 
 ```bash
-oxyde sqlmigration myapp 0002
+oxyde sqlmigrate 0002_add_profile
 ```
 
 ### 2. Test on Development First
@@ -344,7 +380,7 @@ oxyde sqlmigration myapp 0002
 oxyde migrate
 
 # Production (after testing)
-oxyde migrate --database production
+oxyde migrate --db-alias production
 ```
 
 ### 3. One Change Per Migration
@@ -386,17 +422,17 @@ If the database is out of sync:
 oxyde showmigrations
 
 # Fake migration (mark as applied without running)
-oxyde migrate --fake 0002
+oxyde migrate 0002_add_profile --fake
 ```
 
 ### Rollback Failed Migration
 
 ```bash
-# Rollback to previous state
-oxyde migrate 0001
+# Rollback to specific version
+oxyde migrate 0001_initial
 
-# Or manually fix and re-run
-oxyde migrate
+# Rollback all migrations
+oxyde migrate zero
 ```
 
 ## Complete Example
@@ -407,39 +443,39 @@ from datetime import datetime
 from oxyde import OxydeModel, Field, Index
 
 class User(OxydeModel):
-    class Meta:
-        is_table = True
-        table_name = "users"
-
     id: int | None = Field(default=None, db_pk=True)
     email: str = Field(db_unique=True)
     name: str
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
 
+    class Meta:
+        is_table = True
+        table_name = "users"
+
 
 class Post(OxydeModel):
+    id: int | None = Field(default=None, db_pk=True)
+    title: str
+    content: str
+    author: "User" | None = Field(default=None, db_on_delete="CASCADE")
+    created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
+
     class Meta:
         is_table = True
         table_name = "posts"
         indexes = [
             Index(("author_id", "created_at")),
         ]
-
-    id: int | None = Field(default=None, db_pk=True)
-    title: str
-    content: str
-    author: "User" | None = Field(default=None, db_on_delete="CASCADE")
-    created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
 ```
 
 ```bash
 # Generate and apply
-oxyde makemigrations --name "initial"
+oxyde makemigrations --name initial
 oxyde migrate
 
 # Check status
 oxyde showmigrations
-# [X] 0001_initial.py
+#   [✓] 0001_initial
 ```
 
 ## Next Steps

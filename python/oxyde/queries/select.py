@@ -36,6 +36,9 @@ Execution:
     to_ir() converts Query state to dict (Intermediate Representation).
     IR is serialized to MessagePack and sent to Rust for SQL generation.
 
+    The IR includes col_types (dict mapping column names to IR type hints)
+    which enables type-aware decoding in Rust without expensive type_info() calls.
+
 Example:
     query = (
         User.objects
@@ -44,11 +47,15 @@ Example:
         .order_by("-created_at")
         .limit(10)
     )
-    ir = query.to_ir()  # {"table": "user", "columns": [...], "filter_tree": {...}}
+    ir = query.to_ir()
+    # {"table": "user", "columns": [...], "col_types": {"id": "int", ...}, ...}
 """
 
 from __future__ import annotations
 
+import datetime
+import decimal
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from oxyde.core import ir
@@ -63,6 +70,47 @@ from oxyde.queries.mixins import (
     MutationMixin,
     PaginationMixin,
 )
+
+# Mapping from Python types to IR type hints for Rust decoding
+_PYTHON_TYPE_TO_IR: dict[type, str] = {
+    int: "int",
+    str: "str",
+    float: "float",
+    bool: "bool",
+    bytes: "bytes",
+    bytearray: "bytes",
+    datetime.datetime: "datetime",
+    datetime.date: "date",
+    datetime.time: "time",
+    datetime.timedelta: "timedelta",
+    decimal.Decimal: "decimal",
+    uuid.UUID: "uuid",
+}
+
+
+def _get_ir_type(python_type: Any) -> str | None:
+    """Convert Python type to IR type hint string.
+
+    Returns None for unsupported types (fallback to dynamic decode in Rust).
+    Handles Optional[T] by unwrapping the inner type.
+    """
+    from typing import get_args, get_origin
+
+    # Handle Optional[T] and Union types
+    origin = get_origin(python_type)
+    if origin is not None:
+        # For Union types (including Optional), try each arg
+        args = get_args(python_type)
+        for arg in args:
+            if arg is type(None):
+                continue
+            result = _PYTHON_TYPE_TO_IR.get(arg)
+            if result:
+                return result
+        return None
+
+    return _PYTHON_TYPE_TO_IR.get(python_type)
+
 
 if TYPE_CHECKING:
     from oxyde.models.base import OxydeModel
@@ -259,9 +307,30 @@ class Query(
                 self._column_for_field(field) for field in self._group_by_fields
             ]
 
+        # Build col_types from field_metadata for type-aware Rust decoding
+        # Priority: explicit db_type from Field() > python_type mapping
+        col_types: dict[str, str] | None = None
+        field_metadata = self.model_class._db_meta.field_metadata
+        if field_metadata:
+            col_types = {}
+            for field_name in fields:
+                meta = field_metadata.get(field_name)
+                if meta is not None:
+                    # Use explicit db_type if specified, otherwise use Python type
+                    if meta.db_type:
+                        col_types[field_name] = meta.db_type.upper()
+                    else:
+                        ir_type = _get_ir_type(meta.python_type)
+                        if ir_type:
+                            col_types[field_name] = ir_type
+            # Only pass if we have at least one type hint
+            if not col_types:
+                col_types = None
+
         return ir.build_select_ir(
             table=table_name,
             columns=fields,
+            col_types=col_types,
             model=_model_key(self.model_class),
             column_mappings=column_mappings or None,
             filter_tree=final_filter_tree,
@@ -277,7 +346,4 @@ class Query(
         )
 
 
-# SelectQuery is kept as an alias for backwards compatibility
-SelectQuery = Query
-
-__all__ = ["Query", "SelectQuery"]
+__all__ = ["Query"]

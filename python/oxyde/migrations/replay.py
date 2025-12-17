@@ -82,6 +82,10 @@ class SchemaState:
                         # Map changes keys to field keys
                         if "type" in changes:
                             field["field_type"] = changes["type"]
+                        if "python_type" in changes:
+                            field["python_type"] = changes["python_type"]
+                        if "db_type" in changes:
+                            field["db_type"] = changes["db_type"]
                         if "nullable" in changes:
                             field["nullable"] = changes["nullable"]
                         if "default" in changes:

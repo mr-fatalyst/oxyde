@@ -31,6 +31,8 @@
 | | `union_all(qs)` | `.union_all(other_qs)` | - | `Query` | UNION ALL (keeps duplicates); chainable |
 | | `for_update()` | `.for_update()` | - | `Query` | FOR UPDATE lock; no-op on SQLite |
 | | `for_share()` | `.for_share()` | - | `Query` | FOR SHARE lock; no-op on SQLite |
+| | `values(*cols)` | `.values("id", "name")` | - | `Query` | Set result mode to dicts; chainable |
+| | `values_list(*cols, flat=False)` | `.values_list("id", flat=True)` | - | `Query` | Set result mode to tuples/flat list; chainable |
 | **Terminal Methods (Query)** | `all()` | `await qs.all()` | Yes (SELECT) | `list[Model]` | **Required** to execute selection |
 | | `first()` | `await qs.first()` | Yes (SELECT) | `Model \| None` | First result or None |
 | | `last()` | `await qs.last()` | Yes (SELECT) | `Model \| None` | Last result (requires order_by) |
@@ -43,8 +45,6 @@
 | | `avg(field)` | `await qs.avg("age")` | Yes (AVG) | `float` | Average value |
 | | `max(field)` | `await qs.max("price")` | Yes (MAX) | `Any` | Maximum |
 | | `min(field)` | `await qs.min("price")` | Yes (MIN) | `Any` | Minimum |
-| | `values(*cols)` | `await qs.values("id", "name")` | Yes (SELECT) | `list[dict]` | Projection without models |
-| | `values_list(*cols, flat=False)` | `await qs.values_list("id", flat=True)` | Yes (SELECT) | `list[tuple] \| list` | Tuple projection |
 | | **Note:** | All terminal methods accept `using="db_alias"` | - | - | For DB selection: `await qs.all(using="replica")` |
 | **Introspection** | `sql(dialect="postgres")` | `qs.sql()` | - | `(str, list)` | Raw SQL + params for logging |
 | | `query()` | `qs.query()` | - | `dict` | Serialized IR (Intermediate Representation) |
@@ -190,16 +190,16 @@ has_active = await User.objects.filter(is_active=True).exists()
 ### Values and values_list
 
 ```python
-# Dictionaries instead of models
-users_data = await User.objects.filter(is_active=True).values("id", "name", "email")
+# Dictionaries instead of models (values is a builder, requires .all())
+users_data = await User.objects.filter(is_active=True).values("id", "name", "email").all()
 # [{"id": 1, "name": "John", "email": "..."}, ...]
 
 # Flat list
-user_ids = await User.objects.filter(is_active=True).values_list("id", flat=True)
+user_ids = await User.objects.filter(is_active=True).values_list("id", flat=True).all()
 # [1, 2, 3, 4, ...]
 
 # Tuples
-user_pairs = await User.objects.values_list("id", "name")
+user_pairs = await User.objects.values_list("id", "name").all()
 # [(1, "John"), (2, "Jane"), ...]
 ```
 
@@ -212,7 +212,7 @@ premium = User.objects.filter(status="premium")
 combined = await active.union(premium).all()
 
 # Distinct
-unique_statuses = await Post.objects.distinct().values_list("status", flat=True)
+unique_statuses = await Post.objects.distinct().values_list("status", flat=True).all()
 
 # First / Last
 newest = await Post.objects.order_by("-created_at").first()

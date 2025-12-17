@@ -63,6 +63,10 @@ _FUNCTION_REGISTRY: list[tuple[str, str, bool, bool]] = [
     ("close_all_pools", "close_all_pools", True, False),
     # Query execution
     ("execute", "execute", True, False),
+    ("execute_to_pylist", "execute_to_pylist", True, False),
+    ("execute_select_direct", "execute_select_direct", True, False),
+    ("execute_select_batched", "execute_select_batched", True, False),
+    ("execute_select_batched_dedup", "execute_select_batched_dedup", True, False),
     ("execute_in_transaction", "execute_in_transaction", True, False),
     # Transactions
     ("begin_transaction", "begin_transaction", True, False),
@@ -158,6 +162,10 @@ _exports = _load_functions()
 
 # Export individual functions for IDE support and type checking
 execute = _exports["execute"]
+execute_to_pylist = _exports["execute_to_pylist"]
+execute_select_direct = _exports["execute_select_direct"]
+execute_select_batched = _exports["execute_select_batched"]
+execute_select_batched_dedup = _exports["execute_select_batched_dedup"]
 execute_in_transaction = _exports["execute_in_transaction"]
 init_pool = _exports["init_pool"]
 init_pool_overwrite = _exports["init_pool_overwrite"]
@@ -178,6 +186,10 @@ migration_to_sql = _exports["migration_to_sql"]
 
 __all__ = [
     "execute",
+    "execute_to_pylist",
+    "execute_select_direct",
+    "execute_select_batched",
+    "execute_select_batched_dedup",
     "execute_in_transaction",
     "init_pool",
     "init_pool_overwrite",
