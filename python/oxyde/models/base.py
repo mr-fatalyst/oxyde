@@ -307,6 +307,31 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
             cls._resolve_fk_fields()
         if cls._is_table and not cls._db_meta.field_metadata:
             cls._parse_field_tags()
+            # Compute col_types for IR after field_metadata is populated
+            cls._compute_col_types()
+
+    @classmethod
+    def _compute_col_types(cls) -> None:
+        """Compute IR type hints from field metadata (cached in _db_meta.col_types)."""
+        from oxyde.core.ir_types import get_ir_type
+
+        if cls._db_meta.col_types is not None:
+            return  # Already computed
+
+        col_types: dict[str, str] = {}
+        for meta in cls._db_meta.field_metadata.values():
+            # Skip virtual relation fields
+            if meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
+                continue
+            # Use explicit db_type if specified, otherwise infer from python_type
+            if meta.db_type:
+                col_types[meta.db_column] = meta.db_type.upper()
+            else:
+                ir_type = get_ir_type(meta.python_type)
+                if ir_type:
+                    col_types[meta.db_column] = ir_type
+
+        cls._db_meta.col_types = col_types if col_types else None
 
     @classmethod
     def _resolve_fk_fields(cls) -> None:

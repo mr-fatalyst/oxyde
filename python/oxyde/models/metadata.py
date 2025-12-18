@@ -116,6 +116,8 @@ class ModelMeta:
     field_metadata: dict[str, ColumnMeta] = dataclass_field(default_factory=dict)
     relations: dict[str, RelationInfo] = dataclass_field(default_factory=dict)
     extra: dict[str, Any] = dataclass_field(default_factory=dict)
+    # Cached IR type hints for Rust decoding (computed in ensure_field_metadata)
+    col_types: dict[str, str] | None = None
 
 
 class RelationDescriptorBase:

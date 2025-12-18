@@ -133,6 +133,12 @@ fn decode_mysql_cell_by_ir_type(
             Ok(None) => serde_json::Value::Null,
             Err(_) => serde_json::Value::Null,
         }),
+        // JSON - MySQL has native JSON type
+        "json" => Some(match row.try_get::<Option<serde_json::Value>, _>(idx) {
+            Ok(Some(v)) => v,
+            Ok(None) => serde_json::Value::Null,
+            Err(_) => fallback_string_mysql(row, idx),
+        }),
         _ => None, // Unknown IR type - fallback to DB type
     }
 }

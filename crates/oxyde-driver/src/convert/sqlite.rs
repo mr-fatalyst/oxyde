@@ -119,6 +119,12 @@ fn decode_sqlite_cell_by_ir_type(
                 Err(_) => serde_json::Value::Null,
             })
         }
+        // JSON - SQLite stores as TEXT, parse it
+        "json" => Some(match row.try_get::<Option<String>, _>(idx) {
+            Ok(Some(v)) => serde_json::from_str(&v).unwrap_or(serde_json::Value::String(v)),
+            Ok(None) => serde_json::Value::Null,
+            Err(_) => serde_json::Value::Null,
+        }),
         _ => None, // Unknown IR type - fallback to DB type
     }
 }

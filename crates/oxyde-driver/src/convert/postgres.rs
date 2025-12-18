@@ -145,6 +145,12 @@ fn decode_pg_cell_by_ir_type(row: &PgRow, idx: usize, ir_type: &str) -> Option<s
             Ok(None) => serde_json::Value::Null,
             Err(_) => serde_json::Value::Null,
         }),
+        // JSON - PostgreSQL has native JSON/JSONB types
+        "json" => Some(match row.try_get::<Option<serde_json::Value>, _>(idx) {
+            Ok(Some(v)) => v,
+            Ok(None) => serde_json::Value::Null,
+            Err(_) => fallback_string_pg(row, idx),
+        }),
         _ => None, // Unknown IR type - fallback to DB type
     }
 }
