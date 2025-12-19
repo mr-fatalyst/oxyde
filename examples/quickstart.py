@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-from oxyde import AsyncDatabase, OxydeModel, Field, disconnect_all
+from oxyde import AsyncDatabase, OxydeModel, Field, disconnect_all, execute_raw
 
 
 # =============================================================================
@@ -68,14 +68,14 @@ class Comment(OxydeModel):
 
 async def setup_tables(db: AsyncDatabase) -> None:
     """Create tables using raw SQL (in real apps, use migrations)."""
-    await db.execute_raw("""
+    await execute_raw("""
         CREATE TABLE IF NOT EXISTS authors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE
         )
-    """)
-    await db.execute_raw("""
+    """, using=db.name)
+    await execute_raw("""
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -83,15 +83,15 @@ async def setup_tables(db: AsyncDatabase) -> None:
             views INTEGER DEFAULT 0,
             author_id INTEGER REFERENCES authors(id) ON DELETE CASCADE
         )
-    """)
-    await db.execute_raw("""
+    """, using=db.name)
+    await execute_raw("""
         CREATE TABLE IF NOT EXISTS comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
             body TEXT NOT NULL,
             likes INTEGER DEFAULT 0
         )
-    """)
+    """, using=db.name)
 
 
 async def cleanup(db: AsyncDatabase) -> None:

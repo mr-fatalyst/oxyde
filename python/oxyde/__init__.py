@@ -83,6 +83,7 @@ from oxyde.queries import (
     QueryManager,
     RawSQL,
     Sum,
+    execute_raw,
 )
 
 __version__ = "0.2.0"
@@ -120,4 +121,5 @@ __all__ = [
     "Concat",
     "Coalesce",
     "RawSQL",
+    "execute_raw",
 ]

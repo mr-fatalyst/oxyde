@@ -51,6 +51,7 @@ from .base import SupportsExecute
 from .expressions import F
 from .manager import QueryManager
 from .q import Q
+from .raw import execute_raw
 from .select import Query
 
 __all__ = [
@@ -68,4 +69,5 @@ __all__ = [
     "Concat",
     "Coalesce",
     "RawSQL",
+    "execute_raw",
 ]

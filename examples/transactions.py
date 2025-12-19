@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-from oxyde import AsyncDatabase, OxydeModel, Field, F, atomic, disconnect_all
+from oxyde import AsyncDatabase, OxydeModel, Field, F, atomic, disconnect_all, execute_raw
 from oxyde.db.transaction import TransactionTimeoutError
 
 
@@ -43,13 +43,13 @@ class Account(OxydeModel):
 
 async def setup_tables(db: AsyncDatabase) -> None:
     """Create tables using raw SQL."""
-    await db.execute_raw("""
+    await execute_raw("""
         CREATE TABLE IF NOT EXISTS accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner TEXT NOT NULL,
             balance INTEGER NOT NULL DEFAULT 0
         )
-    """)
+    """, using=db.name)
 
 
 async def seed_data(db: AsyncDatabase) -> list[Account]:

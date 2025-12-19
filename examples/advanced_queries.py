@@ -32,6 +32,7 @@ from oxyde import (
     Max,
     Min,
     disconnect_all,
+    execute_raw,
 )
 
 
@@ -73,7 +74,7 @@ class Order(OxydeModel):
 
 async def setup_tables(db: AsyncDatabase) -> None:
     """Create tables using raw SQL."""
-    await db.execute_raw("""
+    await execute_raw("""
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -82,15 +83,15 @@ async def setup_tables(db: AsyncDatabase) -> None:
             stock INTEGER DEFAULT 0,
             is_active INTEGER DEFAULT 1
         )
-    """)
-    await db.execute_raw("""
+    """, using=db.name)
+    await execute_raw("""
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             product_id INTEGER NOT NULL REFERENCES products(id),
             quantity INTEGER NOT NULL,
             total INTEGER NOT NULL
         )
-    """)
+    """, using=db.name)
 
 
 async def seed_data(db: AsyncDatabase) -> None:
