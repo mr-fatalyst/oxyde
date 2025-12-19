@@ -19,8 +19,6 @@ permissions:
 
 jobs:
   deploy:
-    # Only deploy docs for minor/major releases (v0.1.0, v0.2.0, v1.0.0, not v0.1.1)
-    if: endsWith(inputs.version, '.0')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
