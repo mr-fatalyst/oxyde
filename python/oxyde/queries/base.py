@@ -104,19 +104,8 @@ def _primary_key_meta(model_class: type[OxydeModel]):
     raise FieldLookupError(f"{model_class.__name__} has no primary key field")
 
 
-def _build_col_types(
-    model_class: type[OxydeModel],
-    columns: list[str] | None = None,  # noqa: ARG001 - kept for API compat
-) -> dict[str, str] | None:
-    """Get cached col_types mapping from model metadata.
-
-    Args:
-        model_class: The model class to get types from
-        columns: Deprecated, ignored. All columns are always included.
-
-    Returns:
-        Dict mapping column name to IR type, or None if no type hints
-    """
+def _build_col_types(model_class: type[OxydeModel]) -> dict[str, str] | None:
+    """Get cached col_types mapping from model metadata."""
     model_class.ensure_field_metadata()
     return model_class._db_meta.col_types
 
