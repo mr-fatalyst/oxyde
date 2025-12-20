@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../img/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -86,6 +86,10 @@
     <div data-md-component="announce">
       
     </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
     
     
       
@@ -1100,6 +1104,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#execute_raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        execute_raw()
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="execute_raw()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection Resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rawsql-in-annotations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1122,17 +1154,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#low-level-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Low-Level Execution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#common-use-cases" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1145,10 +1166,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#complex-aggregations" class="md-nav__link">
+  <a href="#window-functions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Complex Aggregations
+        Window Functions
       
     </span>
   </a>
@@ -1412,6 +1433,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API Reference
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1551,6 +1583,34 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#execute_raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        execute_raw()
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="execute_raw()">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#connection-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Connection Resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rawsql-in-annotations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1573,17 +1633,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#low-level-execution" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Low-Level Execution
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#common-use-cases" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1596,10 +1645,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#complex-aggregations" class="md-nav__link">
+  <a href="#window-functions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Complex Aggregations
+        Window Functions
       
     </span>
   </a>
@@ -1867,6 +1916,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#api-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API Reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1903,271 +1963,312 @@
 <p class="admonition-title">SQL Injection</p>
 <p>Always use parameterized queries. Never interpolate user input directly into SQL strings.</p>
 </div>
+<h2 id="execute_raw">execute_raw()<a class="headerlink" href="#execute_raw" title="Permanent link">&para;</a></h2>
+<p>The primary way to execute raw SQL:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde</span><span class="w"> </span><span class="kn">import</span> <span class="n">execute_raw</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Simple SELECT</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;SELECT * FROM users WHERE age &gt; $1&quot;</span><span class="p">,</span> <span class="p">[</span><span class="mi">18</span><span class="p">])</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Returns list of dicts</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">for</span> <span class="n">user</span> <span class="ow">in</span> <span class="n">users</span><span class="p">:</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">user</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">user</span><span class="p">[</span><span class="s2">&quot;email&quot;</span><span class="p">])</span>
+</code></pre></div>
+<h3 id="connection-resolution">Connection Resolution<a class="headerlink" href="#connection-resolution" title="Permanent link">&para;</a></h3>
+<p><code>execute_raw()</code> uses the same connection resolution as <code>Model.objects</code>:</p>
+<ol>
+<li>Active transaction (if inside <code>atomic()</code>)</li>
+<li>Named connection (<code>using="alias"</code>)</li>
+<li>Default connection</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Uses default connection</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;SELECT * FROM users&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Uses specific connection</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;SELECT * FROM metrics&quot;</span><span class="p">,</span> <span class="n">using</span><span class="o">=</span><span class="s2">&quot;analytics&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Inside transaction - automatically uses same transaction</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">async</span> <span class="k">with</span> <span class="n">transaction</span><span class="o">.</span><span class="n">atomic</span><span class="p">():</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Alice&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>        <span class="s2">&quot;INSERT INTO audit_log (user_id, action) VALUES ($1, $2)&quot;</span><span class="p">,</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;created&quot;</span><span class="p">]</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="p">)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="c1"># Both operations in same transaction</span>
+</code></pre></div>
 <h2 id="rawsql-in-annotations">RawSQL in Annotations<a class="headerlink" href="#rawsql-in-annotations" title="Permanent link">&para;</a></h2>
 <p>Use raw SQL expressions in annotations:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde</span><span class="w"> </span><span class="kn">import</span> <span class="n">RawSQL</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Custom SQL expression</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">name_length</span><span class="o">=</span><span class="n">RawSQL</span><span class="p">(</span><span class="s2">&quot;LENGTH(name)&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># Database-specific functions</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">created_date</span><span class="o">=</span><span class="n">RawSQL</span><span class="p">(</span><span class="s2">&quot;DATE(created_at)&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde</span><span class="w"> </span><span class="kn">import</span> <span class="n">RawSQL</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># Custom SQL expression</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">name_length</span><span class="o">=</span><span class="n">RawSQL</span><span class="p">(</span><span class="s2">&quot;LENGTH(name)&quot;</span><span class="p">)</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># Database-specific functions</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">created_date</span><span class="o">=</span><span class="n">RawSQL</span><span class="p">(</span><span class="s2">&quot;DATE(created_at)&quot;</span><span class="p">)</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </code></pre></div>
 <h2 id="querysql">Query.sql()<a class="headerlink" href="#querysql" title="Permanent link">&para;</a></h2>
 <p>Get the generated SQL without executing:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">query</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">&quot;-created_at&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Get SQL and parameters</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">sql</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">sql</span><span class="p">()</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SQL: </span><span class="si">{</span><span class="n">sql</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Params: </span><span class="si">{</span><span class="n">params</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># With specific dialect</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">sql</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">sql</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">&quot;postgres&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">sql</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">sql</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">&quot;sqlite&quot;</span><span class="p">)</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">sql</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">sql</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">&quot;mysql&quot;</span><span class="p">)</span>
-</code></pre></div>
-<h2 id="low-level-execution">Low-Level Execution<a class="headerlink" href="#low-level-execution" title="Permanent link">&para;</a></h2>
-<p>For full control, use the database connection directly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_connection</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">msgpack</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">conn</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_connection</span><span class="p">(</span><span class="s2">&quot;default&quot;</span><span class="p">)</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="c1"># Build raw IR</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">ir</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;raw&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="s2">&quot;sql&quot;</span><span class="p">:</span> <span class="n">sql</span><span class="p">,</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">params</span> <span class="ow">or</span> <span class="p">[],</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="p">}</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="c1"># Execute</span>
-<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="n">result_bytes</span> <span class="o">=</span> <span class="k">await</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">ir</span><span class="p">)</span>
-<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="k">return</span> <span class="n">msgpack</span><span class="o">.</span><span class="n">unpackb</span><span class="p">(</span><span class="n">result_bytes</span><span class="p">,</span> <span class="n">raw</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">query</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">&quot;-created_at&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># Get SQL and parameters</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">sql</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">sql</span><span class="p">()</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SQL: </span><span class="si">{</span><span class="n">sql</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Params: </span><span class="si">{</span><span class="n">params</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># With specific dialect</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">sql</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">sql</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">&quot;postgres&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">sql</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">sql</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">&quot;sqlite&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="n">sql</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">query</span><span class="o">.</span><span class="n">sql</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">&quot;mysql&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="common-use-cases">Common Use Cases<a class="headerlink" href="#common-use-cases" title="Permanent link">&para;</a></h2>
-<h3 id="complex-aggregations">Complex Aggregations<a class="headerlink" href="#complex-aggregations" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Window functions (not supported in ORM)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="s2">SELECT</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="s2">    id,</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="s2">    name,</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="s2">    salary,</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="s2">    RANK() OVER (ORDER BY salary DESC) as rank</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="s2">FROM employees</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="s2">WHERE department_id = $1</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="n">department_id</span><span class="p">])</span>
+<h3 id="window-functions">Window Functions<a class="headerlink" href="#window-functions" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Window functions (not supported in ORM)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="s2">    SELECT</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="s2">        id,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s2">        name,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="s2">        salary,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="s2">        RANK() OVER (ORDER BY salary DESC) as rank</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="s2">    FROM employees</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="s2">    WHERE department_id = $1</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">department_id</span><span class="p">])</span>
 </code></pre></div>
 <h3 id="database-specific-features">Database-Specific Features<a class="headerlink" href="#database-specific-features" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># PostgreSQL JSONB operators</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="s2">SELECT * FROM products</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="s2">WHERE metadata @&gt; &#39;{&quot;featured&quot;: true}&#39;::jsonb</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># PostgreSQL full-text search</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="s2">SELECT * FROM articles</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="s2">WHERE to_tsvector(&#39;english&#39;, content) @@ plainto_tsquery(&#39;english&#39;, $1)</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="c1"># SQLite JSON functions</span>
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="s2">SELECT * FROM products</span>
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="s2">WHERE json_extract(metadata, &#39;$.featured&#39;) = 1</span>
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="s2">&quot;&quot;&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># PostgreSQL JSONB operators</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="s2">    SELECT * FROM products</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="s2">    WHERE metadata @&gt; &#39;{&quot;featured&quot;: true}&#39;::jsonb</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1"># PostgreSQL full-text search</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="s2">    SELECT * FROM articles</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="s2">    WHERE to_tsvector(&#39;english&#39;, content) @@ plainto_tsquery(&#39;english&#39;, $1)</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">search_term</span><span class="p">])</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="c1"># SQLite JSON functions</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="s2">    SELECT * FROM products</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="s2">    WHERE json_extract(metadata, &#39;$.featured&#39;) = 1</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="complex-joins">Complex Joins<a class="headerlink" href="#complex-joins" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Self-join with aliases</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="s2">SELECT</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="s2">    e.name as employee,</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="s2">    m.name as manager</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="s2">FROM employees e</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="s2">LEFT JOIN employees m ON e.manager_id = m.id</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="s2">WHERE e.department_id = $1</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="s2">&quot;&quot;&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Self-join with aliases</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="s2">    SELECT</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="s2">        e.name as employee,</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="s2">        m.name as manager</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="s2">    FROM employees e</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="s2">    LEFT JOIN employees m ON e.manager_id = m.id</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="s2">    WHERE e.department_id = $1</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">department_id</span><span class="p">])</span>
 </code></pre></div>
 <h3 id="recursive-ctes">Recursive CTEs<a class="headerlink" href="#recursive-ctes" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Recursive category tree</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="s2">WITH RECURSIVE category_tree AS (</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="s2">    SELECT id, name, parent_id, 0 as depth</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="s2">    FROM categories</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="s2">    WHERE parent_id IS NULL</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="s2">    UNION ALL</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="s2">    SELECT c.id, c.name, c.parent_id, ct.depth + 1</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="s2">    FROM categories c</span>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="s2">    JOIN category_tree ct ON c.parent_id = ct.id</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="s2">)</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="s2">SELECT * FROM category_tree</span>
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="s2">ORDER BY depth, name</span>
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="s2">&quot;&quot;&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Recursive category tree</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="s2">    WITH RECURSIVE category_tree AS (</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="s2">        SELECT id, name, parent_id, 0 as depth</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="s2">        FROM categories</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="s2">        WHERE parent_id IS NULL</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="s2">        UNION ALL</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="s2">        SELECT c.id, c.name, c.parent_id, ct.depth + 1</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="s2">        FROM categories c</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="s2">        JOIN category_tree ct ON c.parent_id = ct.id</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="s2">    )</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="s2">    SELECT * FROM category_tree</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="s2">    ORDER BY depth, name</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="bulk-operations">Bulk Operations<a class="headerlink" href="#bulk-operations" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># UPSERT (PostgreSQL)</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="s2">INSERT INTO products (sku, name, price)</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="s2">VALUES ($1, $2, $3)</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="s2">ON CONFLICT (sku)</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="s2">DO UPDATE SET</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="s2">    name = EXCLUDED.name,</span>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="s2">    price = EXCLUDED.price</span>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
-<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="c1"># Bulk UPSERT</span>
-<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="k">for</span> <span class="n">product</span> <span class="ow">in</span> <span class="n">products</span><span class="p">:</span>
-<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="n">product</span><span class="o">.</span><span class="n">sku</span><span class="p">,</span> <span class="n">product</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">product</span><span class="o">.</span><span class="n">price</span><span class="p">])</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># UPSERT (PostgreSQL)</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="s2">    INSERT INTO products (sku, name, price)</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="s2">    VALUES ($1, $2, $3)</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="s2">    ON CONFLICT (sku)</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="s2">    DO UPDATE SET</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="s2">        name = EXCLUDED.name,</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="s2">        price = EXCLUDED.price</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="k">for</span> <span class="n">product</span> <span class="ow">in</span> <span class="n">products</span><span class="p">:</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>    <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="n">product</span><span class="o">.</span><span class="n">sku</span><span class="p">,</span> <span class="n">product</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">product</span><span class="o">.</span><span class="n">price</span><span class="p">])</span>
 </code></pre></div>
 <h2 id="parameter-binding">Parameter Binding<a class="headerlink" href="#parameter-binding" title="Permanent link">&para;</a></h2>
 <h3 id="postgresql">PostgreSQL<a class="headerlink" href="#postgresql" title="Permanent link">&para;</a></h3>
 <p>Uses <code>$1</code>, <code>$2</code>, etc.:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;SELECT * FROM users WHERE age &gt;= $1 AND status = $2&quot;</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="mi">18</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="s2">&quot;SELECT * FROM users WHERE age &gt;= $1 AND status = $2&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="p">[</span><span class="mi">18</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">]</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="p">)</span>
 </code></pre></div>
 <h3 id="sqlite">SQLite<a class="headerlink" href="#sqlite" title="Permanent link">&para;</a></h3>
 <p>Uses <code>?</code> placeholders:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;SELECT * FROM users WHERE age &gt;= ? AND status = ?&quot;</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="mi">18</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="s2">&quot;SELECT * FROM users WHERE age &gt;= ? AND status = ?&quot;</span><span class="p">,</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="p">[</span><span class="mi">18</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">]</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="p">)</span>
 </code></pre></div>
 <h3 id="mysql">MySQL<a class="headerlink" href="#mysql" title="Permanent link">&para;</a></h3>
 <p>Uses <code>?</code> placeholders:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;SELECT * FROM users WHERE age &gt;= ? AND status = ?&quot;</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="mi">18</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="s2">&quot;SELECT * FROM users WHERE age &gt;= ? AND status = ?&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="p">[</span><span class="mi">18</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">]</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="p">)</span>
 </code></pre></div>
 <h2 id="mixing-raw-and-orm">Mixing Raw and ORM<a class="headerlink" href="#mixing-raw-and-orm" title="Permanent link">&para;</a></h2>
 <h3 id="filter-with-raw-sql">Filter with Raw SQL<a class="headerlink" href="#filter-with-raw-sql" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Get IDs from raw query</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="s2">SELECT user_id FROM user_scores</span>
-<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="s2">WHERE score &gt; (SELECT AVG(score) FROM user_scores)</span>
-<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
-<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="n">user_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
-<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>
-<a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="c1"># Use in ORM query</span>
-<a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="n">high_scorers</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">id__in</span><span class="o">=</span><span class="n">user_ids</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Get IDs from raw query</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="s2">    SELECT user_id FROM user_scores</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="s2">    WHERE score &gt; (SELECT AVG(score) FROM user_scores)</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="n">user_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;user_id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="c1"># Use in ORM query</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="n">high_scorers</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">id__in</span><span class="o">=</span><span class="n">user_ids</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </code></pre></div>
 <h3 id="supplement-orm-queries">Supplement ORM Queries<a class="headerlink" href="#supplement-orm-queries" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># ORM for basic query</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;active&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Raw SQL for complex aggregation</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="n">user_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">u</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">users</span><span class="p">]</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="n">sql</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="s2">SELECT user_id, COUNT(*) as post_count</span>
-<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="s2">FROM posts</span>
-<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="s2">WHERE user_id = ANY($1)</span>
-<a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="s2">GROUP BY user_id</span>
-<a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="n">stats</span> <span class="o">=</span> <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="n">user_ids</span><span class="p">])</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># ORM for basic query</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;active&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># Raw SQL for complex aggregation</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="n">user_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">u</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">users</span><span class="p">]</span>
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="n">stats</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="s2">    SELECT user_id, COUNT(*) as post_count</span>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="s2">    FROM posts</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="s2">    WHERE user_id = ANY($1)</span>
+<a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="s2">    GROUP BY user_id</span>
+<a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">user_ids</span><span class="p">])</span>
 </code></pre></div>
 <h2 id="transaction-support">Transaction Support<a class="headerlink" href="#transaction-support" title="Permanent link">&para;</a></h2>
-<p>Raw queries participate in transactions:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="k">async</span> <span class="k">with</span> <span class="n">transaction</span><span class="o">.</span><span class="n">atomic</span><span class="p">():</span>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="c1"># ORM operation</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">user</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Alice&quot;</span><span class="p">)</span>
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>    <span class="c1"># Raw SQL in same transaction</span>
-<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>    <span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;INSERT INTO audit_log (user_id, action) VALUES ($1, $2)&quot;</span>
-<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">&quot;created&quot;</span><span class="p">])</span>
+<p>Raw queries automatically participate in transactions:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde</span><span class="w"> </span><span class="kn">import</span> <span class="n">atomic</span><span class="p">,</span> <span class="n">execute_raw</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="k">async</span> <span class="k">with</span> <span class="n">atomic</span><span class="p">():</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="c1"># ORM operation</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="n">user</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Alice&quot;</span><span class="p">)</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="c1"># Raw SQL in same transaction</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>        <span class="s2">&quot;INSERT INTO audit_log (user_id, action) VALUES ($1, $2)&quot;</span><span class="p">,</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>        <span class="p">[</span><span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">&quot;created&quot;</span><span class="p">]</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>    <span class="p">)</span>
+<a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="c1"># Both commit together or rollback together</span>
 </code></pre></div>
 <h2 id="explain">explain()<a class="headerlink" href="#explain" title="Permanent link">&para;</a></h2>
-<p>Analyze raw query performance:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Using ORM explain</span>
-<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">plan</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span><span class="o">.</span><span class="n">explain</span><span class="p">(</span><span class="n">analyze</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
-<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Raw SQL explain</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;EXPLAIN ANALYZE SELECT * FROM users WHERE age &gt;= 18&quot;</span>
-<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="n">plan</span> <span class="o">=</span> <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
+<p>Analyze query performance:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Using ORM explain</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">plan</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">age__gte</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span><span class="o">.</span><span class="n">explain</span><span class="p">(</span><span class="n">analyze</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1"># Raw SQL explain</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;EXPLAIN ANALYZE SELECT * FROM users WHERE age &gt;= 18&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="best-practices">Best Practices<a class="headerlink" href="#best-practices" title="Permanent link">&para;</a></h2>
 <h3 id="1-prefer-orm-when-possible">1. Prefer ORM When Possible<a class="headerlink" href="#1-prefer-orm-when-possible" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Use ORM for standard operations</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;active&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1"># Use raw SQL only for unsupported features</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;SELECT * FROM users WHERE metadata @&gt; &#39;{</span><span class="se">\&quot;</span><span class="s2">vip</span><span class="se">\&quot;</span><span class="s2">: true}&#39;::jsonb&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Use ORM for standard operations</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;active&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Use raw SQL only for unsupported features</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>    <span class="s2">&quot;SELECT * FROM users WHERE metadata @&gt; $1::jsonb&quot;</span><span class="p">,</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>    <span class="p">[</span><span class="s1">&#39;{&quot;vip&quot;: true}&#39;</span><span class="p">]</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="p">)</span>
 </code></pre></div>
 <h3 id="2-parameterize-everything">2. Parameterize Everything<a class="headerlink" href="#2-parameterize-everything" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># GOOD</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;SELECT * FROM users WHERE email = $1&quot;</span>
-<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="n">user_email</span><span class="p">])</span>
-<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>
-<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="c1"># BAD - SQL injection risk!</span>
-<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="n">sql</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;SELECT * FROM users WHERE email = &#39;</span><span class="si">{</span><span class="n">user_email</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># GOOD</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;SELECT * FROM users WHERE email = $1&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">user_email</span><span class="p">])</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1"># BAD - SQL injection risk!</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SELECT * FROM users WHERE email = &#39;</span><span class="si">{</span><span class="n">user_email</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h3 id="3-document-complex-queries">3. Document Complex Queries<a class="headerlink" href="#3-document-complex-queries" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_user_activity_report</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="sd">    Get user activity report with window functions.</span>
-<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>
-<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="sd">    Returns posts with running total of views and rank within user&#39;s posts.</span>
-<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>    <span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="s2">    SELECT</span>
-<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="s2">        id,</span>
-<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="s2">        title,</span>
-<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="s2">        views,</span>
-<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a><span class="s2">        SUM(views) OVER (ORDER BY created_at) as running_total,</span>
-<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="s2">        RANK() OVER (ORDER BY views DESC) as view_rank</span>
-<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a><span class="s2">    FROM posts</span>
-<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a><span class="s2">    WHERE author_id = $1</span>
-<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a><span class="s2">    ORDER BY created_at DESC</span>
-<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a><span class="s2">    &quot;&quot;&quot;</span>
-<a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="n">user_id</span><span class="p">])</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_user_activity_report</span><span class="p">(</span><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="sd">    Get user activity report with window functions.</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="sd">    Returns posts with running total of views and rank within user&#39;s posts.</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="s2">        SELECT</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="s2">            id,</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="s2">            title,</span>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="s2">            views,</span>
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a><span class="s2">            SUM(views) OVER (ORDER BY created_at) as running_total,</span>
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a><span class="s2">            RANK() OVER (ORDER BY views DESC) as view_rank</span>
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a><span class="s2">        FROM posts</span>
+<a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a><span class="s2">        WHERE author_id = $1</span>
+<a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a><span class="s2">        ORDER BY created_at DESC</span>
+<a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a><span class="s2">    &quot;&quot;&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">user_id</span><span class="p">])</span>
 </code></pre></div>
 <h3 id="4-test-across-databases">4. Test Across Databases<a class="headerlink" href="#4-test-across-databases" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_date_trunc_sql</span><span class="p">(</span><span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dialect</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate date truncation SQL for different dialects.&quot;&quot;&quot;</span>
-<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>    <span class="k">if</span> <span class="n">dialect</span> <span class="o">==</span> <span class="s2">&quot;postgres&quot;</span><span class="p">:</span>
-<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;DATE_TRUNC(&#39;</span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">&#39;, </span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">)&quot;</span>
-<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>    <span class="k">elif</span> <span class="n">dialect</span> <span class="o">==</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">:</span>
-<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>        <span class="k">if</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">&quot;day&quot;</span><span class="p">:</span>
-<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;DATE(</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">)&quot;</span>
-<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>        <span class="k">elif</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">&quot;month&quot;</span><span class="p">:</span>
-<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;DATE(</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">, &#39;start of month&#39;)&quot;</span>
-<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>    <span class="k">elif</span> <span class="n">dialect</span> <span class="o">==</span> <span class="s2">&quot;mysql&quot;</span><span class="p">:</span>
-<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a>        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;DATE_FORMAT(</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">, &#39;%Y-%m-01&#39;)&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">get_date_trunc_sql</span><span class="p">(</span><span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dialect</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate date truncation SQL for different dialects.&quot;&quot;&quot;</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>    <span class="k">if</span> <span class="n">dialect</span> <span class="o">==</span> <span class="s2">&quot;postgres&quot;</span><span class="p">:</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;DATE_TRUNC(&#39;</span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">&#39;, </span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">)&quot;</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>    <span class="k">elif</span> <span class="n">dialect</span> <span class="o">==</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">:</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>        <span class="k">if</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">&quot;day&quot;</span><span class="p">:</span>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;DATE(</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">)&quot;</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>        <span class="k">elif</span> <span class="n">unit</span> <span class="o">==</span> <span class="s2">&quot;month&quot;</span><span class="p">:</span>
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;DATE(</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">, &#39;start of month&#39;)&quot;</span>
+<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>    <span class="k">elif</span> <span class="n">dialect</span> <span class="o">==</span> <span class="s2">&quot;mysql&quot;</span><span class="p">:</span>
+<a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;DATE_FORMAT(</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">, &#39;%Y-%m-01&#39;)&quot;</span>
 </code></pre></div>
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <h3 id="no-automatic-type-conversion">No Automatic Type Conversion<a class="headerlink" href="#no-automatic-type-conversion" title="Permanent link">&para;</a></h3>
 <p>Raw queries return raw values:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># ORM converts types</span>
-<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="n">user</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">created_at</span><span class="p">))</span>  <span class="c1"># datetime</span>
-<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>
-<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="c1"># Raw returns strings (depends on driver)</span>
-<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;SELECT created_at FROM users WHERE id = $1&quot;</span>
-<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;created_at&quot;</span><span class="p">]))</span>  <span class="c1"># str or datetime</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># ORM converts types</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="n">user</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">user</span><span class="o">.</span><span class="n">created_at</span><span class="p">))</span>  <span class="c1"># datetime</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="c1"># Raw may return strings (depends on driver and column type)</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;SELECT created_at FROM users WHERE id = $1&quot;</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;created_at&quot;</span><span class="p">]))</span>  <span class="c1"># str or datetime</span>
 </code></pre></div>
 <h3 id="no-model-hydration">No Model Hydration<a class="headerlink" href="#no-model-hydration" title="Permanent link">&para;</a></h3>
 <p>Raw queries return dictionaries, not model instances:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># ORM returns models</span>
-<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">users</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c1"># User</span>
-<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>
-<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="c1"># Raw returns dicts</span>
-<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;SELECT * FROM users&quot;</span>
-<a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
-<a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a><span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c1"># dict</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1"># ORM returns models</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">users</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c1"># User</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="c1"># Raw returns dicts</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;SELECT * FROM users&quot;</span><span class="p">)</span>
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>  <span class="c1"># dict</span>
 </code></pre></div>
 <p>To hydrate manually:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="n">sql</span> <span class="o">=</span> <span class="s2">&quot;SELECT * FROM users WHERE ...&quot;</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">raw_query</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span>
-<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="n">users</span> <span class="o">=</span> <span class="p">[</span><span class="n">User</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">execute_raw</span><span class="p">(</span><span class="s2">&quot;SELECT * FROM users WHERE ...&quot;</span><span class="p">)</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">users</span> <span class="o">=</span> <span class="p">[</span><span class="n">User</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">]</span>
+</code></pre></div>
+<h2 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute_raw</span><span class="p">(</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>    <span class="n">sql</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>    <span class="n">params</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a>    <span class="n">using</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a>    <span class="n">client</span><span class="p">:</span> <span class="n">SupportsExecute</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="sd">    Execute raw SQL query.</span>
+<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>
+<a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a><span class="sd">    Args:</span>
+<a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a><span class="sd">        sql: SQL with placeholders ($1/$2 for Postgres, ? for SQLite/MySQL)</span>
+<a id="__codelineno-23-13" name="__codelineno-23-13" href="#__codelineno-23-13"></a><span class="sd">        params: Query parameters (use these to prevent SQL injection!)</span>
+<a id="__codelineno-23-14" name="__codelineno-23-14" href="#__codelineno-23-14"></a><span class="sd">        using: Connection alias (default: &quot;default&quot;)</span>
+<a id="__codelineno-23-15" name="__codelineno-23-15" href="#__codelineno-23-15"></a><span class="sd">        client: Explicit client (AsyncDatabase or AsyncTransaction)</span>
+<a id="__codelineno-23-16" name="__codelineno-23-16" href="#__codelineno-23-16"></a>
+<a id="__codelineno-23-17" name="__codelineno-23-17" href="#__codelineno-23-17"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-23-18" name="__codelineno-23-18" href="#__codelineno-23-18"></a><span class="sd">        List of dicts for SELECT queries.</span>
+<a id="__codelineno-23-19" name="__codelineno-23-19" href="#__codelineno-23-19"></a><span class="sd">        Empty list for INSERT/UPDATE/DELETE without RETURNING.</span>
+<a id="__codelineno-23-20" name="__codelineno-23-20" href="#__codelineno-23-20"></a>
+<a id="__codelineno-23-21" name="__codelineno-23-21" href="#__codelineno-23-21"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-23-22" name="__codelineno-23-22" href="#__codelineno-23-22"></a><span class="sd">        RuntimeError: If no connection is available.</span>
+<a id="__codelineno-23-23" name="__codelineno-23-23" href="#__codelineno-23-23"></a><span class="sd">        ManagerError: If both &#39;using&#39; and &#39;client&#39; are provided.</span>
+<a id="__codelineno-23-24" name="__codelineno-23-24" href="#__codelineno-23-24"></a><span class="sd">    &quot;&quot;&quot;</span>
 </code></pre></div>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
@@ -2265,10 +2366,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

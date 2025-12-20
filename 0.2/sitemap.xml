@@ -2,86 +2,86 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/cheatsheet/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/faq/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/advanced/internals/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/advanced/performance/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/advanced/raw-queries/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/getting-started/fastapi-project/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/getting-started/first-project/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/getting-started/installation/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/getting-started/quickstart/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/aggregation/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/connections/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/exceptions/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/expressions/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/fields/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/filtering/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/migrations/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/models/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/queries/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/relations/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
     <url>
          <loc>https://oxyde.fatalyst.dev/0.2/guide/transactions/</loc>
-         <lastmod>2025-12-17</lastmod>
+         <lastmod>2025-12-20</lastmod>
     </url>
 </urlset>
