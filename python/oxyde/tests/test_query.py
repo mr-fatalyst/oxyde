@@ -389,7 +389,10 @@ async def test_async_manager_create_update_delete_and_save() -> None:
         class Meta:
             is_table = True
 
-    create_stub = StubExecuteClient([{"affected": 1, "inserted_ids": [1]}])
+    create_stub = StubExecuteClient([{
+        "columns": ["id", "name", "price"],
+        "rows": [[1, "Widget", None]]
+    }])
     item = await Item.objects.create(client=create_stub, name="Widget")
     assert isinstance(item, Item)
     assert create_stub.calls[0]["op"] == "insert"
@@ -400,18 +403,24 @@ async def test_async_manager_create_update_delete_and_save() -> None:
     item.price = 5
 
     # Test save() - should update all fields (no dirty tracking)
-    update_stub = StubExecuteClient([{"affected": 1}])
+    update_stub = StubExecuteClient([{
+        "columns": ["id", "name", "price"],
+        "rows": [[10, "Gadget", 5]]
+    }])
     await item.save(client=update_stub)
     assert update_stub.calls[0]["op"] == "update"
     assert update_stub.calls[0]["values"]["name"] == "Gadget"
     assert update_stub.calls[0]["values"]["price"] == 5
 
-    update_count_stub = StubExecuteClient([{"affected": 3}])
-    affected = await Item.objects.filter(name__icontains="gad").update(
+    update_count_stub = StubExecuteClient([{
+        "columns": ["id", "name", "price"],
+        "rows": [[1, "a", 100], [2, "b", 100], [3, "c", 100]]
+    }])
+    rows = await Item.objects.filter(name__icontains="gad").update(
         price=100,
         client=update_count_stub,
     )
-    assert affected == 3
+    assert len(rows) == 3
     assert update_count_stub.calls[0]["op"] == "update"
 
     delete_stub = StubExecuteClient([{"affected": 2}])

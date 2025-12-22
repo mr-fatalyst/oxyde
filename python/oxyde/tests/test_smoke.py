@@ -204,7 +204,7 @@ class TestArticleMutations:
             views=99,
             using=sqlite_db.name,
         )
-        assert updated == 1
+        assert len(updated) == 1
 
         titles = await self.Article.objects.values_list("title", flat=True).all(client=sqlite_db)
         assert "Created" in titles

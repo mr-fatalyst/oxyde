@@ -766,13 +766,23 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
                 )
                 return self
 
-            # Use Manager.filter().update() for updating
-            affected = await manager.filter(**{pk_field: pk_value}).update(
+            # Use Manager.filter().update() for updating (returns list of updated rows)
+            rows = await manager.filter(**{pk_field: pk_value}).update(
                 client=client, using=using, **values
             )
-            if affected == 0:
+            if not rows:
                 cls_name = self.__class__.__name__
                 raise NotFoundError(f"{cls_name} with {pk_field}={pk_value} not found")
+
+            # Update instance from RETURNING * result
+            self.__class__.ensure_field_metadata()
+            col_to_field = {
+                meta.db_column: field_name
+                for field_name, meta in self.__class__._db_meta.field_metadata.items()
+            }
+            for col, value in rows[0].items():
+                field_name = col_to_field.get(col, col)
+                setattr(self, field_name, value)
         else:
             await manager.create(
                 instance=self, client=client, using=using, _skip_hooks=True

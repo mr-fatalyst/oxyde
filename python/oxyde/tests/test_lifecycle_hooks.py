@@ -89,7 +89,10 @@ class TestPreSaveHook:
                     "update_fields": update_fields,
                 })
 
-        stub = StubExecuteClient([{"affected": 1}])
+        stub = StubExecuteClient([{
+            "columns": ["id", "name"],
+            "rows": [[1, "Bob"]]
+        }])
         instance = HookedModel(id=1, name="Bob")
         await instance.save(client=stub)
 
@@ -118,7 +121,10 @@ class TestPreSaveHook:
                     "update_fields": update_fields,
                 })
 
-        stub = StubExecuteClient([{"affected": 1}])
+        stub = StubExecuteClient([{
+            "columns": ["id", "name", "email"],
+            "rows": [[1, "Charlie", "c@example.com"]]
+        }])
         instance = HookedModel(id=1, name="Charlie", email="c@example.com")
         await instance.save(client=stub, update_fields=["name"])
 
@@ -204,7 +210,10 @@ class TestPostSaveHook:
                     "is_create": is_create,
                 })
 
-        stub = StubExecuteClient([{"affected": 1}])
+        stub = StubExecuteClient([{
+            "columns": ["id", "name"],
+            "rows": [[1, "Bob"]]
+        }])
         instance = HookedModel(id=1, name="Bob")
         await instance.save(client=stub)
 

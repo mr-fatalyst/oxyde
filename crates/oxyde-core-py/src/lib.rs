@@ -312,19 +312,33 @@ fn execute<'py>(
                 result
             }
             oxyde_codec::Operation::Insert => {
-                // Get pk_column from IR (defaults to "id" in driver if None)
-                let pk_column = ir.pk_column.as_deref();
+                // Single insert with RETURNING * (ir.returning=true) returns full rows
+                // Bulk insert returns only PKs for efficiency
+                if ir.returning.unwrap_or(false) {
+                    // Single insert: use RETURNING * and return full row data
+                    let (columns, rows) = execute_query_columnar(&pool_name, &sql, &params, None)
+                        .await
+                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 
-                // Execute INSERT and return inserted IDs (works for both single and bulk)
-                let ids = execute_insert_returning(&pool_name, &sql, &params, pk_column)
-                    .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                    rmp_serde::to_vec_named(&MutationWithReturningResult {
+                        affected: rows.len(),
+                        columns,
+                        rows,
+                    })
+                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                } else {
+                    // Bulk insert: return only PKs
+                    let pk_column = ir.pk_column.as_deref();
+                    let ids = execute_insert_returning(&pool_name, &sql, &params, pk_column)
+                        .await
+                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 
-                rmp_serde::to_vec_named(&InsertResult {
-                    affected: ids.len(),
-                    inserted_ids: ids,
-                })
-                .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    rmp_serde::to_vec_named(&InsertResult {
+                        affected: ids.len(),
+                        inserted_ids: ids,
+                    })
+                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                }
             }
             oxyde_codec::Operation::Update | oxyde_codec::Operation::Delete => {
                 let op_name = if matches!(ir.op, oxyde_codec::Operation::Delete) {
@@ -421,19 +435,33 @@ fn execute_in_transaction<'py>(
                     .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
             }
             oxyde_codec::Operation::Insert => {
-                // Get pk_column from IR (defaults to "id" in driver if None)
-                let pk_column = ir.pk_column.as_deref();
+                // Single insert with RETURNING * returns full rows
+                // Bulk insert returns only PKs for efficiency
+                if ir.returning.unwrap_or(false) {
+                    let (columns, rows) =
+                        execute_query_columnar_in_transaction(tx_id, &sql, &params)
+                            .await
+                            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 
-                // INSERT - return inserted IDs
-                let ids = execute_insert_returning_in_transaction(tx_id, &sql, &params, pk_column)
-                    .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                    rmp_serde::to_vec_named(&MutationWithReturningResult {
+                        affected: rows.len(),
+                        columns,
+                        rows,
+                    })
+                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                } else {
+                    let pk_column = ir.pk_column.as_deref();
+                    let ids =
+                        execute_insert_returning_in_transaction(tx_id, &sql, &params, pk_column)
+                            .await
+                            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 
-                rmp_serde::to_vec_named(&InsertResult {
-                    affected: ids.len(),
-                    inserted_ids: ids,
-                })
-                .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    rmp_serde::to_vec_named(&InsertResult {
+                        affected: ids.len(),
+                        inserted_ids: ids,
+                    })
+                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                }
             }
             oxyde_codec::Operation::Update | oxyde_codec::Operation::Delete => {
                 // If RETURNING clause is requested, use columnar format

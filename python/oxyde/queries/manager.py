@@ -369,8 +369,22 @@ class QueryManager(_QueryManagerBase):
         query = InsertQuery(self.model_class).values(**payload)
         result = await self._run_mutation(query, exec_client)
 
-        # Assign auto-generated PK to instance
-        if "inserted_ids" in result and result["inserted_ids"]:
+        # Update instance from RETURNING * result
+        if "rows" in result and result["rows"]:
+            # Build db_column -> field_name mapping
+            self.model_class.ensure_field_metadata()
+            col_to_field = {
+                meta.db_column: field_name
+                for field_name, meta in self.model_class._db_meta.field_metadata.items()
+            }
+            # Update instance with returned values
+            columns = result.get("columns", [])
+            row = result["rows"][0]
+            for col, value in zip(columns, row):
+                field_name = col_to_field.get(col, col)
+                setattr(instance, field_name, value)
+        elif "inserted_ids" in result and result["inserted_ids"]:
+            # Fallback for bulk insert (only PKs returned)
             pk_field = self._primary_key_field()
             if pk_field:
                 setattr(instance, pk_field, result["inserted_ids"][0])

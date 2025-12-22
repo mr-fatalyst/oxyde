@@ -73,7 +73,7 @@ class MutationMixin:
         using: str | None = None,
         client: SupportsExecute | None = None,
         **values: Any,
-    ) -> int:
+    ) -> list[dict[str, Any]]:
         """
         Update records matching the query.
 
@@ -83,11 +83,11 @@ class MutationMixin:
             **values: Field values to update
 
         Returns:
-            Number of affected rows
+            List of updated rows as dicts (with all fields from RETURNING *)
 
         Examples:
-            await Post.objects.filter(id=42).update(status="published")
-            await User.objects.filter(is_active=False).update(status="archived")
+            rows = await Post.objects.filter(id=42).update(status="published")
+            rows = await User.objects.filter(is_active=False).update(status="archived")
         """
         exec_client = await _resolve_execution_client(using, client)
         col_types = _build_col_types(self.model_class)
@@ -101,10 +101,14 @@ class MutationMixin:
             filter_tree=self._build_filter_tree(),
             col_types=col_types,
             model=_model_key(self.model_class),
+            returning=True,
         )
         result_bytes = await exec_client.execute(update_ir)
         result = msgpack.unpackb(result_bytes, raw=False)
-        return result.get("affected", 0)
+        # Convert columnar format to list of dicts
+        columns = result.get("columns", [])
+        rows = result.get("rows", [])
+        return [dict(zip(columns, row)) for row in rows]
 
     async def delete(
         self,

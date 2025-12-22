@@ -86,6 +86,7 @@ class InsertQuery:
                 }
                 serialized_bulk.append(serialized)
 
+            # Bulk insert: only return PKs for efficiency
             return ir.build_insert_ir(
                 table=table_name,
                 bulk_values=serialized_bulk,
@@ -103,12 +104,14 @@ class InsertQuery:
                 for key, value in mapped_values.items()
             }
 
+            # Single insert: use RETURNING * to get all fields (including db defaults)
             return ir.build_insert_ir(
                 table=table_name,
                 values=serialized_values,
                 col_types=col_types,
                 model=_model_key(self.model_class),
                 pk_column=pk_column,
+                returning=True,
             )
 
     async def execute(self, client: SupportsExecute) -> dict[str, Any]:

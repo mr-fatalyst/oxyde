@@ -61,7 +61,10 @@ class TestModelSave:
     @pytest.mark.asyncio
     async def test_save_new_instance_creates(self):
         """Test save() on new instance (no PK) creates record."""
-        stub = StubExecuteClient([{"affected": 1, "inserted_ids": [42]}])
+        stub = StubExecuteClient([{
+            "columns": ["id", "name", "email", "age", "is_active"],
+            "rows": [[42, "Alice", None, 25, True]]
+        }])
 
         instance = TestModel(name="Alice", age=25)
         result = await instance.save(client=stub)
@@ -73,7 +76,10 @@ class TestModelSave:
     @pytest.mark.asyncio
     async def test_save_existing_instance_updates(self):
         """Test save() on existing instance (with PK) updates record."""
-        stub = StubExecuteClient([{"affected": 1}])
+        stub = StubExecuteClient([{
+            "columns": ["id", "name", "email", "age", "is_active"],
+            "rows": [[1, "Bob", None, 30, True]]
+        }])
 
         instance = TestModel(id=1, name="Bob", age=30)
         result = await instance.save(client=stub)
@@ -84,7 +90,10 @@ class TestModelSave:
     @pytest.mark.asyncio
     async def test_save_with_update_fields(self):
         """Test save() with update_fields updates only specified fields."""
-        stub = StubExecuteClient([{"affected": 1}])
+        stub = StubExecuteClient([{
+            "columns": ["id", "name", "email", "age", "is_active"],
+            "rows": [[1, "Charlie", "c@example.com", 35, True]]
+        }])
 
         instance = TestModel(id=1, name="Charlie", email="c@example.com", age=35)
         await instance.save(client=stub, update_fields=["name", "age"])
@@ -487,14 +496,17 @@ class TestManagerUpdate:
     @pytest.mark.asyncio
     async def test_filter_update(self):
         """Test update() through filter."""
-        stub = StubExecuteClient([{"affected": 3}])
+        stub = StubExecuteClient([{
+            "columns": ["id", "name", "age"],
+            "rows": [[1, "a", 25], [2, "b", 25], [3, "c", 25]]
+        }])
 
         # update() takes keyword arguments, not positional dict
-        affected = await TestModel.objects.filter(is_active=True).update(
+        rows = await TestModel.objects.filter(is_active=True).update(
             age=25, client=stub
         )
 
-        assert affected == 3
+        assert len(rows) == 3
         assert stub.calls[0]["op"] == "update"
 
 
