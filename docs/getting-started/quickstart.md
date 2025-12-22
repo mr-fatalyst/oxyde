@@ -46,6 +46,9 @@ DATABASES = {
 }
 ```
 
+!!! tip "SQLite paths"
+    SQLite relative paths are resolved from the current working directory. For portable projects, see [SQLite File Paths](../guide/connections.md#connection-urls).
+
 ## 4. Define Models
 
 Create `models.py`:

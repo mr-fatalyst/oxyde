@@ -27,6 +27,20 @@ await db.close()
 | SQLite (memory) | `sqlite:///:memory:` |
 | MySQL | `mysql://user:pass@host:3306/database` |
 
+!!! note "SQLite File Paths"
+    SQLite relative paths (like `sqlite:///app.db`) are resolved from the **current working directory**, not from the config file location. For portable projects, use absolute paths:
+
+    ```python
+    # oxyde_config.py
+    from pathlib import Path
+
+    BASE_DIR = Path(__file__).parent
+
+    DATABASES = {
+        "default": f"sqlite:///{BASE_DIR}/app.db"
+    }
+    ```
+
 ## High-Level API
 
 ### db.init()
