@@ -143,9 +143,9 @@ mysql://user:password@localhost:3306/database
 
 Full documentation: **[https://oxyde.fatalyst.dev/](https://oxyde.fatalyst.dev/)**
 
-- [Quick Start](https://oxyde.fatalyst.dev/getting-started/quickstart/) — Get up and running
-- [User Guide](https://oxyde.fatalyst.dev/guide/models/) — Models, queries, relations, transactions
-- [Cheatsheet](https://oxyde.fatalyst.dev/cheatsheet/) — Quick reference for all methods
+- [Quick Start](https://oxyde.fatalyst.dev/latest/getting-started/quickstart/) — Get up and running
+- [User Guide](https://oxyde.fatalyst.dev/latest/guide/models/) — Models, queries, relations, transactions
+- [Cheatsheet](https://oxyde.fatalyst.dev/latest/cheatsheet/) — Quick reference for all methods
 
 ## Contributing
 
