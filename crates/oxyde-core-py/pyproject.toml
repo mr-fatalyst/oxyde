@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "oxyde-core"
-version = "0.2.1"
+version = "0.3.0"
 description = "Rust core for Oxyde ORM - high-performance database operations"
 readme = "README.md"
 license = {text = "MIT"}
