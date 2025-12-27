@@ -1231,12 +1231,17 @@ fn execute_select_batched_dedup<'py>(
         fn init_dedup_result(
             py: Python<'_>,
             join_prefixes: &[(String, String, String)],
-        ) -> PyResult<(Py<PyList>, Py<PyDict>)> {
+        ) -> PyResult<(Py<PyList>, Py<PyDict>, Py<PyDict>)> {
             let relations = PyDict::new(py);
             for (_, path, _) in join_prefixes {
                 relations.set_item(path, PyDict::new(py))?;
             }
-            Ok((PyList::empty(py).unbind(), relations.unbind()))
+            let seen_main_pks = PyDict::new(py);
+            Ok((
+                PyList::empty(py).unbind(),
+                relations.unbind(),
+                seen_main_pks.unbind(),
+            ))
         }
 
         // Helper to finalize result
@@ -1250,6 +1255,9 @@ fn execute_select_batched_dedup<'py>(
             result.set_item("relations", relations_dict.bind(py))?;
             Ok(result.unbind())
         }
+
+        // Get main table PK column for deduplication
+        let main_pk_column = ir.pk_column.clone();
 
         match pool {
             DbPool::Sqlite(pool) => {
@@ -1266,20 +1274,23 @@ fn execute_select_batched_dedup<'py>(
                 }
 
                 let columns = extract_sqlite_columns(&rows[0], col_types.as_ref());
-                let (main_list, relations_dict) =
+                let (main_list, relations_dict, seen_main_pks) =
                     Python::attach(|py| init_dedup_result(py, &join_prefixes))?;
 
                 for chunk in rows.chunks(batch_size) {
                     Python::attach(|py| {
                         let main = main_list.bind(py);
                         let relations = relations_dict.bind(py);
+                        let seen_pks = seen_main_pks.bind(py);
                         for row in chunk {
                             process_row_dedup_generic(
                                 py,
                                 &columns,
                                 &join_prefixes,
+                                main_pk_column.as_deref(),
                                 main,
                                 relations,
+                                seen_pks,
                                 |idx, col| decode_sqlite_cell_to_py(py, row, idx, col),
                             )?;
                         }
@@ -1305,20 +1316,23 @@ fn execute_select_batched_dedup<'py>(
                 }
 
                 let columns = extract_pg_columns(&rows[0], col_types.as_ref());
-                let (main_list, relations_dict) =
+                let (main_list, relations_dict, seen_main_pks) =
                     Python::attach(|py| init_dedup_result(py, &join_prefixes))?;
 
                 for chunk in rows.chunks(batch_size) {
                     Python::attach(|py| {
                         let main = main_list.bind(py);
                         let relations = relations_dict.bind(py);
+                        let seen_pks = seen_main_pks.bind(py);
                         for row in chunk {
                             process_row_dedup_generic(
                                 py,
                                 &columns,
                                 &join_prefixes,
+                                main_pk_column.as_deref(),
                                 main,
                                 relations,
+                                seen_pks,
                                 |idx, col| decode_pg_cell_to_py(py, row, idx, col),
                             )?;
                         }
@@ -1344,20 +1358,23 @@ fn execute_select_batched_dedup<'py>(
                 }
 
                 let columns = extract_mysql_columns(&rows[0], col_types.as_ref());
-                let (main_list, relations_dict) =
+                let (main_list, relations_dict, seen_main_pks) =
                     Python::attach(|py| init_dedup_result(py, &join_prefixes))?;
 
                 for chunk in rows.chunks(batch_size) {
                     Python::attach(|py| {
                         let main = main_list.bind(py);
                         let relations = relations_dict.bind(py);
+                        let seen_pks = seen_main_pks.bind(py);
                         for row in chunk {
                             process_row_dedup_generic(
                                 py,
                                 &columns,
                                 &join_prefixes,
+                                main_pk_column.as_deref(),
                                 main,
                                 relations,
+                                seen_pks,
                                 |idx, col| decode_mysql_cell_to_py(py, row, idx, col),
                             )?;
                         }
@@ -1378,8 +1395,10 @@ fn process_row_dedup_generic<F>(
     py: Python<'_>,
     columns: &[oxyde_driver::StreamingColumnMeta],
     join_prefixes: &[(String, String, String)],
+    main_pk_column: Option<&str>,
     main_list: &Bound<'_, PyList>,
     relations_dict: &Bound<'_, PyDict>,
+    seen_main_pks: &Bound<'_, PyDict>,
     decode_cell: F,
 ) -> PyResult<()>
 where
@@ -1427,7 +1446,24 @@ where
         }
     }
 
-    main_list.append(main_dict)?;
+    // Deduplicate main objects by PK
+    if let Some(pk_col) = main_pk_column {
+        if let Some(pk_idx) = columns.iter().position(|c| c.name == pk_col) {
+            let pk_value = decode_cell(pk_idx, &columns[pk_idx]);
+            // Only append if we haven't seen this PK before
+            if seen_main_pks.get_item(&pk_value)?.is_none() {
+                seen_main_pks.set_item(&pk_value, true)?;
+                main_list.append(main_dict)?;
+            }
+        } else {
+            // PK column not found, append without dedup
+            main_list.append(main_dict)?;
+        }
+    } else {
+        // No PK specified, append without dedup
+        main_list.append(main_dict)?;
+    }
+
     Ok(())
 }
 
