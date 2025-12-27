@@ -115,12 +115,19 @@ def _collect_model_columns(model_class: type[OxydeModel]) -> list[tuple[str, str
 
     Excludes virtual relation fields (db_reverse_fk, db_m2m) that don't
     have corresponding database columns.
+
+    Also excludes virtual FK fields (author: User) since they share db_column
+    with synthetic FK columns (author_id: int) - we use the synthetic ones
+    to avoid type conflicts during hydration.
     """
     model_class.ensure_field_metadata()
     result = []
     for meta in model_class._db_meta.field_metadata.values():
         # Skip virtual relation fields (db_reverse_fk, db_m2m)
         if meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
+            continue
+        # Skip virtual FK fields (author: User) - use synthetic author_id instead
+        if meta.foreign_key is not None:
             continue
         result.append((meta.name, meta.db_column))
     return result

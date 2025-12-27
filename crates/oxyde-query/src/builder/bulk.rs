@@ -58,7 +58,7 @@ pub fn build_bulk_update(
     query.cond_where(filter_cond);
 
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree)?;
+        let expr = build_filter_node(filter_tree, None)?;
         query.and_where(expr);
     }
 

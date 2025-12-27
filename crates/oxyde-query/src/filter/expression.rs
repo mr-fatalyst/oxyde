@@ -7,33 +7,41 @@ use crate::error::{QueryError, Result};
 use crate::utils::{json_to_value, ColumnIdent, TableIdent};
 
 /// Create column expression, handling "table.column" format for joins
-fn make_col_expr(col_name: &str) -> Expr {
+/// If default_table is provided and column is not already qualified, prepend it
+fn make_col_expr(col_name: &str, default_table: Option<&str>) -> Expr {
     if let Some((table, column)) = col_name.split_once('.') {
         // "user.age" -> ("user", "age") -> "user"."age"
         Expr::col((
             TableIdent(table.to_string()),
             ColumnIdent(column.to_string()),
         ))
+    } else if let Some(table) = default_table {
+        // Qualify with default table (for JOIN queries)
+        Expr::col((
+            TableIdent(table.to_string()),
+            ColumnIdent(col_name.to_string()),
+        ))
     } else {
-        // Simple column name
+        // Simple column name (no JOIN)
         Expr::col(ColumnIdent(col_name.to_string()))
     }
 }
 
 /// Build WHERE clause from FilterNode tree
-pub fn build_filter_node(node: &FilterNode) -> Result<SimpleExpr> {
+/// default_table: if provided, unqualified columns will be prefixed with this table name
+pub fn build_filter_node(node: &FilterNode, default_table: Option<&str>) -> Result<SimpleExpr> {
     match node {
-        FilterNode::Condition(filter) => apply_filter(filter),
+        FilterNode::Condition(filter) => apply_filter(filter, default_table),
         FilterNode::And { conditions } => {
             if conditions.is_empty() {
                 return Err(QueryError::InvalidQuery(
                     "AND node must have at least one condition".into(),
                 ));
             }
-            let first = build_filter_node(&conditions[0])?;
+            let first = build_filter_node(&conditions[0], default_table)?;
             let mut result = first;
             for cond in &conditions[1..] {
-                let next = build_filter_node(cond)?;
+                let next = build_filter_node(cond, default_table)?;
                 result = result.and(next);
             }
             Ok(result)
@@ -44,25 +52,25 @@ pub fn build_filter_node(node: &FilterNode) -> Result<SimpleExpr> {
                     "OR node must have at least one condition".into(),
                 ));
             }
-            let first = build_filter_node(&conditions[0])?;
+            let first = build_filter_node(&conditions[0], default_table)?;
             let mut result = first;
             for cond in &conditions[1..] {
-                let next = build_filter_node(cond)?;
+                let next = build_filter_node(cond, default_table)?;
                 result = result.or(next);
             }
             Ok(result)
         }
         FilterNode::Not { condition } => {
-            let inner = build_filter_node(condition)?;
+            let inner = build_filter_node(condition, default_table)?;
             Ok(inner.not())
         }
     }
 }
 
 /// Apply filter to expression
-pub fn apply_filter(filter: &Filter) -> Result<SimpleExpr> {
+pub fn apply_filter(filter: &Filter, default_table: Option<&str>) -> Result<SimpleExpr> {
     let col_name = filter.column.as_ref().unwrap_or(&filter.field);
-    let col = make_col_expr(col_name);
+    let col = make_col_expr(col_name, default_table);
     let val = json_to_value(&filter.value);
 
     let expr = match filter.operator.as_str() {
@@ -84,7 +92,7 @@ pub fn apply_filter(filter: &Filter) -> Result<SimpleExpr> {
             })?;
             let lowered = text.to_lowercase();
             // Use col_name (respects filter.column alias) instead of filter.field
-            let lower_col = Func::lower(make_col_expr(col_name));
+            let lower_col = Func::lower(make_col_expr(col_name, default_table));
             Expr::expr(lower_col).binary(BinOper::Like, Expr::val(Value::from(lowered)))
         }
         "IN" => {

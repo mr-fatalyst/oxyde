@@ -61,9 +61,16 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         query.column(Asterisk);
     }
 
+    // Determine default table for filter qualification (needed for JOINs to avoid ambiguity)
+    let default_table = if ir.joins.is_some() {
+        Some(ir.table.as_str())
+    } else {
+        None
+    };
+
     // Add filters
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree)?;
+        let expr = build_filter_node(filter_tree, default_table)?;
         query.and_where(expr);
     }
 
@@ -76,7 +83,7 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
 
     // Add HAVING
     if let Some(having) = &ir.having {
-        let expr = build_filter_node(having)?;
+        let expr = build_filter_node(having, default_table)?;
         query.and_having(expr);
     }
 
@@ -164,9 +171,16 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         count_query.from(table.clone());
         count_query.expr_as(Func::count(Expr::col(Asterisk)), Alias::new("_count"));
 
+        // Determine default table for filter qualification (needed for JOINs)
+        let count_default_table = if ir.joins.is_some() {
+            Some(ir.table.as_str())
+        } else {
+            None
+        };
+
         // Add filters
         if let Some(filter_tree) = &ir.filter_tree {
-            let expr = build_filter_node(filter_tree)?;
+            let expr = build_filter_node(filter_tree, count_default_table)?;
             count_query.and_where(expr);
         }
 
