@@ -140,6 +140,7 @@ def build_select_ir(
     exists: bool | None = None,
     count: bool | None = None,
     lock: str | None = None,
+    pk_column: str | None = None,
 ) -> dict[str, Any]:
     """Build a SELECT query IR payload.
 
@@ -147,6 +148,7 @@ def build_select_ir(
         col_types: Optional mapping of column name to IR type hint.
             Used by Rust for type-aware decoding without type_info() calls.
             Types: "int", "str", "float", "bool", "bytes", "datetime", "date", "time"
+        pk_column: Primary key column name, used for deduplication in JOIN queries.
     """
     payload: dict[str, Any] = {
         "proto": IR_PROTO_VERSION,
@@ -188,6 +190,8 @@ def build_select_ir(
         payload["count"] = bool(count)
     if lock is not None:
         payload["lock"] = lock
+    if pk_column is not None:
+        payload["pk_column"] = pk_column
     return payload
 
 

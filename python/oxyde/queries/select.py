@@ -266,6 +266,11 @@ class Query(
         # Use cached col_types from model metadata (computed in ensure_field_metadata)
         col_types = self.model_class._db_meta.col_types
 
+        # Pass pk_column only for JOIN queries (needed for deduplication)
+        pk_column = None
+        if self._join_specs:
+            pk_column = self.model_class._get_primary_key_field()
+
         return ir.build_select_ir(
             table=table_name,
             columns=fields,
@@ -282,6 +287,7 @@ class Query(
             having=self._having,
             aggregates=aggregates_ir,
             lock=self._lock_type,
+            pk_column=pk_column,
         )
 
 
