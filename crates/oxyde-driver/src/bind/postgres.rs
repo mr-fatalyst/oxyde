@@ -96,9 +96,7 @@ fn bind_null_array<'q>(query: PgQuery<'q>, array_type: &ArrayType) -> PgQuery<'q
         ArrayType::SmallInt => query.bind(Option::<Vec<i16>>::None),
         ArrayType::Int => query.bind(Option::<Vec<i32>>::None),
         ArrayType::BigInt => query.bind(Option::<Vec<i64>>::None),
-        ArrayType::TinyUnsigned | ArrayType::SmallUnsigned => {
-            query.bind(Option::<Vec<i32>>::None)
-        }
+        ArrayType::TinyUnsigned | ArrayType::SmallUnsigned => query.bind(Option::<Vec<i32>>::None),
         ArrayType::Unsigned | ArrayType::BigUnsigned => query.bind(Option::<Vec<i64>>::None),
         ArrayType::Float => query.bind(Option::<Vec<f32>>::None),
         ArrayType::Double => query.bind(Option::<Vec<f64>>::None),
