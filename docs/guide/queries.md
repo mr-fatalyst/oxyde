@@ -267,8 +267,9 @@ else:
 Bulk update matching records:
 
 ```python
-# Returns count of affected rows
-count = await User.objects.filter(status="pending").update(status="active")
+# Returns list of updated rows (RETURNING *)
+rows = await User.objects.filter(status="pending").update(status="active")
+print(f"Updated {len(rows)} users")
 ```
 
 With F expressions:

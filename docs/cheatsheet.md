@@ -66,7 +66,7 @@ Complete API reference.
 <tr><td><code>count()</code></td><td><code>await qs.count()</code></td><td><code>int</code></td><td>COUNT(*)</td></tr>
 <tr><td><code>exists()</code></td><td><code>await qs.exists()</code></td><td><code>bool</code></td><td>EXISTS check</td></tr>
 <tr><td><code>delete()</code></td><td><code>await qs.delete()</code></td><td><code>int</code></td><td>Bulk DELETE</td></tr>
-<tr><td><code>update()</code></td><td><code>await qs.update(status="x")</code></td><td><code>int</code></td><td>Bulk UPDATE</td></tr>
+<tr><td><code>update()</code></td><td><code>await qs.update(status="x")</code></td><td><code>list[dict]</code></td><td>Bulk UPDATE (RETURNING *)</td></tr>
 <tr><td><code>increment()</code></td><td><code>await qs.increment("views", by=1)</code></td><td><code>int</code></td><td>Atomic increment</td></tr>
 <tr><td><code>sum()</code></td><td><code>await qs.sum("views")</code></td><td><code>number</code></td><td>SUM</td></tr>
 <tr><td><code>avg()</code></td><td><code>await qs.avg("age")</code></td><td><code>float</code></td><td>AVG</td></tr>
@@ -154,11 +154,11 @@ users = await User.objects.bulk_create([
 user.age = 26
 await user.save()
 
-# Partial update via Query
-count = await User.objects.filter(is_active=False).update(status="archived")
+# Partial update via Query (returns updated rows)
+rows = await User.objects.filter(is_active=False).update(status="archived")
 
 # Atomic update with F()
-count = await User.objects.filter(id=42).update(views=F("views") + 1)
+rows = await User.objects.filter(id=42).update(views=F("views") + 1)
 
 # Atomic increment
 count = await Post.objects.filter(id=42).increment("views", by=1)
