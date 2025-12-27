@@ -74,10 +74,18 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         query.and_where(expr);
     }
 
-    // Add GROUP BY
+    // Add GROUP BY (with table qualification for JOINs to avoid ambiguity)
     if let Some(group_by) = &ir.group_by {
         for field in group_by {
-            query.add_group_by([Expr::col(ColumnIdent(field.clone())).into()]);
+            let col_expr = if ir.joins.is_some() {
+                Expr::col(ColumnRef::TableColumn(
+                    SeaRc::new(table.clone()),
+                    SeaRc::new(ColumnIdent(field.clone())),
+                ))
+            } else {
+                Expr::col(ColumnIdent(field.clone()))
+            };
+            query.add_group_by([col_expr.into()]);
         }
     }
 
@@ -87,7 +95,7 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         query.and_having(expr);
     }
 
-    // Add order by
+    // Add order by (with table qualification for JOINs to avoid ambiguity)
     if let Some(order_by) = &ir.order_by {
         for (field, direction) in order_by {
             let order = match direction.to_uppercase().as_str() {
@@ -95,7 +103,15 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                 "DESC" => Order::Desc,
                 _ => Order::Asc,
             };
-            query.order_by(ColumnIdent(field.clone()), order);
+            if ir.joins.is_some() {
+                let col_ref = ColumnRef::TableColumn(
+                    SeaRc::new(table.clone()),
+                    SeaRc::new(ColumnIdent(field.clone())),
+                );
+                query.order_by(col_ref, order);
+            } else {
+                query.order_by(ColumnIdent(field.clone()), order);
+            }
         }
     }
 
