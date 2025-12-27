@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 import msgpack
 
 from oxyde.core import ir
-from oxyde.exceptions import FieldLookupError
+from oxyde.exceptions import FieldLookupError, MultipleObjectsReturned, NotFoundError
 from oxyde.queries.base import (
     _TYPE_ADAPTER_CACHE,
     _TYPE_ADAPTER_LOCK,
@@ -300,6 +300,56 @@ class ExecutionMixin:
                 return bool(row[0]) if row else False
             return bool(row)
         return False
+
+    async def get(
+        self,
+        *,
+        using: str | None = None,
+        client: SupportsExecute | None = None,
+    ) -> OxydeModel:
+        """
+        Return exactly one result matching the query.
+
+        Raises NotFoundError if no match, MultipleObjectsReturned if more than one.
+
+        Returns:
+            Model instance
+
+        Examples:
+            user = await User.objects.filter(id=1).get()
+        """
+        exec_client = await _resolve_execution_client(using, client)
+        query = self.limit(2)
+        results = await query.fetch_models(exec_client)
+        if not results:
+            raise NotFoundError(f"{self.model_class.__name__} matching query not found")
+        if len(results) > 1:
+            raise MultipleObjectsReturned(
+                f"Query for {self.model_class.__name__} returned multiple objects"
+            )
+        return results[0]
+
+    async def get_or_none(
+        self,
+        *,
+        using: str | None = None,
+        client: SupportsExecute | None = None,
+    ) -> OxydeModel | None:
+        """
+        Return one result or None if not found.
+
+        Raises MultipleObjectsReturned if more than one match.
+
+        Returns:
+            Model instance or None
+
+        Examples:
+            user = await User.objects.filter(email="test@example.com").get_or_none()
+        """
+        try:
+            return await self.get(using=using, client=client)
+        except NotFoundError:
+            return None
 
     def _execute(
         self,

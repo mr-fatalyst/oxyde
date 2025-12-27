@@ -658,6 +658,15 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
         """Get the table name for this model."""
         return cls._db_meta.table_name or cls.__name__.lower()
 
+    @classmethod
+    def _get_primary_key_field(cls) -> str | None:
+        """Get primary key field name from model metadata."""
+        cls.ensure_field_metadata()
+        for field_name, meta in cls._db_meta.field_metadata.items():
+            if meta.primary_key:
+                return field_name
+        return None
+
     # =========================================================================
     # Lifecycle Hooks
     # =========================================================================
@@ -732,7 +741,7 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
         update_fields: Iterable[str] | None = None,
     ) -> OxydeModel:
         manager = self.__class__.objects
-        pk_field = manager._primary_key_field()
+        pk_field = self._get_primary_key_field()
         pk_value = getattr(self, pk_field) if pk_field else None
         is_create = not (pk_field and pk_value not in (None, PydanticUndefined))
 
@@ -800,7 +809,7 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
         using: str | None = None,
     ) -> int:
         manager = self.__class__.objects
-        pk_field = manager._primary_key_field()
+        pk_field = self._get_primary_key_field()
         if not pk_field:
             raise ManagerError("delete() requires a primary key")
         pk_value = getattr(self, pk_field)
@@ -847,8 +856,7 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
             # ... time passes, data may have changed ...
             await user.refresh()  # Reload from DB
         """
-        manager = self.__class__.objects
-        pk_field = manager._primary_key_field()
+        pk_field = self._get_primary_key_field()
         if not pk_field:
             raise ManagerError("refresh() requires a primary key")
         pk_value = getattr(self, pk_field)
@@ -858,7 +866,7 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
             )
 
         # Fetch fresh data from DB
-        refreshed = await manager.get(
+        refreshed = await self.__class__.objects.get(
             client=client, using=using, **{pk_field: pk_value}
         )
 
