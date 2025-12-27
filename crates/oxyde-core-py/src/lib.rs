@@ -1395,6 +1395,7 @@ fn execute_select_batched_dedup<'py>(
 }
 
 /// Generic row processing for dedup - works with any database via closure
+#[allow(clippy::too_many_arguments)]
 fn process_row_dedup_generic<F>(
     py: Python<'_>,
     columns: &[oxyde_driver::StreamingColumnMeta],

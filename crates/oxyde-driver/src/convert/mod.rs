@@ -24,7 +24,7 @@ pub mod sqlite;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_convert;
 
-pub use mysql::{convert_mysql_rows, convert_mysql_rows_columnar, convert_mysql_rows_typed};
+pub use mysql::{convert_mysql_rows_columnar, convert_mysql_rows_typed};
 pub use postgres::{convert_pg_rows, convert_pg_rows_columnar, convert_pg_rows_typed};
 pub use sqlite::{convert_sqlite_rows, convert_sqlite_rows_columnar, convert_sqlite_rows_typed};
 

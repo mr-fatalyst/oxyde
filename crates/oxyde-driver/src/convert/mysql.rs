@@ -23,6 +23,7 @@ struct ColumnMeta {
 
 /// Convert multiple MySQL rows with cached column metadata.
 /// Pre-computes column names and types from first row, then reuses for all rows.
+#[allow(dead_code)]
 pub fn convert_mysql_rows(rows: Vec<MySqlRow>) -> Vec<HashMap<String, serde_json::Value>> {
     convert_mysql_rows_typed(rows, None)
 }
