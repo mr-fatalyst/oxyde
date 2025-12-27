@@ -427,9 +427,10 @@ fn execute_in_transaction<'py>(
         let results = match ir.op {
             oxyde_codec::Operation::Select | oxyde_codec::Operation::Raw => {
                 // Always use columnar format
-                let (columns, rows) = execute_query_columnar_in_transaction(tx_id, &sql, &params)
-                    .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                let (columns, rows) =
+                    execute_query_columnar_in_transaction(tx_id, &sql, &params, ir.col_types.as_ref())
+                        .await
+                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 
                 oxyde_codec::serialize_columnar_results((columns, rows))
                     .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
@@ -439,7 +440,7 @@ fn execute_in_transaction<'py>(
                 // Bulk insert returns only PKs for efficiency
                 if ir.returning.unwrap_or(false) {
                     let (columns, rows) =
-                        execute_query_columnar_in_transaction(tx_id, &sql, &params)
+                        execute_query_columnar_in_transaction(tx_id, &sql, &params, None)
                             .await
                             .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 
@@ -467,7 +468,7 @@ fn execute_in_transaction<'py>(
                 // If RETURNING clause is requested, use columnar format
                 if ir.returning.unwrap_or(false) {
                     let (columns, rows) =
-                        execute_query_columnar_in_transaction(tx_id, &sql, &params)
+                        execute_query_columnar_in_transaction(tx_id, &sql, &params, None)
                             .await
                             .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 

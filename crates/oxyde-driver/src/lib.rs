@@ -373,6 +373,7 @@ pub async fn execute_query_in_transaction(
     tx_id: u64,
     sql: &str,
     params: &[Value],
+    col_types: Option<&HashMap<String, String>>,
 ) -> Result<Vec<HashMap<String, serde_json::Value>>> {
     let registry = transaction_registry();
     let arc = registry
@@ -389,7 +390,7 @@ pub async fn execute_query_in_transaction(
         .conn
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
-    conn.query(sql, params).await
+    conn.query(sql, params, col_types).await
 }
 
 /// Execute SELECT query in transaction returning columnar format (columns, rows).
@@ -397,6 +398,7 @@ pub async fn execute_query_columnar_in_transaction(
     tx_id: u64,
     sql: &str,
     params: &[Value],
+    col_types: Option<&HashMap<String, String>>,
 ) -> Result<ColumnarResult> {
     let registry = transaction_registry();
     let arc = registry
@@ -413,7 +415,7 @@ pub async fn execute_query_columnar_in_transaction(
         .conn
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
-    conn.query_columnar(sql, params).await
+    conn.query_columnar(sql, params, col_types).await
 }
 
 pub async fn execute_statement_in_transaction(

@@ -9,9 +9,8 @@ use std::collections::HashMap;
 
 use crate::bind::{bind_mysql, bind_postgres, bind_sqlite};
 use crate::convert::{
-    convert_mysql_rows, convert_mysql_rows_columnar, convert_mysql_rows_typed, convert_pg_rows,
-    convert_pg_rows_columnar, convert_pg_rows_typed, convert_sqlite_rows,
-    convert_sqlite_rows_columnar, convert_sqlite_rows_typed, ColumnarResult,
+    convert_mysql_rows_columnar, convert_mysql_rows_typed, convert_pg_rows_columnar,
+    convert_pg_rows_typed, convert_sqlite_rows_columnar, convert_sqlite_rows_typed, ColumnarResult,
 };
 use crate::error::{DriverError, Result};
 use crate::pool::DbPool;
@@ -62,10 +61,16 @@ pub trait ConnExec {
         &mut self,
         sql: &str,
         params: &[Value],
+        col_types: Option<&HashMap<String, String>>,
     ) -> Result<Vec<HashMap<String, serde_json::Value>>>;
 
     /// Execute a SELECT query and return columnar format
-    async fn query_columnar(&mut self, sql: &str, params: &[Value]) -> Result<ColumnarResult>;
+    async fn query_columnar(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+        col_types: Option<&HashMap<String, String>>,
+    ) -> Result<ColumnarResult>;
 
     /// Execute a statement and return affected rows
     async fn execute(&mut self, sql: &str, params: &[Value]) -> Result<u64>;
@@ -166,42 +171,48 @@ impl ConnExec for DbConn {
         &mut self,
         sql: &str,
         params: &[Value],
+        col_types: Option<&HashMap<String, String>>,
     ) -> Result<Vec<HashMap<String, serde_json::Value>>> {
         match self {
             DbConn::Postgres(conn) => {
                 let query = bind_postgres(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_pg_rows(rows))
+                Ok(convert_pg_rows_typed(rows, col_types))
             }
             DbConn::MySql(conn) => {
                 let query = bind_mysql(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_mysql_rows(rows))
+                Ok(convert_mysql_rows_typed(rows, col_types))
             }
             DbConn::Sqlite(conn) => {
                 let query = bind_sqlite(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_sqlite_rows(rows))
+                Ok(convert_sqlite_rows_typed(rows, col_types))
             }
         }
     }
 
-    async fn query_columnar(&mut self, sql: &str, params: &[Value]) -> Result<ColumnarResult> {
+    async fn query_columnar(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+        col_types: Option<&HashMap<String, String>>,
+    ) -> Result<ColumnarResult> {
         match self {
             DbConn::Postgres(conn) => {
                 let query = bind_postgres(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_pg_rows_columnar(rows, None))
+                Ok(convert_pg_rows_columnar(rows, col_types))
             }
             DbConn::MySql(conn) => {
                 let query = bind_mysql(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_mysql_rows_columnar(rows, None))
+                Ok(convert_mysql_rows_columnar(rows, col_types))
             }
             DbConn::Sqlite(conn) => {
                 let query = bind_sqlite(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_sqlite_rows_columnar(rows, None))
+                Ok(convert_sqlite_rows_columnar(rows, col_types))
             }
         }
     }
