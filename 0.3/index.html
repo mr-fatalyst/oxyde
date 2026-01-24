@@ -1178,6 +1178,34 @@
   
   
     <li class="md-nav__item">
+      <a href="advanced/benchmarks.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="advanced/raw-queries/" class="md-nav__link">
         
   
@@ -1488,6 +1516,54 @@
 <h2 id="why-oxyde">Why Oxyde?<a class="headerlink" href="#why-oxyde" title="Permanent link">&para;</a></h2>
 <h3 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h3>
 <p>Oxyde's Rust core handles SQL generation and query execution, releasing Python's GIL during database I/O. This enables true parallelism for database operations.</p>
+<p><strong>Benchmarks vs popular Python ORMs</strong> (avg ops/sec, higher is better):</p>
+<table>
+<thead>
+<tr>
+<th>Database</th>
+<th>Oxyde</th>
+<th>Tortoise</th>
+<th>Piccolo</th>
+<th>SQLAlchemy</th>
+<th>SQLModel</th>
+<th>Peewee</th>
+<th>Django</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PostgreSQL</td>
+<td>924</td>
+<td>748</td>
+<td>746</td>
+<td>336</td>
+<td>324</td>
+<td>61</td>
+<td>59</td>
+</tr>
+<tr>
+<td>MySQL</td>
+<td>1037</td>
+<td>1019</td>
+<td>—</td>
+<td>434</td>
+<td>420</td>
+<td>371</td>
+<td>313</td>
+</tr>
+<tr>
+<td>SQLite</td>
+<td>1232</td>
+<td>1477</td>
+<td>295</td>
+<td>342</td>
+<td>336</td>
+<td>449</td>
+<td>434</td>
+</tr>
+</tbody>
+</table>
+<p><a href="advanced/benchmarks.md"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Full benchmark report</a></p>
 <h3 id="type-safety">Type Safety<a class="headerlink" href="#type-safety" title="Permanent link">&para;</a></h3>
 <p>Built on Pydantic v2, Oxyde provides full type checking for models and queries. Your IDE understands your database schema.</p>
 <h3 id="familiar-api">Familiar API<a class="headerlink" href="#familiar-api" title="Permanent link">&para;</a></h3>
