@@ -72,6 +72,16 @@
 
 Oxyde's Rust core handles SQL generation and query execution, releasing Python's GIL during database I/O. This enables true parallelism for database operations.
 
+**Benchmarks vs popular Python ORMs** (avg ops/sec, higher is better):
+
+| Database   | Oxyde | Tortoise | Piccolo | SQLAlchemy | SQLModel | Peewee | Django |
+|------------|-------|----------|---------|------------|----------|--------|--------|
+| PostgreSQL | 924   | 748      | 746     | 336        | 324      | 61     | 59     |
+| MySQL      | 1037  | 1019     | —       | 434        | 420      | 371    | 313    |
+| SQLite     | 1232  | 1477     | 295     | 342        | 336      | 449    | 434    |
+
+[:octicons-arrow-right-24: Full benchmark report](advanced/benchmarks.md)
+
 ### Type Safety
 
 Built on Pydantic v2, Oxyde provides full type checking for models and queries. Your IDE understands your database schema.

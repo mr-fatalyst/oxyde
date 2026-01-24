@@ -26,6 +26,18 @@
 - **Transactions** — `transaction.atomic()` context manager with savepoints
 - **Migrations** — Django-style `makemigrations` and `migrate` CLI
 
+## Performance
+
+Benchmarks vs popular Python ORMs (avg ops/sec, higher is better):
+
+| Database   | Oxyde | Tortoise | Piccolo | SQLAlchemy | SQLModel | Peewee | Django |
+|------------|-------|----------|---------|------------|----------|--------|--------|
+| PostgreSQL | 924   | 748      | 746     | 336        | 324      | 61     | 59     |
+| MySQL      | 1037  | 1019     | —       | 434        | 420      | 371    | 313    |
+| SQLite     | 1232  | 1477     | 295     | 342        | 336      | 449    | 434    |
+
+Full benchmark report: **[Documentation](https://oxyde.fatalyst.dev/latest/advanced/benchmarks/)**
+
 ## Installation
 
 ```bash
