@@ -2,6 +2,8 @@
 
 Complete example of using Oxyde with FastAPI.
 
+Full working example: [github.com/mr-fatalyst/fastapi-oxyde-example](https://github.com/mr-fatalyst/fastapi-oxyde-example)
+
 ## Setup
 
 ```bash
