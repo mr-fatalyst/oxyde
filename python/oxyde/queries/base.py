@@ -16,7 +16,7 @@ Helper Functions:
     _model_key(model_class) -> str:
         Returns "{module}.{qualname}" for model identification.
 
-    _resolve_registered_model(key) -> type[OxydeModel]:
+    _resolve_registered_model(key) -> type[Model]:
         Look up model by key or class name in registry.
 
     _primary_key_meta(model_class) -> ColumnMeta:
@@ -57,7 +57,7 @@ from oxyde.exceptions import FieldLookupError, ManagerError
 from oxyde.models.registry import registered_tables
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
     from oxyde.queries.select import Query
 
 # Global cache for TypeAdapter instances (thread-safe)
@@ -65,7 +65,7 @@ _TYPE_ADAPTER_CACHE: dict[type, TypeAdapter] = {}
 _TYPE_ADAPTER_LOCK = threading.Lock()
 
 
-def _model_key(model_class: type[OxydeModel]) -> str:
+def _model_key(model_class: type[Model]) -> str:
     """Return fully qualified identifier for a model."""
     return f"{model_class.__module__}.{model_class.__qualname__}"
 
@@ -81,7 +81,7 @@ class SupportsExecute(Protocol):
 TQuery = TypeVar("TQuery", bound="Query")  # type: ignore
 
 
-def _resolve_registered_model(model_key: str) -> type[OxydeModel]:
+def _resolve_registered_model(model_key: str) -> type[Model]:
     """Resolve a model by its fully qualified key or simple class name."""
     tables = registered_tables()
     # Try exact match first
@@ -95,7 +95,7 @@ def _resolve_registered_model(model_key: str) -> type[OxydeModel]:
     raise FieldLookupError(f"Related model '{model_key}' is not registered")
 
 
-def _primary_key_meta(model_class: type[OxydeModel]):
+def _primary_key_meta(model_class: type[Model]):
     """Get primary key metadata from model."""
     model_class.ensure_field_metadata()
     for meta in model_class._db_meta.field_metadata.values():
@@ -104,13 +104,13 @@ def _primary_key_meta(model_class: type[OxydeModel]):
     raise FieldLookupError(f"{model_class.__name__} has no primary key field")
 
 
-def _build_col_types(model_class: type[OxydeModel]) -> dict[str, str] | None:
+def _build_col_types(model_class: type[Model]) -> dict[str, str] | None:
     """Get cached col_types mapping from model metadata."""
     model_class.ensure_field_metadata()
     return model_class._db_meta.col_types
 
 
-def _collect_model_columns(model_class: type[OxydeModel]) -> list[tuple[str, str]]:
+def _collect_model_columns(model_class: type[Model]) -> list[tuple[str, str]]:
     """Collect all (field_name, db_column) pairs from model.
 
     Excludes virtual relation fields (db_reverse_fk, db_m2m) that don't
@@ -134,7 +134,7 @@ def _collect_model_columns(model_class: type[OxydeModel]) -> list[tuple[str, str
 
 
 def _map_values_to_columns(
-    model_class: type[OxydeModel],
+    model_class: type[Model],
     values: dict[str, Any],
 ) -> dict[str, Any]:
     """Map field names to database column names."""

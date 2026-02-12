@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from oxyde.models.base import OxydeModel
+from oxyde.models.base import Model
 from oxyde.models.lookups import (
     COMMON_LOOKUPS,
     DATE_PART_LOOKUPS,
@@ -42,7 +42,7 @@ def _get_python_type_name(python_type: Any) -> str:
         return "Decimal"
     elif python_type is UUID:
         return "UUID"
-    elif isinstance(python_type, type) and issubclass(python_type, OxydeModel):
+    elif isinstance(python_type, type) and issubclass(python_type, Model):
         # FK field pointing to another model
         return python_type.__name__
     else:
@@ -78,7 +78,7 @@ def _get_lookups_for_type(python_type: Any) -> list[str]:
     return lookups
 
 
-def _get_field_info(model_class: type[OxydeModel]) -> dict[str, tuple[Any, bool]]:
+def _get_field_info(model_class: type[Model]) -> dict[str, tuple[Any, bool]]:
     """
     Get field info from model_fields, returns dict of field_name -> (python_type, is_pk).
 
@@ -115,7 +115,7 @@ def _get_field_info(model_class: type[OxydeModel]) -> dict[str, tuple[Any, bool]
     return result
 
 
-def _generate_filter_params(model_class: type[OxydeModel]) -> str:
+def _generate_filter_params(model_class: type[Model]) -> str:
     """Generate filter method parameters with all lookups."""
     lines = []
     field_info = _get_field_info(model_class)
@@ -148,7 +148,7 @@ def _generate_filter_params(model_class: type[OxydeModel]) -> str:
     return "\n".join(lines)
 
 
-def _generate_order_by_literal(model_class: type[OxydeModel]) -> str:
+def _generate_order_by_literal(model_class: type[Model]) -> str:
     """Generate Literal type for order_by fields (includes - prefix for DESC)."""
     field_info = _get_field_info(model_class)
     literals = []
@@ -163,7 +163,7 @@ def _generate_order_by_literal(model_class: type[OxydeModel]) -> str:
     return f"Literal[{', '.join(literals)}]"
 
 
-def _generate_field_literal(model_class: type[OxydeModel]) -> str:
+def _generate_field_literal(model_class: type[Model]) -> str:
     """Generate Literal type for field names (for select/values/group_by)."""
     field_info = _get_field_info(model_class)
     literals = [f'"{field_name}"' for field_name in sorted(field_info.keys())]
@@ -174,7 +174,7 @@ def _generate_field_literal(model_class: type[OxydeModel]) -> str:
     return f"Literal[{', '.join(literals)}]"
 
 
-def _generate_update_params(model_class: type[OxydeModel]) -> str:
+def _generate_update_params(model_class: type[Model]) -> str:
     """Generate update method parameters (field: type | None = None for each field)."""
     lines = []
     field_info = _get_field_info(model_class)
@@ -191,7 +191,7 @@ def _generate_update_params(model_class: type[OxydeModel]) -> str:
     return "\n".join(lines)
 
 
-def _generate_create_params(model_class: type[OxydeModel]) -> str:
+def _generate_create_params(model_class: type[Model]) -> str:
     """Generate create method parameters with proper optionality."""
     lines = []
     field_info = _get_field_info(model_class)
@@ -204,13 +204,13 @@ def _generate_create_params(model_class: type[OxydeModel]) -> str:
     return "\n".join(lines)
 
 
-def _generate_model_class_stub(model_class: type[OxydeModel]) -> str:
+def _generate_model_class_stub(model_class: type[Model]) -> str:
     """Generate stub class definition for model (to avoid circular imports in .pyi)."""
     from oxyde.models.field import OxydeFieldInfo
     from oxyde.models.utils import _unpack_annotated, _unwrap_optional
 
     model_name = model_class.__name__
-    lines = [f"class {model_name}(OxydeModel):"]
+    lines = [f"class {model_name}(Model):"]
 
     # Add Meta class if present
     if hasattr(model_class, "Meta"):
@@ -250,7 +250,7 @@ def _generate_model_class_stub(model_class: type[OxydeModel]) -> str:
     return "\n".join(lines)
 
 
-def generate_model_stub(model_class: type[OxydeModel]) -> str:
+def generate_model_stub(model_class: type[Model]) -> str:
     """Generate .pyi stub content for a single model (without imports)."""
     model_name = model_class.__name__
 
@@ -664,14 +664,14 @@ def generate_stub_for_file(file_path: Path) -> None:
     sys.modules["temp_module"] = module
     spec.loader.exec_module(module)
 
-    # Find all OxydeModel subclasses in the module
+    # Find all Model subclasses in the module
     models = []
     for name in dir(module):
         obj = getattr(module, name)
         if (
             inspect.isclass(obj)
-            and issubclass(obj, OxydeModel)
-            and obj is not OxydeModel
+            and issubclass(obj, Model)
+            and obj is not Model
             and getattr(obj, "_is_table", False)
         ):
             models.append(obj)
@@ -692,7 +692,7 @@ def generate_stub_for_file(file_path: Path) -> None:
 
 
 def generate_stubs_for_models(
-    models: list[type[OxydeModel]] | None = None,
+    models: list[type[Model]] | None = None,
 ) -> dict[Path, str]:
     """
     Generate stubs for models and return mapping of file paths to stub content.
@@ -707,7 +707,7 @@ def generate_stubs_for_models(
         models = list(registered_tables().values())
 
     # Group models by source file
-    file_models: dict[Path, list[type[OxydeModel]]] = {}
+    file_models: dict[Path, list[type[Model]]] = {}
     for model in models:
         if not getattr(model, "_is_table", False):
             continue
@@ -735,7 +735,7 @@ def generate_stubs_for_models(
             "from decimal import Decimal",
             "from uuid import UUID",
             "",
-            "from oxyde import OxydeModel",
+            "from oxyde import Model",
             "from oxyde.queries import Query, QueryManager",
             "",
         ]

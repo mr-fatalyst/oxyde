@@ -13,8 +13,8 @@ Attributes:
     source_column: FK column on source table (e.g., "author_id")
     target_column: PK column on target table (e.g., "id")
     columns: List of (field_name, db_column) for SELECT
-    target_model: OxydeModel class being joined
-    parent_model: OxydeModel class of the parent
+    target_model: Model class being joined
+    parent_model: Model class of the parent
     nullable: Whether this is a LEFT JOIN (True) or INNER JOIN (False)
 
 Join Resolution:
@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 @dataclass(slots=True)
@@ -58,8 +58,8 @@ class _JoinDescriptor:
     source_column: str
     target_column: str
     columns: list[tuple[str, str]]
-    target_model: type[OxydeModel]
-    parent_model: type[OxydeModel]
+    target_model: type[Model]
+    parent_model: type[Model]
     nullable: bool
 
 

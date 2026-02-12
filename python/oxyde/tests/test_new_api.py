@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from oxyde import Avg, Coalesce, Concat, Count, Max, Min, OxydeModel, Q, RawSQL, Sum
+from oxyde import Avg, Coalesce, Concat, Count, Max, Min, Model, Q, RawSQL, Sum
 
 
-class SampleModel(OxydeModel):
+class SampleModel(Model):
     """Sample model for new features."""
 
     id: int

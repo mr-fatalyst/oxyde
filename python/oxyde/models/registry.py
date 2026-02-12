@@ -1,4 +1,4 @@
-"""Global registry of OxydeModel table classes.
+"""Global registry of Model table classes.
 
 This module maintains a global dict mapping model keys to model classes.
 Models are auto-registered when defined with Meta.is_table = True.
@@ -17,10 +17,10 @@ Functions:
     unregister_table(model):
         Remove model from registry (no-op if not registered).
 
-    registered_tables() -> dict[str, type[OxydeModel]]:
+    registered_tables() -> dict[str, type[Model]]:
         Return copy of registry. Ensures field metadata is parsed.
 
-    iter_tables() -> tuple[type[OxydeModel], ...]:
+    iter_tables() -> tuple[type[Model], ...]:
         Return tuple of registered model classes.
 
     clear_registry():
@@ -28,9 +28,9 @@ Functions:
 
 Auto-Registration:
     Models with Meta.is_table = True are automatically registered in
-    OxydeModel.__init_subclass__(). This happens at class definition time.
+    Model.__init_subclass__(). This happens at class definition time.
 
-    class User(OxydeModel):
+    class User(Model):
         class Meta:
             is_table = True  # Auto-registers as "myapp.models.User"
 
@@ -44,13 +44,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
-_TABLES: dict[str, type[OxydeModel]] = {}
-_PENDING_FK_MODELS: set[type[OxydeModel]] = set()
+_TABLES: dict[str, type[Model]] = {}
+_PENDING_FK_MODELS: set[type[Model]] = set()
 
 
-def _model_key(model: type[OxydeModel]) -> str:
+def _model_key(model: type[Model]) -> str:
     return f"{model.__module__}.{model.__qualname__}"
 
 
@@ -66,12 +66,12 @@ def _resolve_pending_fk_models() -> None:
     _PENDING_FK_MODELS.difference_update(resolved)
 
 
-def register_table(model: type[OxydeModel], *, overwrite: bool = False) -> None:
+def register_table(model: type[Model], *, overwrite: bool = False) -> None:
     """Register an ORM model that represents a database table.
 
     Note: FK resolution is NOT done here because model_fields is not yet
     populated when this is called from __init_subclass__. FK resolution
-    is triggered from OxydeModelMeta.__new__ after Pydantic completes.
+    is triggered from ModelMeta.__new__ after Pydantic completes.
     """
     key = _model_key(model)
     existing = _TABLES.get(key)
@@ -87,12 +87,12 @@ def register_table(model: type[OxydeModel], *, overwrite: bool = False) -> None:
         _PENDING_FK_MODELS.add(model)
 
 
-def unregister_table(model: type[OxydeModel]) -> None:
+def unregister_table(model: type[Model]) -> None:
     """Remove a model from the registry if present."""
     _TABLES.pop(_model_key(model), None)
 
 
-def registered_tables() -> dict[str, type[OxydeModel]]:
+def registered_tables() -> dict[str, type[Model]]:
     """Return a copy of the registered table mapping."""
     tables = dict(_TABLES)
     for model in tables.values():
@@ -101,7 +101,7 @@ def registered_tables() -> dict[str, type[OxydeModel]]:
     return tables
 
 
-def iter_tables() -> tuple[type[OxydeModel], ...]:
+def iter_tables() -> tuple[type[Model], ...]:
     """Return tuple of registered table classes."""
     tables = tuple(_TABLES.values())
     for model in tables:
@@ -119,7 +119,7 @@ def clear_registry() -> None:
 def resolve_pending_fk() -> None:
     """Resolve FK fields for all pending models.
 
-    Called from OxydeModelMeta.__new__ after Pydantic completes model creation.
+    Called from ModelMeta.__new__ after Pydantic completes model creation.
     At this point model_fields is populated and FK fields can be resolved.
     """
     _resolve_pending_fk_models()

@@ -177,7 +177,7 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
         }
     """
     # Import here to avoid circular dependency
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
     tables = {}
 
@@ -190,11 +190,11 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
         fields = []
         for field_name, field_meta in meta.field_metadata.items():
             # Skip virtual relation fields - these are for ORM, not actual DB columns:
-            # 1. FK fields (python_type is OxydeModel) - real column is synthetic field
+            # 1. FK fields (python_type is Model) - real column is synthetic field
             # 2. Reverse FK fields (db_reverse_fk) - no DB column, just relation
             # 3. M2M fields (db_m2m) - no DB column, uses junction table
             if isinstance(field_meta.python_type, type) and issubclass(
-                field_meta.python_type, OxydeModel
+                field_meta.python_type, Model
             ):
                 continue
             if field_meta.extra.get("reverse_fk") or field_meta.extra.get("m2m"):

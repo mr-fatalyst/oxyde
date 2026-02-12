@@ -3,7 +3,7 @@
 This module provides the core model system built on Pydantic v2:
 
 Classes:
-    OxydeModel: Base class for all database models. Provides:
+    Model: Base class for all database models. Provides:
         - Automatic table name generation from class name
         - QueryManager via Model.objects for CRUD operations
         - save(), delete(), refresh() instance methods
@@ -28,10 +28,10 @@ Model Registry:
     clear_registry(): Remove all registered models.
 
 Example:
-    from oxyde import OxydeModel, Field, Index
+    from oxyde import Model, Field, Index
 
     @Index("name", "email", unique=True)
-    class User(OxydeModel):
+    class User(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str = Field(db_index=True)
         email: str = Field(db_unique=True)
@@ -41,7 +41,9 @@ Example:
             table_name = "users"
 """
 
-from .base import OxydeModel
+import warnings
+
+from .base import Model
 from .decorators import (  # Keep Index for Meta.indexes, Check for Meta.constraints
     Check,
     Index,
@@ -55,8 +57,20 @@ from .registry import (
     unregister_table,
 )
 
+
+def __getattr__(name: str):
+    if name == "OxydeModel":
+        warnings.warn(
+            "OxydeModel is deprecated, use Model instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return Model
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
-    "OxydeModel",
+    "Model",
     "Field",
     "OxydeFieldInfo",
     "Index",

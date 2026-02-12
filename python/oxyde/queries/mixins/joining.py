@@ -15,14 +15,14 @@ from oxyde.queries.base import (
 from oxyde.queries.joins import _JoinDescriptor
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class JoiningMixin:
     """Mixin providing join and prefetch capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[OxydeModel]
+    model_class: type[Model]
     _join_specs: list[_JoinDescriptor]
     _prefetch_paths: list[str]
 

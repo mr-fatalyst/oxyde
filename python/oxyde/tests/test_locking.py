@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.models.registry import clear_registry
 
 
@@ -16,7 +16,7 @@ def cleanup_registry():
     clear_registry()
 
 
-class Account(OxydeModel):
+class Account(Model):
     """Test model for locking tests."""
 
     id: int | None = Field(default=None, db_pk=True)

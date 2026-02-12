@@ -14,7 +14,7 @@ Oxyde is a hybrid Python/Rust project:
 │  • IR Builder (query → MessagePack)                          │
 │  • Data validation (Pydantic validates, Rust executes)       │
 └────────────────────────┬─────────────────────────────────────┘
-                         │ MessagePack IR (~2KB)
+                         │ MessagePack IR
                          ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  Rust Core (crates/)                                         │
@@ -46,7 +46,7 @@ Oxyde is a hybrid Python/Rust project:
 ```
 python/oxyde/
 ├── models/
-│   ├── base.py         # OxydeModel, ModelMeta
+│   ├── base.py         # Model, ModelMeta
 │   ├── field.py        # Field(), OxydeFieldInfo
 │   ├── decorators.py   # Index, Check
 │   ├── metadata.py     # ColumnMeta, ForeignKeyInfo

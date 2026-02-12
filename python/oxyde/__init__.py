@@ -5,7 +5,7 @@ all public APIs from submodules for convenient access.
 
 Public API:
     Models:
-        OxydeModel: Base class for all ORM models (Pydantic v2 based).
+        Model: Base class for all ORM models (Pydantic v2 based).
         Field: Field configuration with db_pk, db_index, db_default, etc.
         Index: Composite index decorator for models.
         Check: CHECK constraint decorator for models.
@@ -35,9 +35,9 @@ Public API:
         FieldError, FieldLookupError, ManagerError: Validation errors.
 
 Example:
-    from oxyde import OxydeModel, Field, db
+    from oxyde import Model, Field, db
 
-    class User(OxydeModel):
+    class User(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
 
@@ -48,6 +48,8 @@ Example:
         user = await User.objects.create(name="Alice")
         users = await User.objects.filter(name__startswith="A").all()
 """
+
+import warnings
 
 from oxyde import db
 from oxyde.db import (
@@ -69,7 +71,7 @@ from oxyde.exceptions import (
     NotFoundError,
     OxydeError,
 )
-from oxyde.models import Check, Field, Index, OxydeModel
+from oxyde.models import Check, Field, Index, Model
 from oxyde.queries import (
     Avg,
     Coalesce,
@@ -88,8 +90,20 @@ from oxyde.queries import (
 
 __version__ = "0.3.0"
 
+
+def __getattr__(name: str):
+    if name == "OxydeModel":
+        warnings.warn(
+            "OxydeModel is deprecated, use Model instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return Model
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
-    "OxydeModel",
+    "Model",
     "db",
     "AsyncDatabase",
     "PoolSettings",

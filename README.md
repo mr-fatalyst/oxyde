@@ -58,9 +58,9 @@ This creates `oxyde_config.py` with your database settings and model paths.
 
 ```python
 # models.py
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)

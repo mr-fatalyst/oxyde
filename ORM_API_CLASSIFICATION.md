@@ -2,9 +2,9 @@
 
 | Category | Method / Operator | Call Type | SQL Query? | Returns | Purpose / Notes |
 |----------|-------------------|-----------|------------|---------|-----------------|
-| **Model Instance** | `save()` | `await user.save()` | Yes (INSERT/UPDATE) | `OxydeModel` | Returns self; `update_fields` for partial update |
+| **Model Instance** | `save()` | `await user.save()` | Yes (INSERT/UPDATE) | `Model` | Returns self; `update_fields` for partial update |
 | | `delete()` | `await user.delete()` | Yes (DELETE) | `int` | Delete current instance, returns count |
-| | `refresh()` | `await user.refresh()` | Yes (SELECT) | `OxydeModel` | Reload data from DB, returns self |
+| | `refresh()` | `await user.refresh()` | Yes (SELECT) | `Model` | Reload data from DB, returns self |
 | | `pre_save()` | override method | - | - | Hook before save/create; `is_create`, `update_fields` |
 | | `post_save()` | override method | - | - | Hook after save/create; `is_create`, `update_fields` |
 | | `pre_delete()` | override method | - | - | Hook before delete |

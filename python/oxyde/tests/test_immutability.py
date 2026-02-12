@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.models.registry import clear_registry
 
 
@@ -16,7 +16,7 @@ def cleanup_registry():
     clear_registry()
 
 
-class TestModel(OxydeModel):
+class TestModel(Model):
     """Test model for immutability tests."""
 
     id: int | None = Field(default=None, db_pk=True)
@@ -102,14 +102,14 @@ class TestQueryImmutability:
         """Test that join() returns a new Query instance when relation exists."""
 
         # Create models with FK relation - join works from FK side (child -> parent)
-        class ParentModel(OxydeModel):
+        class ParentModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str = ""
 
             class Meta:
                 is_table = True
 
-        class ChildModel(OxydeModel):
+        class ChildModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             parent: ParentModel = Field(db_on_delete="CASCADE")
 
@@ -214,14 +214,14 @@ class TestQuerySetImmutability:
     def test_queryset_join_returns_new_instance(self):
         """Test that QuerySet.join() returns new QuerySet."""
 
-        class Container(OxydeModel):
+        class Container(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str = ""
 
             class Meta:
                 is_table = True
 
-        class Item(OxydeModel):
+        class Item(Model):
             id: int | None = Field(default=None, db_pk=True)
             container: Container | None = None  # FK by type hint
 
@@ -243,14 +243,14 @@ class TestQuerySetImmutability:
     def test_queryset_clone_copies_paths(self):
         """Test that QuerySet._clone() copies join and prefetch paths."""
 
-        class Author(OxydeModel):
+        class Author(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str = ""
 
             class Meta:
                 is_table = True
 
-        class Comment(OxydeModel):
+        class Comment(Model):
             id: int | None = Field(default=None, db_pk=True)
             post_id: int = 0
             body: str = ""
@@ -258,7 +258,7 @@ class TestQuerySetImmutability:
             class Meta:
                 is_table = True
 
-        class Post(OxydeModel):
+        class Post(Model):
             id: int | None = Field(default=None, db_pk=True)
             author: Author | None = None  # FK by type hint
             comments: list[Comment] = Field(db_reverse_fk="post_id")

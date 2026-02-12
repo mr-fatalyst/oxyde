@@ -239,9 +239,9 @@ yearly = await Order.objects.filter(
 
 ```python
 import asyncio
-from oxyde import OxydeModel, Field, db, Count, Sum, Avg
+from oxyde import Model, Field, db, Count, Sum, Avg
 
-class Order(OxydeModel):
+class Order(Model):
     class Meta:
         is_table = True
 

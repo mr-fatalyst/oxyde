@@ -156,7 +156,7 @@ PoolSettings(
 ### Single-Column Indexes
 
 ```python
-class User(OxydeModel):
+class User(Model):
     email: str = Field(db_index=True)  # For equality lookups
     created_at: datetime = Field(db_index=True)  # For range queries
 
@@ -169,7 +169,7 @@ class User(OxydeModel):
 ```python
 from oxyde import Index
 
-class Event(OxydeModel):
+class Event(Model):
     user_id: int
     created_at: datetime
 
@@ -187,7 +187,7 @@ class Event(OxydeModel):
 ### Partial Indexes
 
 ```python
-class User(OxydeModel):
+class User(Model):
     email: str
     deleted_at: datetime | None = None
 

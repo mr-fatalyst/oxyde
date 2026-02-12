@@ -25,14 +25,14 @@ from oxyde.queries.expressions import F, _serialize_value_for_ir
 from oxyde.queries.insert import InsertQuery
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class MutationMixin:
     """Mixin providing data mutation capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[OxydeModel]
+    model_class: type[Model]
 
     def _build_filter_tree(self) -> ir.FilterNode | None:
         """Must be implemented by FilteringMixin."""
@@ -176,12 +176,12 @@ class MutationMixin:
     async def create(
         self,
         *,
-        instance: OxydeModel | None = None,
+        instance: Model | None = None,
         using: str | None = None,
         client: SupportsExecute | None = None,
         _skip_hooks: bool = False,
         **data: Any,
-    ) -> OxydeModel:
+    ) -> Model:
         """
         Create a new record in the database.
 
@@ -254,7 +254,7 @@ class MutationMixin:
         using: str | None = None,
         client: SupportsExecute | None = None,
         batch_size: int | None = None,
-    ) -> list[OxydeModel]:
+    ) -> list[Model]:
         """
         Insert multiple objects efficiently.
 
@@ -317,7 +317,7 @@ class MutationMixin:
 
     async def bulk_update(
         self,
-        objects: Iterable[OxydeModel],
+        objects: Iterable[Model],
         fields: Iterable[str],
         *,
         using: str | None = None,

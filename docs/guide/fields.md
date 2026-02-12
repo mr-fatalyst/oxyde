@@ -5,9 +5,9 @@ The `Field()` function configures both Pydantic validation and database schema.
 ## Basic Usage
 
 ```python
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(max_length=100)
     email: str = Field(db_unique=True, db_index=True)
@@ -145,7 +145,7 @@ content: str = Field(db_type="LONGTEXT")
 Foreign keys are defined by type annotation:
 
 ```python
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     author: "Author" | None = Field(default=None, db_on_delete="CASCADE")  # FK to Author
@@ -193,7 +193,7 @@ author: "Author" | None = Field(default=None, db_on_delete="RESTRICT")
 Define on the "one" side of a one-to-many relationship:
 
 ```python
-class Author(OxydeModel):
+class Author(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     posts: list["Post"] = Field(db_reverse_fk="author")  # Virtual field - not stored in DB
@@ -213,7 +213,7 @@ for author in authors:
 ### Many-to-Many
 
 ```python
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     tags: list["Tag"] = Field(db_m2m=True, db_through="PostTag")
@@ -222,7 +222,7 @@ class Post(OxydeModel):
         is_table = True
 
 
-class Tag(OxydeModel):
+class Tag(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(db_unique=True)
 
@@ -230,7 +230,7 @@ class Tag(OxydeModel):
         is_table = True
 
 
-class PostTag(OxydeModel):
+class PostTag(Model):
     id: int | None = Field(default=None, db_pk=True)
     post: "Post" | None = Field(default=None, db_on_delete="CASCADE")
     tag: "Tag" | None = Field(default=None, db_on_delete="CASCADE")
@@ -289,9 +289,9 @@ email: str = Field(
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
-class Product(OxydeModel):
+class Product(Model):
     # Primary key
     id: UUID = Field(default_factory=uuid4, db_pk=True)
 

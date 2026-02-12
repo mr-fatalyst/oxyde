@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-from oxyde import AsyncDatabase, OxydeModel, Field, F, atomic, disconnect_all, execute_raw
+from oxyde import AsyncDatabase, Model, Field, F, atomic, disconnect_all, execute_raw
 from oxyde.db.transaction import TransactionTimeoutError
 
 
@@ -25,7 +25,7 @@ from oxyde.db.transaction import TransactionTimeoutError
 # Model Definitions
 # =============================================================================
 
-class Account(OxydeModel):
+class Account(Model):
     """Bank account model for transaction demo."""
 
     id: int | None = Field(default=None, db_pk=True)

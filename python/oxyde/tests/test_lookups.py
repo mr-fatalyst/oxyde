@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.exceptions import FieldError, FieldLookupError, FieldLookupValueError
 from oxyde.models.lookups import (
     _allowed_lookups_for_meta,
@@ -39,7 +39,7 @@ def cleanup_registry():
     clear_registry()
 
 
-class TestModel(OxydeModel):
+class TestModel(Model):
     """Test model with various field types."""
 
     id: int | None = Field(default=None, db_pk=True)

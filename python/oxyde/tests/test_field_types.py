@@ -8,7 +8,7 @@ from uuid import UUID
 
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.models.field import OxydeFieldInfo
 from oxyde.models.registry import clear_registry, registered_tables
 
@@ -167,12 +167,12 @@ class TestFieldFactory:
 
 
 class TestModelFieldMetadata:
-    """Test field metadata extraction in OxydeModel."""
+    """Test field metadata extraction in Model."""
 
     def test_basic_field_types(self):
         """Test metadata extraction for basic field types."""
 
-        class BasicModel(OxydeModel):
+        class BasicModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             age: int
@@ -197,7 +197,7 @@ class TestModelFieldMetadata:
     def test_datetime_field_types(self):
         """Test metadata extraction for datetime types."""
 
-        class DateTimeModel(OxydeModel):
+        class DateTimeModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             created_at: datetime
             birth_date: date
@@ -217,7 +217,7 @@ class TestModelFieldMetadata:
     def test_optional_fields(self):
         """Test metadata extraction for optional fields."""
 
-        class OptionalModel(OxydeModel):
+        class OptionalModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str | None = None
             age: int | None = None
@@ -238,7 +238,7 @@ class TestModelFieldMetadata:
     def test_field_with_max_length(self):
         """Test metadata extraction for fields with max_length."""
 
-        class LengthModel(OxydeModel):
+        class LengthModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             title: str = Field(max_length=200)
             description: str = Field(max_length=1000)
@@ -256,7 +256,7 @@ class TestModelFieldMetadata:
     def test_field_with_db_column_override(self):
         """Test metadata extraction with db_column override."""
 
-        class ColumnModel(OxydeModel):
+        class ColumnModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             created_at: datetime = Field(db_column="created_timestamp")
 
@@ -272,7 +272,7 @@ class TestModelFieldMetadata:
     def test_field_with_db_type_override(self):
         """Test metadata extraction with db_type override."""
 
-        class TypeModel(OxydeModel):
+        class TypeModel(Model):
             id: int | None = Field(default=None, db_pk=True, db_type="BIGSERIAL")
             data: str = Field(db_type="JSONB")
 
@@ -289,7 +289,7 @@ class TestModelFieldMetadata:
     def test_field_with_db_default(self):
         """Test metadata extraction with db_default."""
 
-        class DefaultModel(OxydeModel):
+        class DefaultModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             created_at: datetime | None = Field(default=None, db_default="NOW()")
             counter: int = Field(default=0, db_default="0")
@@ -307,7 +307,7 @@ class TestModelFieldMetadata:
     def test_field_with_comment(self):
         """Test metadata extraction with db_comment."""
 
-        class CommentModel(OxydeModel):
+        class CommentModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             email: str = Field(db_comment="User email address")
 
@@ -323,7 +323,7 @@ class TestModelFieldMetadata:
     def test_index_and_unique_fields(self):
         """Test metadata extraction for indexed and unique fields."""
 
-        class IndexModel(OxydeModel):
+        class IndexModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             email: str = Field(db_unique=True)
             category: str = Field(db_index=True)
@@ -344,7 +344,7 @@ class TestModelFieldMetadata:
     def test_uuid_field(self):
         """Test metadata extraction for UUID field."""
 
-        class UUIDModel(OxydeModel):
+        class UUIDModel(Model):
             id: UUID | None = Field(default=None, db_pk=True)
             external_id: UUID | None = None
 
@@ -361,7 +361,7 @@ class TestModelFieldMetadata:
     def test_combined_field_attributes(self):
         """Test field with multiple attributes combined."""
 
-        class CombinedModel(OxydeModel):
+        class CombinedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             email: str = Field(
                 max_length=255,
@@ -389,7 +389,7 @@ class TestFieldDescriptorAccess:
     def test_instance_attribute_returns_value(self):
         """Test that instance attribute access returns value."""
 
-        class TestModel(OxydeModel):
+        class TestModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -407,7 +407,7 @@ class TestModelSerialization:
     def test_model_to_dict(self):
         """Test model.model_dump() method."""
 
-        class SerModel(OxydeModel):
+        class SerModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             age: int
@@ -423,7 +423,7 @@ class TestModelSerialization:
     def test_model_from_dict(self):
         """Test model creation from dict."""
 
-        class SerModel(OxydeModel):
+        class SerModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             age: int
@@ -441,7 +441,7 @@ class TestModelSerialization:
     def test_model_with_defaults(self):
         """Test model with default values."""
 
-        class DefaultsModel(OxydeModel):
+        class DefaultsModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             status: str = "active"
@@ -458,7 +458,7 @@ class TestModelSerialization:
     def test_model_json_serialization(self):
         """Test model JSON serialization."""
 
-        class JsonModel(OxydeModel):
+        class JsonModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             created_at: datetime
@@ -479,7 +479,7 @@ class TestFieldValidation:
     def test_ge_le_validators(self):
         """Test ge/le validators."""
 
-        class ValidatedModel(OxydeModel):
+        class ValidatedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             age: int = Field(ge=0, le=150)
             rating: float = Field(ge=0.0, le=5.0)
@@ -501,7 +501,7 @@ class TestFieldValidation:
     def test_string_length_validators(self):
         """Test string length validators."""
 
-        class LengthModel(OxydeModel):
+        class LengthModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             code: str = Field(min_length=2, max_length=10)
 

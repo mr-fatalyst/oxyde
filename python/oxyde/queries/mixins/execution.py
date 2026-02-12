@@ -2,7 +2,7 @@
 
 Provides fetch_models(), fetch_all(), fetch_one() and other execution methods.
 JOIN fields (author__id, author__name) are handled via extra="ignore" in
-OxydeModel.model_config - no sanitization needed.
+Model.model_config - no sanitization needed.
 """
 
 from __future__ import annotations
@@ -25,14 +25,14 @@ from oxyde.queries.base import (
 from oxyde.queries.joins import _JoinDescriptor
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class ExecutionMixin:
     """Mixin providing query execution capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[OxydeModel]
+    model_class: type[Model]
     _result_mode: str | None
     _values_flat: bool
     _selected_fields: list[str] | None
@@ -124,7 +124,7 @@ class ExecutionMixin:
                 return [dict(zip(first, row)) for row in second]
         return data if isinstance(data, list) else []
 
-    async def fetch_models(self, client: SupportsExecute) -> list[OxydeModel]:
+    async def fetch_models(self, client: SupportsExecute) -> list[Model]:
         """Execute query and return results as model instances.
 
         Uses direct PyDict path (no msgpack) when available.
@@ -197,7 +197,7 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> OxydeModel | None:
+    ) -> Model | None:
         """
         Return the first result or None.
 
@@ -219,7 +219,7 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> OxydeModel | None:
+    ) -> Model | None:
         """
         Return the last result or None.
 
@@ -306,7 +306,7 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> OxydeModel:
+    ) -> Model:
         """
         Return exactly one result matching the query.
 
@@ -334,7 +334,7 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> OxydeModel | None:
+    ) -> Model | None:
         """
         Return one result or None if not found.
 
@@ -373,7 +373,7 @@ class ExecutionMixin:
 
     def _hydrate_from_columnar(
         self,
-        models: list[OxydeModel],
+        models: list[Model],
         rows: list[dict[str, Any]],
     ) -> None:
         """Hydrate joined relations from columnar format.
@@ -409,7 +409,7 @@ class ExecutionMixin:
             spec_columns[spec.path] = cols
 
         # Cache related models by (relation_path, pk) to reuse instances
-        related_cache: dict[tuple[str, Any], OxydeModel] = {}
+        related_cache: dict[tuple[str, Any], Model] = {}
 
         # Hydrate each model from its corresponding row
         for model, row in zip(models, rows):
@@ -446,9 +446,9 @@ class ExecutionMixin:
 
     def _resolve_join_parent(
         self,
-        model: OxydeModel,
+        model: Model,
         parent_path: str | None,
-    ) -> OxydeModel | None:
+    ) -> Model | None:
         """Resolve parent model for nested join."""
         if not parent_path:
             return model
@@ -461,7 +461,7 @@ class ExecutionMixin:
 
     def _hydrate_from_dedup(
         self,
-        models: list[OxydeModel],
+        models: list[Model],
         rows: list[dict[str, Any]],
         relations: dict[str, dict[Any, dict[str, Any]]],
     ) -> None:
@@ -485,7 +485,7 @@ class ExecutionMixin:
         )
 
         # Cache created model instances to reuse same object
-        related_cache: dict[tuple[str, Any], OxydeModel] = {}
+        related_cache: dict[tuple[str, Any], Model] = {}
 
         for model, row in zip(models, rows):
             for spec in ordered_specs:
@@ -532,7 +532,7 @@ class ExecutionMixin:
 
     async def _run_prefetch(
         self,
-        parents: list[OxydeModel],
+        parents: list[Model],
         client: SupportsExecute,
     ) -> None:
         """Run prefetch for all specified paths."""
@@ -542,10 +542,10 @@ class ExecutionMixin:
 
     async def _prefetch_path(
         self,
-        parents: list[OxydeModel],
+        parents: list[Model],
         client: SupportsExecute,
         segments: list[str],
-        current_model: type[OxydeModel],
+        current_model: type[Model],
     ) -> None:
         """Prefetch a single relation path."""
         if not parents:
@@ -565,7 +565,7 @@ class ExecutionMixin:
             # Handle nested prefetch for M2M
             if len(segments) > 1:
                 target_model = _resolve_registered_model(relation.target)
-                all_targets: list[OxydeModel] = []
+                all_targets: list[Model] = []
                 for parent in parents:
                     targets = getattr(parent, relation_name, [])
                     all_targets.extend(targets)
@@ -598,7 +598,7 @@ class ExecutionMixin:
                 seen.add(value)
                 unique_ids.append(value)
 
-        grouped: dict[Any, list[OxydeModel]] = {}
+        grouped: dict[Any, list[Model]] = {}
         if unique_ids:
             # Determine FK column: if remote_field is a virtual FK, use its db_column
             target_model.ensure_field_metadata()
@@ -630,7 +630,7 @@ class ExecutionMixin:
                 parent.__dict__[relation_name] = list(values)
 
         if len(segments) > 1:
-            nested_children: list[OxydeModel] = [
+            nested_children: list[Model] = [
                 child for collection in grouped.values() for child in collection
             ]
             if nested_children:
@@ -643,10 +643,10 @@ class ExecutionMixin:
 
     async def _prefetch_m2m(
         self,
-        parents: list[OxydeModel],
+        parents: list[Model],
         client: SupportsExecute,
         relation: Any,  # RelationInfo
-        source_model: type[OxydeModel],
+        source_model: type[Model],
         relation_name: str,
     ) -> None:
         """Prefetch many-to-many relation."""
@@ -656,7 +656,7 @@ class ExecutionMixin:
             return
 
         # Find through model in registry
-        through_model: type[OxydeModel] | None = None
+        through_model: type[Model] | None = None
         tables = registered_tables()
         for key, model in tables.items():
             if (
@@ -725,7 +725,7 @@ class ExecutionMixin:
 
         # Query target model
         target_pk = _primary_key_meta(target_model)
-        targets_by_pk: dict[Any, OxydeModel] = {}
+        targets_by_pk: dict[Any, Model] = {}
         if target_ids:
             filter_kwargs = {f"{target_pk.name}__in": target_ids}
             targets = await target_model.objects.filter(**filter_kwargs).all(
@@ -736,7 +736,7 @@ class ExecutionMixin:
                 targets_by_pk[pk_val] = target
 
         # Group targets by source ID using FK column names
-        grouped: dict[Any, list[OxydeModel]] = {}
+        grouped: dict[Any, list[Model]] = {}
         for link in links:
             source_id = getattr(link, source_fk_column, None)
             target_id = getattr(link, target_fk_column, None)

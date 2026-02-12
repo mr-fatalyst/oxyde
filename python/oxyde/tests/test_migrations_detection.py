@@ -7,7 +7,7 @@ from uuid import UUID
 
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.models.registry import clear_registry, registered_tables
 
 
@@ -25,7 +25,7 @@ class TestSchemaExtraction:
     def test_extract_basic_model_schema(self):
         """Test extracting schema from basic model."""
 
-        class SimpleModel(OxydeModel):
+        class SimpleModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             value: int = 0
@@ -47,7 +47,7 @@ class TestSchemaExtraction:
     def test_extract_nullable_fields(self):
         """Test extracting nullable field information."""
 
-        class NullableModel(OxydeModel):
+        class NullableModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             required: str
             optional: str | None = None
@@ -64,7 +64,7 @@ class TestSchemaExtraction:
     def test_extract_indexed_fields(self):
         """Test extracting index information."""
 
-        class IndexedModel(OxydeModel):
+        class IndexedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             indexed_field: str = Field(db_index=True)
             unique_field: str = Field(db_unique=True)
@@ -81,13 +81,13 @@ class TestSchemaExtraction:
     def test_extract_foreign_key_fields(self):
         """Test extracting FK information."""
 
-        class Parent(OxydeModel):
+        class Parent(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
                 is_table = True
 
-        class Child(OxydeModel):
+        class Child(Model):
             id: int | None = Field(default=None, db_pk=True)
             parent: Parent = Field(db_on_delete="CASCADE")
 
@@ -104,7 +104,7 @@ class TestSchemaExtraction:
         """Test extracting table-level indexes from Meta."""
         from oxyde.models.decorators import Index
 
-        class IndexedTable(OxydeModel):
+        class IndexedTable(Model):
             id: int | None = Field(default=None, db_pk=True)
             first_name: str
             last_name: str
@@ -121,7 +121,7 @@ class TestSchemaExtraction:
     def test_extract_unique_together(self):
         """Test extracting unique_together constraints."""
 
-        class UniqueTogetherModel(OxydeModel):
+        class UniqueTogetherModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             tenant_id: int
             code: str
@@ -140,7 +140,7 @@ class TestFieldTypeDetection:
     def test_detect_string_type(self):
         """Test string type detection."""
 
-        class StringModel(OxydeModel):
+        class StringModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -155,7 +155,7 @@ class TestFieldTypeDetection:
     def test_detect_varchar_with_length(self):
         """Test varchar with max_length detection."""
 
-        class VarcharModel(OxydeModel):
+        class VarcharModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             title: str = Field(max_length=100)
 
@@ -170,7 +170,7 @@ class TestFieldTypeDetection:
     def test_detect_integer_types(self):
         """Test integer type detection."""
 
-        class IntModel(OxydeModel):
+        class IntModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             count: int
             big_count: int = Field(db_type="BIGINT")
@@ -187,7 +187,7 @@ class TestFieldTypeDetection:
     def test_detect_float_types(self):
         """Test float type detection."""
 
-        class FloatModel(OxydeModel):
+        class FloatModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             price: float
             precise: float = Field(db_type="NUMERIC(10,2)")
@@ -204,7 +204,7 @@ class TestFieldTypeDetection:
     def test_detect_datetime_types(self):
         """Test datetime type detection."""
 
-        class DateTimeModel(OxydeModel):
+        class DateTimeModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             created_at: datetime
             birth_date: date
@@ -223,7 +223,7 @@ class TestFieldTypeDetection:
     def test_detect_boolean_type(self):
         """Test boolean type detection."""
 
-        class BoolModel(OxydeModel):
+        class BoolModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             is_active: bool = True
 
@@ -238,7 +238,7 @@ class TestFieldTypeDetection:
     def test_detect_uuid_type(self):
         """Test UUID type detection."""
 
-        class UUIDModel(OxydeModel):
+        class UUIDModel(Model):
             id: UUID | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -258,14 +258,14 @@ class TestSchemaDiff:
         # This is a conceptual test - actual implementation would compare
         # current model schema with database schema
 
-        class OriginalModel(OxydeModel):
+        class OriginalModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
             class Meta:
                 is_table = True
 
-        class ExtendedModel(OxydeModel):
+        class ExtendedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             email: str | None = None  # New field
@@ -286,7 +286,7 @@ class TestSchemaDiff:
     def test_detect_removed_field(self):
         """Test detecting field removal."""
 
-        class FullModel(OxydeModel):
+        class FullModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             legacy_field: str = ""
@@ -294,7 +294,7 @@ class TestSchemaDiff:
             class Meta:
                 is_table = True
 
-        class ReducedModel(OxydeModel):
+        class ReducedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             # legacy_field removed
@@ -314,14 +314,14 @@ class TestSchemaDiff:
     def test_detect_field_type_change(self):
         """Test detecting field type change."""
 
-        class OldTypeModel(OxydeModel):
+        class OldTypeModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             value: int
 
             class Meta:
                 is_table = True
 
-        class NewTypeModel(OxydeModel):
+        class NewTypeModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             value: str  # Changed from int to str
 
@@ -339,14 +339,14 @@ class TestSchemaDiff:
     def test_detect_nullable_change(self):
         """Test detecting nullable change."""
 
-        class RequiredModel(OxydeModel):
+        class RequiredModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             email: str
 
             class Meta:
                 is_table = True
 
-        class OptionalModel(OxydeModel):
+        class OptionalModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             email: str | None = None  # Now optional
 
@@ -364,14 +364,14 @@ class TestSchemaDiff:
     def test_detect_index_addition(self):
         """Test detecting index addition."""
 
-        class UnindexedModel(OxydeModel):
+        class UnindexedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             email: str
 
             class Meta:
                 is_table = True
 
-        class IndexedModel(OxydeModel):
+        class IndexedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             email: str = Field(db_index=True)  # Index added
 
@@ -393,7 +393,7 @@ class TestModelMetaOptions:
     def test_custom_table_name(self):
         """Test custom table name."""
 
-        class CustomTableModel(OxydeModel):
+        class CustomTableModel(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -405,7 +405,7 @@ class TestModelMetaOptions:
     def test_schema_option(self):
         """Test schema option."""
 
-        class SchemaModel(OxydeModel):
+        class SchemaModel(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -417,7 +417,7 @@ class TestModelMetaOptions:
     def test_comment_option(self):
         """Test comment option."""
 
-        class CommentedModel(OxydeModel):
+        class CommentedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -434,7 +434,7 @@ class TestConstraintDetection:
         """Test detecting check constraints."""
         from oxyde.models.decorators import Check
 
-        class CheckModel(OxydeModel):
+        class CheckModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             age: int
 
@@ -450,7 +450,7 @@ class TestConstraintDetection:
     def test_detect_primary_key(self):
         """Test detecting primary key."""
 
-        class PKModel(OxydeModel):
+        class PKModel(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -464,7 +464,7 @@ class TestConstraintDetection:
     def test_detect_unique_constraint(self):
         """Test detecting unique constraint."""
 
-        class UniqueModel(OxydeModel):
+        class UniqueModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             code: str = Field(db_unique=True)
 

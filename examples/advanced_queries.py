@@ -22,7 +22,7 @@ import os
 
 from oxyde import (
     AsyncDatabase,
-    OxydeModel,
+    Model,
     Field,
     Q,
     F,
@@ -40,7 +40,7 @@ from oxyde import (
 # Model Definitions
 # =============================================================================
 
-class Product(OxydeModel):
+class Product(Model):
     """Product model for demonstrating queries."""
 
     id: int | None = Field(default=None, db_pk=True)
@@ -55,7 +55,7 @@ class Product(OxydeModel):
         table_name = "products"
 
 
-class Order(OxydeModel):
+class Order(Model):
     """Order model for demonstrating aggregates."""
 
     id: int | None = Field(default=None, db_pk=True)

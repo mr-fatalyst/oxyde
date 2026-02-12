@@ -97,9 +97,9 @@ maturin develop --release
 Import from `oxyde`, not directly from `oxyde-core`:
 
 ```python
-from oxyde import OxydeModel, Field, db
+from oxyde import Model, Field, db
 
-class User(OxydeModel):
+class User(Model):
     class Meta:
         is_table = True
 

@@ -118,7 +118,7 @@ def generate_config_file(
 
     return f'''"""Oxyde ORM configuration."""
 
-# List of Python modules containing OxydeModel classes
+# List of Python modules containing Model classes
 MODELS = [{models_str}]
 
 # Database dialect: "postgres", "sqlite", or "mysql"

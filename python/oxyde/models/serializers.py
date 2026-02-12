@@ -1,6 +1,6 @@
 """Serialization utilities for INSERT/UPDATE operations.
 
-This module handles conversion of OxydeModel instances to dict payloads
+This module handles conversion of Model instances to dict payloads
 suitable for database operations. It filters out virtual fields and
 handles Pydantic's model_dump() options.
 
@@ -9,7 +9,7 @@ Virtual Fields:
     relations loaded via JOINs but don't have actual database columns.
     These must be excluded from INSERT/UPDATE payloads.
 
-    class Post(OxydeModel):
+    class Post(Model):
         id: int = Field(db_pk=True)
         author_id: int  # Real column
         comments: list[Comment] = Field(db_reverse_fk="post")  # Virtual
@@ -30,7 +30,7 @@ Functions:
         Merge filter kwargs with defaults for get_or_create().
         Only includes exact lookups (no __gte, __contains, etc.).
 
-    _normalize_instance(model_class, payload) -> OxydeModel:
+    _normalize_instance(model_class, payload) -> Model:
         Convert dict to model instance, or return instance as-is.
         Used by bulk_create() to accept mixed input.
 """
@@ -43,10 +43,10 @@ from typing import TYPE_CHECKING, Any
 from oxyde.exceptions import ManagerError
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
-def _get_virtual_fields(model_class: type[OxydeModel]) -> set[str]:
+def _get_virtual_fields(model_class: type[Model]) -> set[str]:
     """Get field names that are virtual (db_reverse_fk, db_m2m).
 
     These fields don't correspond to actual database columns and must be
@@ -64,7 +64,7 @@ def _get_virtual_fields(model_class: type[OxydeModel]) -> set[str]:
     return virtual
 
 
-def _dump_insert_data(instance: OxydeModel) -> dict[str, Any]:
+def _dump_insert_data(instance: Model) -> dict[str, Any]:
     """Serialize model instance for INSERT operation.
 
     Excludes virtual relation fields (db_reverse_fk, db_m2m) that don't
@@ -76,7 +76,7 @@ def _dump_insert_data(instance: OxydeModel) -> dict[str, Any]:
     return data
 
 
-def _dump_update_data(instance: OxydeModel, fields: Iterable[str]) -> dict[str, Any]:
+def _dump_update_data(instance: Model, fields: Iterable[str]) -> dict[str, Any]:
     """Serialize specific fields of model instance for UPDATE operation.
 
     Excludes virtual relation fields (db_reverse_fk, db_m2m) that don't
@@ -106,9 +106,9 @@ def _derive_create_data(
 
 
 def _normalize_instance(
-    model_class: type[OxydeModel],
+    model_class: type[Model],
     payload: Any,
-) -> OxydeModel:
+) -> Model:
     """Normalize payload to model instance."""
     if isinstance(payload, model_class):
         return payload

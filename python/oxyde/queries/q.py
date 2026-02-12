@@ -51,7 +51,7 @@ from typing import TYPE_CHECKING, Any
 from oxyde.core.ir import FilterNode, filter_and, filter_not, filter_or
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class Q:
@@ -96,7 +96,7 @@ class Q:
 
     def _ensure_node(
         self,
-        model_class: type[OxydeModel] | None = None,
+        model_class: type[Model] | None = None,
         query: Any = None,
     ) -> FilterNode | None:
         """Convert kwargs to FilterNode if needed.
@@ -220,7 +220,7 @@ class Q:
 
     def to_filter_node(
         self,
-        model_class: type[OxydeModel],
+        model_class: type[Model],
         query: Any = None,
     ) -> FilterNode | None:
         """

@@ -7,7 +7,7 @@ from typing import Any
 import msgpack
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.db import atomic
 from oxyde.db.transaction import get_active_transaction
 from oxyde.exceptions import (
@@ -91,7 +91,7 @@ def atomic_stub_env(monkeypatch: pytest.MonkeyPatch):
     return call_log
 
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     email: str
     is_active: bool = True
@@ -117,7 +117,7 @@ def test_instance_attribute_access_still_returns_value() -> None:
 def test_meta_is_table_registers_only_tables() -> None:
     clear_registry()
 
-    class Author(OxydeModel):
+    class Author(Model):
         id: int | None = Field(default=None, db_pk=True)
 
         class Meta:
@@ -150,14 +150,14 @@ def test_meta_is_table_registers_only_tables() -> None:
 def test_field_metadata_captures_db_attributes() -> None:
     clear_registry()
 
-    class BaseUser(OxydeModel):
+    class BaseUser(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str
 
         class Meta:
             is_table = True
 
-    class Article(OxydeModel):
+    class Article(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str = Field(max_length=200, db_index=True, db_comment="Article title")
         author: BaseUser = Field(db_on_delete="CASCADE")
@@ -209,14 +209,14 @@ def test_field_metadata_captures_db_attributes() -> None:
 def test_relation_descriptor_registers_metadata() -> None:
     clear_registry()
 
-    class Comment(OxydeModel):
+    class Comment(Model):
         id: int | None = Field(default=None, db_pk=True)
         post_id: int = 0
 
         class Meta:
             is_table = True
 
-    class BlogPost(OxydeModel):
+    class BlogPost(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         comments: list[Comment] = Field(db_reverse_fk="post_id")
@@ -239,7 +239,7 @@ def test_relation_descriptor_registers_metadata() -> None:
 def test_lookup_generation_for_strings_and_numbers() -> None:
     clear_registry()
 
-    class Product(OxydeModel):
+    class Product(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         rating: int | None = None
@@ -293,7 +293,7 @@ def test_lookup_generation_for_strings_and_numbers() -> None:
 async def test_async_manager_all_modes() -> None:
     clear_registry()
 
-    class Customer(OxydeModel):
+    class Customer(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str
 
@@ -320,7 +320,7 @@ async def test_async_manager_all_modes() -> None:
 async def test_async_manager_get_variants() -> None:
     clear_registry()
 
-    class Article(OxydeModel):
+    class Article(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
 
@@ -352,7 +352,7 @@ async def test_async_manager_get_variants() -> None:
 async def test_async_manager_first_last_and_count() -> None:
     clear_registry()
 
-    class LogEntry(OxydeModel):
+    class LogEntry(Model):
         id: int | None = Field(default=None, db_pk=True)
         created_at: datetime
 
@@ -381,7 +381,7 @@ async def test_async_manager_first_last_and_count() -> None:
 async def test_async_manager_create_update_delete_and_save() -> None:
     clear_registry()
 
-    class Item(OxydeModel):
+    class Item(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
         price: int | None = None
@@ -436,7 +436,7 @@ async def test_async_manager_create_update_delete_and_save() -> None:
 def test_queryset_values_distinct_and_slicing() -> None:
     clear_registry()
 
-    class Sample(OxydeModel):
+    class Sample(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str
 
@@ -477,7 +477,7 @@ def test_queryset_values_distinct_and_slicing() -> None:
 async def test_values_list_execution_returns_expected_shapes() -> None:
     clear_registry()
 
-    class Sample(OxydeModel):
+    class Sample(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str
 
@@ -514,14 +514,14 @@ def test_f_expression_serialization() -> None:
 def test_join_ir_contains_join_spec() -> None:
     clear_registry()
 
-    class Author(OxydeModel):
+    class Author(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str
 
         class Meta:
             is_table = True
 
-    class Post(OxydeModel):
+    class Post(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         author: Author | None = None
@@ -549,14 +549,14 @@ def test_year_month_day_lookups() -> None:
 async def test_join_hydrates_related_models() -> None:
     clear_registry()
 
-    class Author(OxydeModel):
+    class Author(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str
 
         class Meta:
             is_table = True
 
-    class Post(OxydeModel):
+    class Post(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         author: Author | None = None
@@ -582,7 +582,7 @@ async def test_join_hydrates_related_models() -> None:
 async def test_prefetch_populates_reverse_relation() -> None:
     clear_registry()
 
-    class Comment(OxydeModel):
+    class Comment(Model):
         id: int | None = Field(default=None, db_pk=True)
         post_id: int = 0
         body: str = ""
@@ -590,7 +590,7 @@ async def test_prefetch_populates_reverse_relation() -> None:
         class Meta:
             is_table = True
 
-    class Post(OxydeModel):
+    class Post(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         author_id: int | None = None
@@ -608,7 +608,7 @@ async def test_prefetch_populates_reverse_relation() -> None:
 
     clear_registry()
 
-    class Event(OxydeModel):
+    class Event(Model):
         id: int | None = Field(default=None, db_pk=True)
         created_at: datetime
 
@@ -653,7 +653,7 @@ async def test_prefetch_populates_reverse_relation() -> None:
 async def test_async_manager_bulk_create_and_get_or_create() -> None:
     clear_registry()
 
-    class Entry(OxydeModel):
+    class Entry(Model):
         id: int | None = Field(default=None, db_pk=True)
         value: str
 
@@ -692,7 +692,7 @@ async def test_async_manager_bulk_create_and_get_or_create() -> None:
 async def test_async_manager_upsert_placeholder() -> None:
     clear_registry()
 
-    class Thing(OxydeModel):
+    class Thing(Model):
         id: int | None = Field(default=None, db_pk=True)
 
         class Meta:
@@ -708,7 +708,7 @@ async def test_async_manager_upsert_placeholder() -> None:
 async def test_instance_delete_uses_manager() -> None:
     clear_registry()
 
-    class Sensor(OxydeModel):
+    class Sensor(Model):
         id: int | None = Field(default=None, db_pk=True)
         label: str
 
@@ -731,7 +731,7 @@ async def test_transaction_atomic_reuses_transaction(
     call_log = atomic_stub_env
     clear_registry()
 
-    class Sample(OxydeModel):
+    class Sample(Model):
         id: int | None = Field(default=None, db_pk=True)
         value: int
 
@@ -758,7 +758,7 @@ async def test_transaction_atomic_nested_exception(
     call_log = atomic_stub_env
     clear_registry()
 
-    class Record(OxydeModel):
+    class Record(Model):
         id: int | None = Field(default=None, db_pk=True)
 
         class Meta:
@@ -778,7 +778,7 @@ async def test_transaction_atomic_nested_exception(
 async def test_async_manager_unimplemented_create() -> None:
     clear_registry()
 
-    class Dummy(OxydeModel):
+    class Dummy(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
 
@@ -834,14 +834,14 @@ def test_fk_filter_parses_nested_path() -> None:
     """Test that user__age__gte parses to correct field path and lookup."""
     clear_registry()
 
-    class Author(OxydeModel):
+    class Author(Model):
         id: int | None = Field(default=None, db_pk=True)
         age: int = 0
 
         class Meta:
             is_table = True
 
-    class Post(OxydeModel):
+    class Post(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         author: Author = Field(db_on_delete="CASCADE")
@@ -875,14 +875,14 @@ def test_fk_filter_exact_lookup() -> None:
     """Test FK traversal with exact (default) lookup."""
     clear_registry()
 
-    class Writer(OxydeModel):
+    class Writer(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
 
         class Meta:
             is_table = True
 
-    class Article(OxydeModel):
+    class Article(Model):
         id: int | None = Field(default=None, db_pk=True)
         writer: Writer = Field(db_on_delete="CASCADE")
 
@@ -906,14 +906,14 @@ def test_fk_filter_string_lookups() -> None:
     """Test FK traversal with string lookups like icontains."""
     clear_registry()
 
-    class Person(OxydeModel):
+    class Person(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str
 
         class Meta:
             is_table = True
 
-    class Comment(OxydeModel):
+    class Comment(Model):
         id: int | None = Field(default=None, db_pk=True)
         person: Person = Field(db_on_delete="CASCADE")
 
@@ -939,14 +939,14 @@ def test_fk_filter_in_q_expression() -> None:
 
     from oxyde.queries.q import Q
 
-    class Owner(OxydeModel):
+    class Owner(Model):
         id: int | None = Field(default=None, db_pk=True)
         verified: bool = False
 
         class Meta:
             is_table = True
 
-    class Pet(OxydeModel):
+    class Pet(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
         owner: Owner = Field(db_on_delete="CASCADE")
@@ -986,14 +986,14 @@ def test_fk_filter_exclude() -> None:
     """Test FK traversal in exclude()."""
     clear_registry()
 
-    class Account(OxydeModel):
+    class Account(Model):
         id: int | None = Field(default=None, db_pk=True)
         active: bool = True
 
         class Meta:
             is_table = True
 
-    class Order(OxydeModel):
+    class Order(Model):
         id: int | None = Field(default=None, db_pk=True)
         account: Account = Field(db_on_delete="CASCADE")
 
@@ -1021,14 +1021,14 @@ def test_fk_filter_invalid_path_raises() -> None:
     """Test that invalid FK path raises appropriate error."""
     clear_registry()
 
-    class Category(OxydeModel):
+    class Category(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
 
         class Meta:
             is_table = True
 
-    class Product(OxydeModel):
+    class Product(Model):
         id: int | None = Field(default=None, db_pk=True)
         category: Category = Field(db_on_delete="CASCADE")
 
@@ -1057,28 +1057,28 @@ def test_multi_level_fk_traversal() -> None:
     """Test FK traversal through multiple levels: user__profile__country__name."""
     clear_registry()
 
-    class Country(OxydeModel):
+    class Country(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
 
         class Meta:
             is_table = True
 
-    class Profile(OxydeModel):
+    class Profile(Model):
         id: int | None = Field(default=None, db_pk=True)
         country: Country = Field(db_on_delete="CASCADE")
 
         class Meta:
             is_table = True
 
-    class User(OxydeModel):
+    class User(Model):
         id: int | None = Field(default=None, db_pk=True)
         profile: Profile = Field(db_on_delete="CASCADE")
 
         class Meta:
             is_table = True
 
-    class Post(OxydeModel):
+    class Post(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         user: User = Field(db_on_delete="CASCADE")
@@ -1110,21 +1110,21 @@ def test_q_multiple_fk_paths() -> None:
 
     from oxyde.queries.q import Q
 
-    class Author(OxydeModel):
+    class Author(Model):
         id: int | None = Field(default=None, db_pk=True)
         age: int = 0
 
         class Meta:
             is_table = True
 
-    class Editor(OxydeModel):
+    class Editor(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
 
         class Meta:
             is_table = True
 
-    class Article(OxydeModel):
+    class Article(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         author: Author = Field(db_on_delete="CASCADE")
@@ -1158,14 +1158,14 @@ def test_fk_traversal_with_isnull() -> None:
     """Test FK traversal with isnull lookup."""
     clear_registry()
 
-    class Manager(OxydeModel):
+    class Manager(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str
 
         class Meta:
             is_table = True
 
-    class Team(OxydeModel):
+    class Team(Model):
         id: int | None = Field(default=None, db_pk=True)
         manager: Manager | None = None
 

@@ -8,7 +8,7 @@ from oxyde.core import ir
 from oxyde.queries.base import TQuery
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class FilteringMixin:
@@ -16,7 +16,7 @@ class FilteringMixin:
 
     # These attributes are defined in the base Query class
     _filter_tree: ir.FilterNode | None
-    model_class: type[OxydeModel]
+    model_class: type[Model]
 
     def _clone(self: TQuery) -> TQuery:
         """Must be implemented by the main Query class."""

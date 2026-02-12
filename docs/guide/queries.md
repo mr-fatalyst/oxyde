@@ -19,7 +19,7 @@ users = await query.all()
 Every model has an `objects` manager:
 
 ```python
-class User(OxydeModel):
+class User(Model):
     # ... fields ...
 
     class Meta:

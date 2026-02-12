@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.models.registry import clear_registry, registered_tables
 
 
@@ -22,7 +22,7 @@ class TestBasicInheritance:
     def test_non_table_subclass_not_registered(self):
         """Test that non-table subclass is not registered."""
 
-        class BaseUser(OxydeModel):
+        class BaseUser(Model):
             id: int | None = Field(default=None, db_pk=True)
             email: str
 
@@ -45,7 +45,7 @@ class TestBasicInheritance:
     def test_explicit_non_table_subclass(self):
         """Test subclass with explicit is_table=False."""
 
-        class BaseModel(OxydeModel):
+        class BaseModel(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -61,7 +61,7 @@ class TestBasicInheritance:
     def test_subclass_inherits_fields(self):
         """Test that subclass inherits parent fields."""
 
-        class Animal(OxydeModel):
+        class Animal(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             age: int
@@ -84,7 +84,7 @@ class TestBasicInheritance:
     def test_subclass_can_override_defaults(self):
         """Test that subclass can override default values."""
 
-        class BaseEntity(OxydeModel):
+        class BaseEntity(Model):
             id: int | None = Field(default=None, db_pk=True)
             status: str = "pending"
 
@@ -107,7 +107,7 @@ class TestMetaInheritance:
     def test_meta_table_name_inheritance(self):
         """Test table name is specific to each model."""
 
-        class Person(OxydeModel):
+        class Person(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -128,7 +128,7 @@ class TestMetaInheritance:
     def test_meta_default_table_name(self):
         """Test default table name is lowercase class name."""
 
-        class MyModel(OxydeModel):
+        class MyModel(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -139,7 +139,7 @@ class TestMetaInheritance:
     def test_meta_schema_inheritance(self):
         """Test schema configuration."""
 
-        class SchemaModel(OxydeModel):
+        class SchemaModel(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -155,7 +155,7 @@ class TestFieldMetadataInheritance:
     def test_parent_field_metadata_preserved(self):
         """Test that parent field metadata is preserved in subclass."""
 
-        class BaseRecord(OxydeModel):
+        class BaseRecord(Model):
             id: int | None = Field(default=None, db_pk=True)
             created_at: str = Field(db_index=True)
 
@@ -179,7 +179,7 @@ class TestFieldMetadataInheritance:
     def test_subclass_adds_new_fields(self):
         """Test that subclass can add new fields."""
 
-        class BaseItem(OxydeModel):
+        class BaseItem(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -209,13 +209,13 @@ class TestManagerInheritance:
     def test_each_model_has_own_manager(self):
         """Test that each model class has its own manager instance."""
 
-        class ModelA(OxydeModel):
+        class ModelA(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
                 is_table = True
 
-        class ModelB(OxydeModel):
+        class ModelB(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -228,7 +228,7 @@ class TestManagerInheritance:
     def test_subclass_has_own_manager(self):
         """Test that subclass has its own manager."""
 
-        class Parent(OxydeModel):
+        class Parent(Model):
             id: int | None = Field(default=None, db_pk=True)
 
             class Meta:
@@ -250,7 +250,7 @@ class TestAbstractModels:
     def test_non_table_base_class(self):
         """Test using non-table base class for shared fields."""
 
-        class TimestampMixin(OxydeModel):
+        class TimestampMixin(Model):
             created_at: str = Field(default="", db_index=True)
             updated_at: str = Field(default="")
 
@@ -292,7 +292,7 @@ class TestInstanceCreation:
     def test_create_parent_instance(self):
         """Test creating parent model instance."""
 
-        class Vehicle(OxydeModel):
+        class Vehicle(Model):
             id: int | None = Field(default=None, db_pk=True)
             brand: str
             year: int
@@ -307,7 +307,7 @@ class TestInstanceCreation:
     def test_create_child_instance(self):
         """Test creating child model instance."""
 
-        class Vehicle(OxydeModel):
+        class Vehicle(Model):
             id: int | None = Field(default=None, db_pk=True)
             brand: str
             year: int
@@ -330,7 +330,7 @@ class TestInstanceCreation:
     def test_child_instance_validation(self):
         """Test that child instance validates all fields."""
 
-        class BaseProduct(OxydeModel):
+        class BaseProduct(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             price: float = Field(ge=0)
@@ -366,7 +366,7 @@ class TestQueryInheritance:
     def test_filter_on_inherited_field(self):
         """Test filtering on field inherited from parent."""
 
-        class BaseLog(OxydeModel):
+        class BaseLog(Model):
             id: int | None = Field(default=None, db_pk=True)
             level: str
             message: str
@@ -387,7 +387,7 @@ class TestQueryInheritance:
     def test_filter_on_child_field(self):
         """Test filtering on field defined in child."""
 
-        class BaseEvent(OxydeModel):
+        class BaseEvent(Model):
             id: int | None = Field(default=None, db_pk=True)
             timestamp: str
 

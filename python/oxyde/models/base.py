@@ -1,7 +1,7 @@
-"""OxydeModel base class for defining database models.
+"""Model base class for defining database models.
 
 This module provides the foundation of the Oxyde ORM model system. It defines
-OxydeModel, a Pydantic v2 BaseModel subclass with database mapping capabilities.
+Model, a Pydantic v2 BaseModel subclass with database mapping capabilities.
 
 Architecture:
     OxydeModelMeta (metaclass)
@@ -9,7 +9,7 @@ Architecture:
         └── Tracks pending FK fields for lazy resolution
         └── Creates ModelFieldDescriptor for each model field
 
-    OxydeModel (base class)
+    Model (base class)
         └── Inherits from pydantic.BaseModel for validation
         └── Uses extra="ignore" to skip JOIN fields (author__id, author__name)
         └── Auto-registers in global model registry if Meta.is_table = True
@@ -41,7 +41,7 @@ Internal Flow:
     4. Field metadata cached in _db_meta.field_metadata for reuse
 
 Example:
-    class User(OxydeModel):
+    class User(Model):
         id: int | None = Field(default=None, db_pk=True)
         name: str = Field(db_index=True)
         email: str = Field(db_unique=True)
@@ -103,10 +103,10 @@ from oxyde.models.utils import _extract_max_length, _unpack_annotated, _unwrap_o
 
 
 def _get_pk_field_name(model_cls: type) -> str:
-    """Get the primary key field name from an OxydeModel class.
+    """Get the primary key field name from a Model class.
 
     Args:
-        model_cls: The OxydeModel class to inspect
+        model_cls: The Model class to inspect
 
     Returns:
         Primary key field name, defaults to "id" if not found
@@ -136,7 +136,7 @@ class OxydeModelMeta(ModelMetaclass):
     """Custom metaclass that exposes model fields as DSL descriptors."""
 
     def __new__(mcs, name: str, bases: tuple, namespace: dict, **kwargs: Any):
-        """Create new OxydeModel class with auto-configured relation fields."""
+        """Create new Model class with auto-configured relation fields."""
         # Import here to avoid circular dependency
         from oxyde.models.field import OxydeFieldInfo
 
@@ -159,7 +159,7 @@ class OxydeModelMeta(ModelMetaclass):
                     ):
                         field_info.default_factory = list
 
-            # Detect FK fields (annotation is OxydeModel subclass)
+            # Detect FK fields (annotation is Model subclass)
             # Skip reverse FK and M2M fields
             is_reverse_fk = isinstance(field_info, OxydeFieldInfo) and getattr(
                 field_info, "db_reverse_fk", None
@@ -194,7 +194,7 @@ class OxydeModelMeta(ModelMetaclass):
         return super().__getattr__(item)  # type: ignore[misc]
 
 
-class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
+class Model(BaseModel, metaclass=OxydeModelMeta):
     """Base class for Oxyde ORM models."""
 
     model_config = ConfigDict(
@@ -352,7 +352,8 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
         module = sys.modules.get(cls.__module__)
         globalns = vars(module) if module is not None else {}
         combined_globalns = {**typing_module.__dict__, **globalns}
-        combined_globalns.setdefault("OxydeModel", OxydeModel)
+        combined_globalns.setdefault("Model", Model)
+        combined_globalns.setdefault("OxydeModel", Model)
         combined_globalns.setdefault("ModelMeta", ModelMeta)
         combined_globalns.setdefault("ColumnMeta", ColumnMeta)
         combined_globalns.setdefault("ForeignKeyInfo", ForeignKeyInfo)
@@ -382,10 +383,8 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
             base_hint, _ = _unpack_annotated(hint)
             inner_type, is_optional = _unwrap_optional(base_hint)
 
-            # Check if it's an OxydeModel subclass
-            if not (
-                isinstance(inner_type, type) and issubclass(inner_type, OxydeModel)
-            ):
+            # Check if it's a Model subclass
+            if not (isinstance(inner_type, type) and issubclass(inner_type, Model)):
                 continue
 
             # Get target field: db_fk or auto-detect PK
@@ -472,8 +471,9 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
         combined_globalns.setdefault("ModelMeta", ModelMeta)
         combined_globalns.setdefault("ColumnMeta", ColumnMeta)
         combined_globalns.setdefault("ForeignKeyInfo", ForeignKeyInfo)
-        combined_globalns.setdefault("OxydeModel", OxydeModel)
-        # Local imports to avoid circular dependency (OxydeModel ↔ Query)
+        combined_globalns.setdefault("Model", Model)
+        combined_globalns.setdefault("OxydeModel", Model)
+        # Local imports to avoid circular dependency (Model ↔ Query)
         from oxyde.queries.manager import QueryManager
         from oxyde.queries.select import Query
 
@@ -522,12 +522,10 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
             db_through = get_db_attr(model_field, "db_through", None)
 
             # Foreign Key detection
-            # FK is defined by type annotation: field type must be OxydeModel
+            # FK is defined by type annotation: field type must be Model
             # db_fk parameter specifies target field (defaults to PK)
             fk_info: ForeignKeyInfo | None = None
-            is_fk = isinstance(python_type, type) and issubclass(
-                python_type, OxydeModel
-            )
+            is_fk = isinstance(python_type, type) and issubclass(python_type, Model)
 
             # Determine nullable:
             # 1. If db_nullable explicitly set — use it
@@ -739,7 +737,7 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
         client: SupportsExecute | None = None,
         using: str | None = None,
         update_fields: Iterable[str] | None = None,
-    ) -> OxydeModel:
+    ) -> Model:
         manager = self.__class__.objects
         pk_field = self._get_primary_key_field()
         pk_value = getattr(self, pk_field) if pk_field else None
@@ -836,7 +834,7 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
         *,
         client: SupportsExecute | None = None,
         using: str | None = None,
-    ) -> OxydeModel:
+    ) -> Model:
         """
         Reload this instance from the database.
 
@@ -878,7 +876,7 @@ class OxydeModel(BaseModel, metaclass=OxydeModelMeta):
 
 
 __all__ = [
-    "OxydeModel",
+    "Model",
     "ModelMeta",
     "ColumnMeta",
     "ForeignKeyInfo",

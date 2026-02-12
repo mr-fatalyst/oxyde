@@ -1,4 +1,4 @@
-"""Tests for OxydeModel lifecycle hooks: pre_save, post_save, pre_delete, post_delete."""
+"""Tests for Model lifecycle hooks: pre_save, post_save, pre_delete, post_delete."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 import msgpack
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.models.registry import clear_registry
 
 
@@ -44,7 +44,7 @@ class TestPreSaveHook:
         """Test pre_save is called when creating a new instance."""
         hook_calls: list[dict[str, Any]] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -74,7 +74,7 @@ class TestPreSaveHook:
         """Test pre_save is called when updating an existing instance."""
         hook_calls: list[dict[str, Any]] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -105,7 +105,7 @@ class TestPreSaveHook:
         """Test pre_save receives update_fields when specified."""
         hook_calls: list[dict[str, Any]] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             email: str | None = None
@@ -135,7 +135,7 @@ class TestPreSaveHook:
     async def test_pre_save_can_modify_instance(self):
         """Test pre_save can modify instance fields before save."""
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
             slug: str | None = None
@@ -167,7 +167,7 @@ class TestPostSaveHook:
         """Test post_save is called after creating a new instance."""
         hook_calls: list[dict[str, Any]] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -196,7 +196,7 @@ class TestPostSaveHook:
         """Test post_save is called after updating an existing instance."""
         hook_calls: list[dict[str, Any]] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -225,7 +225,7 @@ class TestPostSaveHook:
         """Test pre_save is called before post_save."""
         call_order: list[str] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -257,7 +257,7 @@ class TestPreDeleteHook:
         """Test pre_delete is called before deleting an instance."""
         hook_calls: list[int] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -283,7 +283,7 @@ class TestPostDeleteHook:
         """Test post_delete is called after deleting an instance."""
         hook_calls: list[int] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -305,7 +305,7 @@ class TestPostDeleteHook:
         """Test pre_delete is called before post_delete."""
         call_order: list[str] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -333,7 +333,7 @@ class TestManagerCreateHooks:
         """Test QueryManager.create() calls pre_save and post_save."""
         hook_calls: list[str] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -367,7 +367,7 @@ class TestGetOrCreateHooks:
         """Test get_or_create() calls hooks when creating."""
         hook_calls: list[str] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -399,7 +399,7 @@ class TestGetOrCreateHooks:
         """Test get_or_create() does not call hooks when getting existing."""
         hook_calls: list[str] = []
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -432,7 +432,7 @@ class TestHookExceptionHandling:
     async def test_pre_save_exception_prevents_save(self):
         """Test exception in pre_save prevents the save operation."""
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -457,7 +457,7 @@ class TestHookExceptionHandling:
     async def test_post_save_exception_propagates(self):
         """Test exception in post_save propagates after save completes."""
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -483,7 +483,7 @@ class TestHookExceptionHandling:
     async def test_pre_delete_exception_prevents_delete(self):
         """Test exception in pre_delete prevents the delete operation."""
 
-        class HookedModel(OxydeModel):
+        class HookedModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 
@@ -511,7 +511,7 @@ class TestHookInheritance:
         """Test child hooks can call super() to chain behavior."""
         call_order: list[str] = []
 
-        class BaseModel(OxydeModel):
+        class BaseModel(Model):
             id: int | None = Field(default=None, db_pk=True)
             name: str
 

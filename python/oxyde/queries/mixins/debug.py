@@ -9,14 +9,14 @@ import msgpack
 from oxyde.queries.base import SupportsExecute, TQuery, _resolve_pool_name
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class DebugMixin:
     """Mixin providing debugging and introspection capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[OxydeModel]
+    model_class: type[Model]
     _union_query: DebugMixin | None
     _union_all: bool
 

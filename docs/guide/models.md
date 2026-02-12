@@ -5,9 +5,9 @@ Models are the foundation of Oxyde. Each model class represents a database table
 ## Basic Model Definition
 
 ```python
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
@@ -22,7 +22,7 @@ class User(OxydeModel):
 The inner `Meta` class configures table-level settings:
 
 ```python
-class User(OxydeModel):
+class User(Model):
     class Meta:
         is_table = True              # Required: marks this as a database table
         table_name = "users"         # Optional: custom table name (default: class name)
@@ -51,7 +51,7 @@ class User(OxydeModel):
 Oxyde uses Python type hints to infer SQL types:
 
 ```python
-class Example(OxydeModel):
+class Example(Model):
     # Required field
     name: str
 
@@ -84,7 +84,7 @@ class Example(OxydeModel):
 ### Auto-increment Primary Key
 
 ```python
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
 
     class Meta:
@@ -98,7 +98,7 @@ The `id` will be auto-generated on insert.
 ```python
 from uuid import UUID, uuid4
 
-class User(OxydeModel):
+class User(Model):
     id: UUID = Field(default_factory=uuid4, db_pk=True)
 
     class Meta:
@@ -108,7 +108,7 @@ class User(OxydeModel):
 ### Composite Primary Key
 
 ```python
-class UserRole(OxydeModel):
+class UserRole(Model):
     user_id: int
     role_id: int
 
@@ -122,7 +122,7 @@ class UserRole(OxydeModel):
 ### Single-Column Index
 
 ```python
-class User(OxydeModel):
+class User(Model):
     email: str = Field(db_index=True)
 
     class Meta:
@@ -134,7 +134,7 @@ class User(OxydeModel):
 ```python
 from oxyde import Index
 
-class Event(OxydeModel):
+class Event(Model):
     city: str
     start_date: datetime
 
@@ -148,7 +148,7 @@ class Event(OxydeModel):
 ### Partial Index
 
 ```python
-class User(OxydeModel):
+class User(Model):
     email: str
     deleted_at: datetime | None = Field(default=None)
 
@@ -186,7 +186,7 @@ class Meta:
 ```python
 from oxyde import Check
 
-class Event(OxydeModel):
+class Event(Model):
     start_date: datetime
     end_date: datetime
     price: float
@@ -204,7 +204,7 @@ class Event(OxydeModel):
 Set database-level default values:
 
 ```python
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
     uuid: str = Field(db_default="gen_random_uuid()")  # PostgreSQL
@@ -223,7 +223,7 @@ class User(OxydeModel):
 Override the database column name:
 
 ```python
-class User(OxydeModel):
+class User(Model):
     created_at: datetime = Field(db_column="created_timestamp")
 
     class Meta:
@@ -237,7 +237,7 @@ The Python attribute is `created_at`, but the database column is `created_timest
 Override the inferred SQL type:
 
 ```python
-class User(OxydeModel):
+class User(Model):
     id: int = Field(db_pk=True, db_type="BIGSERIAL")
     name: str = Field(db_type="VARCHAR(255)")
     data: dict = Field(db_type="JSONB")  # PostgreSQL
@@ -291,7 +291,7 @@ await user.refresh()  # Reload latest data
 Override these methods to run code before/after database operations:
 
 ```python
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str
@@ -330,7 +330,7 @@ class User(OxydeModel):
 Create base models without database tables:
 
 ```python
-class TimestampMixin(OxydeModel):
+class TimestampMixin(Model):
     """Mixin for created_at/updated_at fields."""
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
     updated_at: datetime | None = Field(default=None)
@@ -348,12 +348,12 @@ Only `User` creates a database table.
 
 ## Pydantic Integration
 
-OxydeModel inherits from Pydantic's BaseModel, so you get:
+Model inherits from Pydantic's BaseModel, so you get:
 
 ### Validation
 
 ```python
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     age: int = Field(ge=0, le=150)  # Must be 0-150
     email: str = Field(pattern=r"^[\w.-]+@[\w.-]+\.\w+$")
@@ -383,7 +383,7 @@ user = User.model_validate({"name": "Alice", "email": "alice@example.com"})
 ### JSON Aliases
 
 ```python
-class User(OxydeModel):
+class User(Model):
     created_at: datetime = Field(
         alias="createdAt",        # JSON key
         db_column="created_at",   # Database column

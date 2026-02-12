@@ -68,7 +68,7 @@ from oxyde.models.metadata import ColumnMeta
 from oxyde.models.utils import _unpack_annotated, _unwrap_optional
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
     from oxyde.queries.conditions import Condition
 
 
@@ -190,17 +190,17 @@ class ResolvedPath:
     """Result of resolving a field path through FK relationships."""
 
     # List of (relation_name, target_model) for each FK traversal
-    joins: list[tuple[str, type[OxydeModel]]]
+    joins: list[tuple[str, type[Model]]]
     # Final field name (e.g., "age" in "user__age")
     final_field: str
     # Final model class where final_field is defined
-    final_model: type[OxydeModel]
+    final_model: type[Model]
     # Column metadata for the final field
     column_meta: ColumnMeta
 
 
 def _resolve_field_path(
-    model_class: type[OxydeModel],
+    model_class: type[Model],
     field_path: list[str],
 ) -> ResolvedPath:
     """Resolve a field path through FK relationships.
@@ -222,7 +222,7 @@ def _resolve_field_path(
     """
     from oxyde.queries.base import _resolve_registered_model
 
-    joins: list[tuple[str, type[OxydeModel]]] = []
+    joins: list[tuple[str, type[Model]]] = []
     current_model = model_class
 
     # Traverse all but the last field (those must be FK fields)
@@ -256,7 +256,7 @@ def _resolve_field_path(
     )
 
 
-def _resolve_column_meta(model_class: type[OxydeModel], field_name: str) -> ColumnMeta:
+def _resolve_column_meta(model_class: type[Model], field_name: str) -> ColumnMeta:
     """Resolve column metadata for a field, creating basic metadata if needed."""
     model_class.ensure_field_metadata()
     meta = model_class._db_meta.field_metadata.get(field_name)
@@ -280,7 +280,7 @@ def _resolve_column_meta(model_class: type[OxydeModel], field_name: str) -> Colu
 
 
 def _build_lookup_conditions(
-    model_class: type[OxydeModel],
+    model_class: type[Model],
     field_name: str,
     lookup: str,
     value: Any,

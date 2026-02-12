@@ -7,7 +7,7 @@ from typing import Any
 import msgpack
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.exceptions import (
     FieldError,
     ManagerError,
@@ -42,7 +42,7 @@ class StubExecuteClient:
         return msgpack.packb(payload)
 
 
-class TestModel(OxydeModel):
+class TestModel(Model):
     """Test model for CRUD operations."""
 
     id: int | None = Field(default=None, db_pk=True)

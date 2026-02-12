@@ -28,13 +28,13 @@ from oxyde.queries.base import (
 from oxyde.queries.expressions import _serialize_value_for_ir
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class InsertQuery:
     """INSERT query builder."""
 
-    def __init__(self, model_class: type[OxydeModel]):
+    def __init__(self, model_class: type[Model]):
         self.model_class = model_class
         self._values: dict[str, Any] = {}
         self._bulk_values: list[dict[str, Any]] | None = None

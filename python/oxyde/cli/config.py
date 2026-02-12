@@ -32,7 +32,7 @@ def init():
 
     # Ask for models
     typer.echo("📦 Models configuration")
-    typer.echo("   Enter Python modules containing your OxydeModel classes.")
+    typer.echo("   Enter Python modules containing your Model classes.")
     typer.echo("   Examples: 'models', 'app.models', 'myapp.db.models'")
     typer.echo()
 

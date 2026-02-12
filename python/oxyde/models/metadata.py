@@ -1,8 +1,8 @@
 """Dataclasses for storing parsed model and field metadata.
 
 This module defines the internal data structures used to store metadata
-extracted from OxydeModel class definitions. These are populated by
-OxydeModel._parse_field_tags() during model initialization.
+extracted from Model class definitions. These are populated by
+Model._parse_field_tags() during model initialization.
 
 Hierarchy:
     ModelMeta (table-level)

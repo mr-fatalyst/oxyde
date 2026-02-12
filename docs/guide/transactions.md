@@ -284,10 +284,10 @@ async with transaction.atomic():
 
 ```python
 import asyncio
-from oxyde import OxydeModel, Field, db, F
+from oxyde import Model, Field, db, F
 from oxyde.db import transaction, TransactionTimeoutError
 
-class Account(OxydeModel):
+class Account(Model):
     class Meta:
         is_table = True
 

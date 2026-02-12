@@ -8,7 +8,7 @@ This section documents Oxyde's Rust architecture for advanced users and contribu
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Python Layer                              │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │ OxydeModel  │  │   Query     │  │    db.*     │              │
+│  │ Model  │  │   Query     │  │    db.*     │              │
 │  │  (Pydantic) │  │  (Builder)  │  │ (Async API) │              │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
 │         │                │                │                      │

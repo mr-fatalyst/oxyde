@@ -69,7 +69,7 @@ from oxyde.queries.mixins import (
 )
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class Query(
@@ -94,7 +94,7 @@ class Query(
     - DebugMixin: sql, query, explain, union, union_all
     """
 
-    def __init__(self, model_class: type[OxydeModel]):
+    def __init__(self, model_class: type[Model]):
         self.model_class = model_class
         # Filtering state
         self._filter_tree: ir.FilterNode | None = None
@@ -200,7 +200,7 @@ class Query(
 
     def to_ir(self) -> dict[str, Any]:
         """Convert query to IR format for Rust execution."""
-        from oxyde.models.base import OxydeModel
+        from oxyde.models.base import Model
         from oxyde.models.utils import _unwrap_optional
 
         table_name = self.model_class.get_table_name()
@@ -221,9 +221,7 @@ class Query(
                 annotation = field_info.annotation
                 if annotation is not None:
                     inner_type, _ = _unwrap_optional(annotation)
-                    if isinstance(inner_type, type) and issubclass(
-                        inner_type, OxydeModel
-                    ):
+                    if isinstance(inner_type, type) and issubclass(inner_type, Model):
                         continue
                 fields.append(field_name)
         else:

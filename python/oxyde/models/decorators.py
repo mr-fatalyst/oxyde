@@ -28,7 +28,7 @@ Classes:
         name: Constraint name (auto-generated if None)
 
 Example:
-    class Order(OxydeModel):
+    class Order(Model):
         user_id: int
         created_at: datetime
         total: Decimal
@@ -57,7 +57,7 @@ class Index:
     For single-field indexes, use Field(db_index=True) instead.
 
     Examples:
-        >>> class User(OxydeModel):
+        >>> class User(Model):
         ...     class Meta:
         ...         indexes = [
         ...             Index(("city", "created_at"), method="btree"),
@@ -93,7 +93,7 @@ class Check:
     """Check constraint definition for Meta.constraints (table-level).
 
     Examples:
-        >>> class Event(OxydeModel):
+        >>> class Event(Model):
         ...     start_date: datetime
         ...     end_date: datetime
         ...     class Meta:

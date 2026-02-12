@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from oxyde import AsyncDatabase, F, Field, OxydeModel, disconnect_all
+from oxyde import AsyncDatabase, F, Field, Model, disconnect_all
 from oxyde.models.registry import register_table
 
 
@@ -107,7 +107,7 @@ async def sqlite_db():
 
 
 class TestArticleQueries:
-    class Article(OxydeModel):
+    class Article(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         views: int
@@ -139,7 +139,7 @@ class TestArticleQueries:
 
 
 class TestArticleManagerHelpers:
-    class Article(OxydeModel):
+    class Article(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         views: int
@@ -177,7 +177,7 @@ class TestArticleManagerHelpers:
 
 
 class TestArticleMutations:
-    class Article(OxydeModel):
+    class Article(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         views: int
@@ -248,7 +248,7 @@ class TestArticleMutations:
 
 
 class TestRelationalQueries:
-    class Author(OxydeModel):
+    class Author(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str
         name: str
@@ -257,7 +257,7 @@ class TestRelationalQueries:
             is_table = True
             table_name = "authors"
 
-    class Comment(OxydeModel):
+    class Comment(Model):
         id: int | None = Field(default=None, db_pk=True)
         post_id: int = 0
         body: str = ""
@@ -266,7 +266,7 @@ class TestRelationalQueries:
             is_table = True
             table_name = "comments"
 
-    class Post(OxydeModel):
+    class Post(Model):
         id: int | None = Field(default=None, db_pk=True)
         title: str
         author: Author | None = None

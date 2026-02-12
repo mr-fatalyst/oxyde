@@ -23,9 +23,9 @@ myapp/
 
 ```python
 # models.py
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
@@ -35,7 +35,7 @@ class User(OxydeModel):
         is_table = True
         table_name = "users"
 
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     content: str

@@ -251,9 +251,9 @@ ctx.execute("UPDATE users SET status = 'active' WHERE status IS NULL")
 
 ```python
 # models.py
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
@@ -279,7 +279,7 @@ oxyde migrate
 ### 4. Add New Field
 
 ```python
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
@@ -440,9 +440,9 @@ oxyde migrate zero
 ```python
 # models.py
 from datetime import datetime
-from oxyde import OxydeModel, Field, Index
+from oxyde import Model, Field, Index
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     email: str = Field(db_unique=True)
     name: str
@@ -453,7 +453,7 @@ class User(OxydeModel):
         table_name = "users"
 
 
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     content: str

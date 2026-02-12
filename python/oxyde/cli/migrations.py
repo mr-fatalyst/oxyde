@@ -26,7 +26,7 @@ def makemigrations(
     """
     Create migration files by comparing current models with replayed migrations.
 
-    Scans all OxydeModel subclasses, replays existing migrations,
+    Scans all Model subclasses, replays existing migrations,
     computes diff, and generates a new migration file if changes detected.
     """
     from oxyde.core import migration_compute_diff

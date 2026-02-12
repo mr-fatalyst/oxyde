@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.models.registry import clear_registry, registered_tables
 from oxyde.queries import F
 from oxyde.queries.expressions import (
@@ -23,7 +23,7 @@ def cleanup_registry():
     clear_registry()
 
 
-class TestModel(OxydeModel):
+class TestModel(Model):
     """Test model for expression tests."""
 
     id: int | None = Field(default=None, db_pk=True)

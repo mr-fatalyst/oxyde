@@ -1,7 +1,7 @@
 """Django-style QueryManager for Model.objects interface.
 
 This module provides QueryManager - the class behind Model.objects that
-enables Django-like query syntax. Each OxydeModel gets a QueryManager
+enables Django-like query syntax. Each Model gets a QueryManager
 instance automatically assigned to its `objects` attribute.
 
 Design:
@@ -11,7 +11,7 @@ Design:
 
 Example:
     # Manager is auto-attached to models
-    class User(OxydeModel):
+    class User(Model):
         ...
 
     # All methods return Query objects or execute queries
@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 from oxyde.queries.select import Query
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
     from oxyde.queries.base import SupportsExecute
 
 
@@ -37,7 +37,7 @@ class QueryManager:
     All methods delegate to Query - this is just a factory/proxy.
     """
 
-    def __init__(self, model_class: type[OxydeModel]) -> None:
+    def __init__(self, model_class: type[Model]) -> None:
         self.model_class = model_class
 
     def _query(self) -> Query:
@@ -178,7 +178,7 @@ class QueryManager:
         using: str | None = None,
         client: SupportsExecute | None = None,
         **filters: Any,
-    ) -> tuple[OxydeModel, bool]:
+    ) -> tuple[Model, bool]:
         """Get existing object or create a new one.
 
         Args:
@@ -264,12 +264,12 @@ class QueryManager:
     async def create(
         self,
         *,
-        instance: OxydeModel | None = None,
+        instance: Model | None = None,
         using: str | None = None,
         client: SupportsExecute | None = None,
         _skip_hooks: bool = False,
         **data: Any,
-    ) -> OxydeModel:
+    ) -> Model:
         """Create a new record in the database."""
         return await self._query().create(
             instance=instance,
@@ -286,7 +286,7 @@ class QueryManager:
         using: str | None = None,
         client: SupportsExecute | None = None,
         batch_size: int | None = None,
-    ) -> list[OxydeModel]:
+    ) -> list[Model]:
         """Insert multiple objects efficiently."""
         return await self._query().bulk_create(
             objects,

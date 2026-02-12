@@ -9,7 +9,7 @@ Oxyde supports foreign key relationships and eager loading.
 Foreign keys are defined using type annotations:
 
 ```python
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
@@ -40,7 +40,7 @@ print(post.author_id)  # 1
 Reference a different field:
 
 ```python
-class Resource(OxydeModel):
+class Resource(Model):
     id: int | None = Field(default=None, db_pk=True)
     tenant: "Tenant" | None = Field(
         default=None,
@@ -114,7 +114,7 @@ for post in posts:
 On the "one" side of a one-to-many:
 
 ```python
-class Author(OxydeModel):
+class Author(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     posts: list["Post"] = Field(db_reverse_fk="author")  # Virtual field for reverse relation
@@ -123,7 +123,7 @@ class Author(OxydeModel):
         is_table = True
 
 
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
@@ -155,7 +155,7 @@ for author in authors:
 Use a junction table:
 
 ```python
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     tags: list["Tag"] = Field(db_m2m=True, db_through="PostTag")
@@ -164,7 +164,7 @@ class Post(OxydeModel):
         is_table = True
 
 
-class Tag(OxydeModel):
+class Tag(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(db_unique=True)
 
@@ -172,7 +172,7 @@ class Tag(OxydeModel):
         is_table = True
 
 
-class PostTag(OxydeModel):
+class PostTag(Model):
     id: int | None = Field(default=None, db_pk=True)
     post: "Post" | None = Field(default=None, db_on_delete="CASCADE")
     tag: "Tag" | None = Field(default=None, db_on_delete="CASCADE")
@@ -221,7 +221,7 @@ Oxyde automatically creates FK columns:
 ### Self-Referential FK
 
 ```python
-class Category(OxydeModel):
+class Category(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     parent: "Category" | None = Field(default=None, db_on_delete="SET NULL")
@@ -233,7 +233,7 @@ class Category(OxydeModel):
 ### Polymorphic Relations (Manual)
 
 ```python
-class Comment(OxydeModel):
+class Comment(Model):
     id: int | None = Field(default=None, db_pk=True)
     content: str
     commentable_type: str  # "post" or "photo"
@@ -252,7 +252,7 @@ post_comments = await Comment.objects.filter(
 ### Soft Delete with Relations
 
 ```python
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     deleted_at: datetime | None = Field(default=None)
@@ -271,9 +271,9 @@ posts = await Post.objects.filter(
 
 ```python
 from datetime import datetime
-from oxyde import OxydeModel, Field, db
+from oxyde import Model, Field, db
 
-class Author(OxydeModel):
+class Author(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     posts: list["Post"] = Field(db_reverse_fk="author")
@@ -283,7 +283,7 @@ class Author(OxydeModel):
         table_name = "authors"
 
 
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     content: str

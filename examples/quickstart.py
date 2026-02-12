@@ -16,14 +16,14 @@ from __future__ import annotations
 import asyncio
 import os
 
-from oxyde import AsyncDatabase, OxydeModel, Field, disconnect_all, execute_raw
+from oxyde import AsyncDatabase, Model, Field, disconnect_all, execute_raw
 
 
 # =============================================================================
 # Model Definitions
 # =============================================================================
 
-class Author(OxydeModel):
+class Author(Model):
     """Author model with primary key."""
 
     id: int | None = Field(default=None, db_pk=True)
@@ -35,7 +35,7 @@ class Author(OxydeModel):
         table_name = "authors"
 
 
-class Post(OxydeModel):
+class Post(Model):
     """Post model with foreign key to Author."""
 
     id: int | None = Field(default=None, db_pk=True)
@@ -49,7 +49,7 @@ class Post(OxydeModel):
         table_name = "posts"
 
 
-class Comment(OxydeModel):
+class Comment(Model):
     """Comment model with foreign key to Post."""
 
     id: int | None = Field(default=None, db_pk=True)

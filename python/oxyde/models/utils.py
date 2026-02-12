@@ -1,4 +1,4 @@
-"""Type introspection utilities for OxydeModel field parsing.
+"""Type introspection utilities for Model field parsing.
 
 This module provides helper functions for extracting type information
 from Python type hints. Used during model metadata parsing.

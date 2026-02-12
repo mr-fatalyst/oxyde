@@ -1,4 +1,4 @@
-"""Field configuration for OxydeModel with database metadata.
+"""Field configuration for Model with database metadata.
 
 This module extends Pydantic's Field() with database-specific attributes.
 OxydeFieldInfo stores both Pydantic validation rules and DB schema metadata.
@@ -37,9 +37,9 @@ Attribute Categories:
         db_through: M2M junction table name
 
 Example:
-    from oxyde import OxydeModel, Field
+    from oxyde import Model, Field
 
-    class User(OxydeModel):
+    class User(Model):
         id: int | None = Field(default=None, db_pk=True)
         email: str = Field(db_unique=True, db_index=True)
         name: str = Field(max_length=100)  # Pydantic validation
@@ -180,7 +180,7 @@ def Field(
         ...     db_default="NOW()"
         ... )
 
-        Foreign keys (type hint must be OxydeModel, db_fk specifies target):
+        Foreign keys (type hint must be Model, db_fk specifies target):
         >>> author: Author | None = Field(default=None, db_on_delete="CASCADE")
         >>> author: Author | None = Field(db_fk="uuid", db_on_delete="CASCADE")
 

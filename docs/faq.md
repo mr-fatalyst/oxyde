@@ -71,9 +71,9 @@ pip install -e .
 ### How do I define a model?
 
 ```python
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
@@ -87,7 +87,7 @@ class User(OxydeModel):
 Ensure you have `is_table = True` in the Meta class:
 
 ```python
-class User(OxydeModel):
+class User(Model):
     class Meta:
         is_table = True  # Required!
 ```
@@ -97,7 +97,7 @@ class User(OxydeModel):
 ```python
 from uuid import UUID
 
-class User(OxydeModel):
+class User(Model):
     id: UUID = Field(
         db_pk=True,
         db_default="gen_random_uuid()"  # PostgreSQL
@@ -112,7 +112,7 @@ class User(OxydeModel):
 Oxyde fields support all Pydantic validation:
 
 ```python
-class User(OxydeModel):
+class User(Model):
     age: int = Field(ge=0, le=150)
     email: str = Field(pattern=r"^[\w.-]+@[\w.-]+\.\w+$")
     name: str = Field(min_length=1, max_length=100)

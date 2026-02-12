@@ -35,10 +35,10 @@ Create `models.py`:
 
 ```python
 from datetime import datetime
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
 
-class Author(OxydeModel):
+class Author(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
@@ -50,7 +50,7 @@ class Author(OxydeModel):
         table_name = "authors"
 
 
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     content: str
@@ -64,7 +64,7 @@ class Post(OxydeModel):
         table_name = "posts"
 
 
-class Tag(OxydeModel):
+class Tag(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(db_unique=True)
 

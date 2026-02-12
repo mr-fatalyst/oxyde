@@ -7,7 +7,7 @@ from typing import Any
 import msgpack
 import pytest
 
-from oxyde import Field, OxydeModel
+from oxyde import Field, Model
 from oxyde.models.registry import clear_registry
 from oxyde.queries.aggregates import (
     Aggregate,
@@ -47,7 +47,7 @@ class StubExecuteClient:
         return msgpack.packb(payload)
 
 
-class Product(OxydeModel):
+class Product(Model):
     """Test model for aggregate tests."""
 
     id: int | None = Field(default=None, db_pk=True)

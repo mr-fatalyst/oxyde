@@ -10,14 +10,14 @@ from oxyde.core import ir
 from oxyde.queries.base import SupportsExecute, TQuery, _resolve_execution_client
 
 if TYPE_CHECKING:
-    from oxyde.models.base import OxydeModel
+    from oxyde.models.base import Model
 
 
 class AggregationMixin:
     """Mixin providing aggregation capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[OxydeModel]
+    model_class: type[Model]
     _annotations: dict[str, Any]
     _group_by_fields: list[str]
     _having: ir.FilterNode | None
