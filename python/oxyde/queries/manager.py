@@ -190,7 +190,7 @@ class QueryManager:
         Returns:
             Tuple of (instance, created) where created is True if new object was made
         """
-        from oxyde.exceptions import NotFoundError
+        from oxyde.exceptions import IntegrityError, NotFoundError
         from oxyde.models.serializers import _derive_create_data
 
         try:
@@ -198,8 +198,12 @@ class QueryManager:
             return obj, False
         except NotFoundError:
             create_data = _derive_create_data(filters, defaults)
-            obj = await self.create(using=using, client=client, **create_data)
-            return obj, True
+            try:
+                obj = await self.create(using=using, client=client, **create_data)
+                return obj, True
+            except IntegrityError:
+                obj = await self.get(using=using, client=client, **filters)
+                return obj, False
 
     async def exists(
         self,
