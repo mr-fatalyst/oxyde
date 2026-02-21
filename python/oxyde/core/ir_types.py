@@ -1,32 +1,14 @@
 """IR type mapping for Python types.
 
 Maps Python types to IR type hint strings used by Rust for type-aware decoding.
-This module is intentionally minimal to avoid circular imports.
+Delegates to TYPE_REGISTRY for the leaf type lookup.
 """
 
 from __future__ import annotations
 
-import datetime
-import decimal
-import uuid
 from typing import Any, get_args, get_origin
 
-# Mapping from Python types to IR type hints for Rust type-aware decoding
-_PYTHON_TYPE_TO_IR: dict[type, str] = {
-    int: "int",
-    str: "str",
-    float: "float",
-    bool: "bool",
-    bytes: "bytes",
-    bytearray: "bytes",
-    datetime.datetime: "datetime",
-    datetime.date: "date",
-    datetime.time: "time",
-    datetime.timedelta: "timedelta",
-    decimal.Decimal: "decimal",
-    uuid.UUID: "uuid",
-    dict: "json",
-}
+from oxyde.core.types import TYPE_REGISTRY
 
 
 def get_ir_type(python_type: Any) -> str | None:
@@ -50,8 +32,9 @@ def get_ir_type(python_type: Any) -> str | None:
                     return result
         return None
 
-    # Simple types: int, str, dict, etc.
-    return _PYTHON_TYPE_TO_IR.get(python_type)
+    # Simple types: exact lookup in TYPE_REGISTRY
+    desc = TYPE_REGISTRY.get(python_type)
+    return desc.ir_name if desc is not None else None
 
 
-__all__ = ["get_ir_type", "_PYTHON_TYPE_TO_IR"]
+__all__ = ["get_ir_type"]

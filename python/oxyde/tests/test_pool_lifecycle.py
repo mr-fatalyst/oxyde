@@ -9,7 +9,7 @@ import pytest
 from oxyde.db.pool import (
     AsyncDatabase,
     PoolSettings,
-    _datetime_encoder,
+    _msgpack_encoder,
     _normalize_duration,
     _validate_url_scheme,
 )
@@ -173,25 +173,47 @@ class TestValidateUrlScheme:
             _validate_url_scheme("redis://host")
 
 
-class TestDatetimeEncoder:
-    """Test _datetime_encoder for msgpack."""
+class TestMsgpackEncoder:
+    """Test _msgpack_encoder for msgpack serialization."""
 
     def test_encode_datetime(self):
         """Test encoding datetime."""
         from datetime import datetime
 
         dt = datetime(2024, 1, 15, 12, 30, 45)
-        result = _datetime_encoder(dt)
-
+        result = _msgpack_encoder(dt)
         assert result == "2024-01-15T12:30:45"
 
-    def test_encode_non_datetime_returns_as_is(self):
-        """Test encoding non-datetime returns value as-is."""
-        result = _datetime_encoder("test")
-        assert result == "test"
+    def test_encode_date(self):
+        """Test encoding date (was BUG-2)."""
+        from datetime import date
 
-        result = _datetime_encoder(42)
-        assert result == 42
+        d = date(2024, 1, 15)
+        result = _msgpack_encoder(d)
+        assert result == "2024-01-15"
+
+    def test_encode_uuid(self):
+        """Test encoding UUID (was BUG-2)."""
+        from uuid import UUID
+
+        u = UUID("12345678-1234-5678-1234-567812345678")
+        result = _msgpack_encoder(u)
+        assert result == "12345678-1234-5678-1234-567812345678"
+
+    def test_encode_decimal(self):
+        """Test encoding Decimal (was BUG-2)."""
+        from decimal import Decimal
+
+        d = Decimal("3.14")
+        result = _msgpack_encoder(d)
+        assert result == "3.14"
+
+    def test_encode_native_types_pass_through(self):
+        """Test that native msgpack types pass through unchanged."""
+        assert _msgpack_encoder("test") == "test"
+        assert _msgpack_encoder(42) == 42
+        assert _msgpack_encoder(3.14) == 3.14
+        assert _msgpack_encoder(True) is True
 
 
 class TestAsyncDatabaseInit:

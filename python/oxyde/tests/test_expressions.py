@@ -224,7 +224,7 @@ class TestSerializeValueForIR:
         from datetime import date, datetime, time, timedelta
 
         dt = datetime(2024, 1, 15, 12, 30, 45)
-        assert _serialize_value_for_ir(dt) == "2024-01-15 12:30:45"
+        assert _serialize_value_for_ir(dt) == "2024-01-15T12:30:45"
 
         d = date(2024, 1, 15)
         assert _serialize_value_for_ir(d) == "2024-01-15"

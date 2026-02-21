@@ -47,18 +47,12 @@ class DebugMixin:
             print(f"SQL: {sql}")
             print(f"Params: {params}")
         """
-        from datetime import datetime
-
         from oxyde.core.wrapper import render_sql_debug
-
-        def _encoder(obj):
-            if isinstance(obj, datetime):
-                return obj.isoformat()
-            return obj
+        from oxyde.db.pool import _msgpack_encoder
 
         # Serialize query IR
         query_ir = self.to_ir()
-        ir_bytes = msgpack.packb(query_ir, default=_encoder)
+        ir_bytes = msgpack.packb(query_ir, default=_msgpack_encoder)
 
         # Call Rust render_sql_debug (synchronous, no DB required)
         return render_sql_debug(ir_bytes, dialect)
@@ -100,21 +94,15 @@ class DebugMixin:
             plan = await User.objects.filter(age__gte=18).explain()
             plan = await User.objects.filter(age__gte=18).explain(analyze=True)
         """
-        from datetime import datetime
-
         from oxyde.core.wrapper import explain_query
+        from oxyde.db.pool import _msgpack_encoder
 
         async def runner():
             # Resolve pool name from using/client
             pool_name = _resolve_pool_name(using, client)
 
-            def _encoder(obj):
-                if isinstance(obj, datetime):
-                    return obj.isoformat()
-                return obj
-
             query_ir = self.to_ir()
-            ir_bytes = msgpack.packb(query_ir, default=_encoder)
+            ir_bytes = msgpack.packb(query_ir, default=_msgpack_encoder)
 
             # Call Rust explain function
             plan = await explain_query(

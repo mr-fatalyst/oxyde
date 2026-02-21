@@ -3,19 +3,6 @@
 This module provides helper functions for extracting type information
 from Python type hints. Used during model metadata parsing.
 
-Type Mapping:
-    DEFAULT_SQL_TYPE_MAP maps Python types to SQL types for schema generation:
-        str      → text
-        int      → bigint
-        float    → double precision
-        bool     → boolean
-        bytes    → bytea
-        datetime → timestamp with time zone
-        date     → date
-        time     → time
-        Decimal  → numeric
-        UUID     → uuid
-
 Functions:
     _unpack_annotated(hint) -> (base_type, metadata_tuple):
         Extract base type from Annotated[T, ...].
@@ -39,27 +26,10 @@ Functions:
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
-from decimal import Decimal
 from types import NoneType, UnionType
 from typing import Annotated, Any, Union, get_args, get_origin
-from uuid import UUID
 
 from pydantic.fields import FieldInfo
-
-# SQL type mapping
-DEFAULT_SQL_TYPE_MAP: dict[type[Any], str] = {
-    str: "text",
-    int: "bigint",
-    float: "double precision",
-    bool: "boolean",
-    bytes: "bytea",
-    datetime: "timestamp with time zone",
-    date: "date",
-    time: "time",
-    Decimal: "numeric",
-    UUID: "uuid",
-}
 
 
 def _unpack_annotated(hint: Any) -> tuple[Any, tuple[Any, ...]]:
@@ -106,7 +76,6 @@ def _extract_max_length(field_info: FieldInfo) -> int | None:
 
 
 __all__ = [
-    "DEFAULT_SQL_TYPE_MAP",
     "_unpack_annotated",
     "_unwrap_optional",
     "_extract_max_length",

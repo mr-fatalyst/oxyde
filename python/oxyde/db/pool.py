@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 try:
@@ -101,11 +101,11 @@ except ImportError:
         raise RuntimeError("Rust core module not available. Please install oxyde-core.")
 
 
-def _datetime_encoder(obj):
-    """Encode datetime objects for msgpack."""
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    return obj
+def _msgpack_encoder(obj):
+    """Encode non-native types for msgpack via TYPE_REGISTRY."""
+    from oxyde.core.types import serialize_value
+
+    return serialize_value(obj)
 
 
 def _normalize_duration(value: float | int | timedelta | None) -> float | None:
@@ -288,7 +288,7 @@ class AsyncDatabase:
 
         import msgpack
 
-        ir_bytes = msgpack.packb(ir, default=_datetime_encoder)
+        ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
         result_bytes = await _execute(self.name, ir_bytes)
         return result_bytes
 
@@ -320,7 +320,7 @@ class AsyncDatabase:
 
         import msgpack
 
-        ir_bytes = msgpack.packb(ir, default=_datetime_encoder)
+        ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
 
         # Use batched execution for lower memory
         if batch_size is not None:
@@ -349,7 +349,7 @@ class AsyncDatabase:
 
         import msgpack
 
-        ir_bytes = msgpack.packb(ir, default=_datetime_encoder)
+        ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
         batch_size = self.settings.batch_size
         return await _execute_batched_dedup(self.name, ir_bytes, batch_size)
 

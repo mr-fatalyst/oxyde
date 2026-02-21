@@ -477,9 +477,9 @@ class MigrationContext:
                 if tx_id is not None:
                     import msgpack
 
-                    from oxyde.db.pool import _datetime_encoder
+                    from oxyde.db.pool import _msgpack_encoder
 
-                    ir_bytes = msgpack.packb(sql_ir, default=_datetime_encoder)
+                    ir_bytes = msgpack.packb(sql_ir, default=_msgpack_encoder)
                     await execute_in_transaction(self._db_conn.name, tx_id, ir_bytes)
                 else:
                     await self._db_conn.execute(sql_ir)

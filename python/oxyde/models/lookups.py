@@ -59,10 +59,10 @@ from __future__ import annotations
 
 import collections.abc
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
-from decimal import Decimal
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from oxyde.core.types import TYPE_REGISTRY
 from oxyde.exceptions import FieldError, FieldLookupError, FieldLookupValueError
 from oxyde.models.metadata import ColumnMeta
 from oxyde.models.utils import _unpack_annotated, _unwrap_optional
@@ -96,20 +96,15 @@ ALL_LOOKUPS = frozenset(
 
 
 def _lookup_category(meta: ColumnMeta) -> str:
-    """Determine lookup category based on field metadata."""
-    python_type = meta.python_type
+    """Determine lookup category based on field metadata.
+
+    Uses exact type() lookup via TYPE_REGISTRY — no issubclass ordering
+    issues (bool is correctly categorized as "bool", not "numeric").
+    """
     if meta.foreign_key is not None:
         return "numeric"
-    if isinstance(python_type, type):
-        if issubclass(python_type, str):
-            return "string"
-        if issubclass(python_type, (int, float, Decimal)):
-            return "numeric"
-        if issubclass(python_type, (datetime, date, time)):
-            return "datetime"
-        if issubclass(python_type, bool):
-            return "bool"
-    return "generic"
+    desc = TYPE_REGISTRY.get(meta.python_type)
+    return desc.category if desc is not None else "generic"
 
 
 def _allowed_lookups_for_meta(meta: ColumnMeta) -> list[str]:

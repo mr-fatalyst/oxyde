@@ -198,13 +198,7 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
                 continue
 
             # Determine Python type for SQL mapping
-            # For FK fields, use int (references PK which is typically int)
-            if field_meta.foreign_key is not None:
-                # FK columns store the PK value of the referenced table
-                # Most PKs are int, so FK columns should be int type
-                python_type_for_sql = int
-            else:
-                python_type_for_sql = field_meta.python_type
+            python_type_for_sql = field_meta.python_type
 
             # Determine if this field needs AUTO_INCREMENT (MySQL only)
             # AUTO_INCREMENT is needed when:

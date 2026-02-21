@@ -75,7 +75,7 @@ from contextvars import ContextVar
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from oxyde.db.pool import _datetime_encoder, _normalize_duration
+from oxyde.db.pool import _msgpack_encoder, _normalize_duration
 
 if TYPE_CHECKING:
     from oxyde.db.pool import AsyncDatabase
@@ -157,7 +157,7 @@ class AsyncTransaction:
 
         import msgpack
 
-        ir_bytes = msgpack.packb(ir, default=_datetime_encoder)
+        ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
         coro = _execute_in_transaction(self._database.name, self._tx_id, ir_bytes)
 
         remaining = self._remaining_timeout()
