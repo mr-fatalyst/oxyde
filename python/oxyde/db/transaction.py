@@ -221,14 +221,16 @@ class AtomicTransactionContext:
         if entry:
             # Nested transaction - create savepoint
             depth = entry["depth"]
+            self._transaction = entry["transaction"]
+
+            # Create savepoint BEFORE incrementing depth —
+            # if this fails, __aexit__ won't be called and depth must stay unchanged
+            self._savepoint_name = f"sp_{depth + 1}"
+            await _create_savepoint(self._transaction.id, self._savepoint_name)
+
             entry["depth"] += 1
             state[self.using] = entry
             _ACTIVE_TRANSACTIONS.set(state)
-            self._transaction = entry["transaction"]
-
-            # Create savepoint for nested transaction
-            self._savepoint_name = f"sp_{depth + 1}"
-            await _create_savepoint(self._transaction.id, self._savepoint_name)
 
             return self
 
