@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import msgpack
+
+from oxyde.core.ir import build_raw_sql_ir
 from oxyde.db.registry import get_connection as _get_connection_async
 
 MIGRATIONS_TABLE = "oxyde_migrations"
@@ -55,8 +58,6 @@ async def ensure_migrations_table(db_alias: str = "default") -> None:
         """
 
     # Execute using IR
-    from oxyde.core.ir import build_raw_sql_ir
-
     create_ir = build_raw_sql_ir(sql=create_sql)
     await db_conn.execute(create_ir)
 
@@ -80,15 +81,11 @@ async def get_applied_migrations(db_alias: str = "default") -> list[str]:
     ORDER BY id ASC
     """
 
-    from oxyde.core.ir import build_raw_sql_ir
-
     query_ir = build_raw_sql_ir(sql=query_sql)
     result_bytes = await db_conn.execute(query_ir)
 
     # Result comes as MessagePack bytes (from serialize_results)
     # Format: [columns, rows] where rows is list of lists
-    import msgpack
-
     result = msgpack.unpackb(result_bytes, raw=False)
 
     # Extract migration names from results
@@ -158,8 +155,6 @@ async def record_migration(name: str, db_alias: str = "default") -> None:
         """
         params = [name]
 
-    from oxyde.core.ir import build_raw_sql_ir
-
     insert_ir = build_raw_sql_ir(
         sql=insert_sql,
         params=params,
@@ -195,8 +190,6 @@ async def remove_migration(name: str, db_alias: str = "default") -> None:
         DELETE FROM {MIGRATIONS_TABLE}
         WHERE name = ?
         """
-
-    from oxyde.core.ir import build_raw_sql_ir
 
     delete_ir = build_raw_sql_ir(sql=delete_sql, params=[name])
     await db_conn.execute(delete_ir)

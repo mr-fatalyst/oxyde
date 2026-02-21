@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from oxyde.exceptions import IntegrityError, ManagerError, NotFoundError
+from oxyde.models.serializers import _derive_create_data
 from oxyde.queries.select import Query
 
 if TYPE_CHECKING:
@@ -190,9 +192,6 @@ class QueryManager:
         Returns:
             Tuple of (instance, created) where created is True if new object was made
         """
-        from oxyde.exceptions import IntegrityError, NotFoundError
-        from oxyde.models.serializers import _derive_create_data
-
         try:
             obj = await self.get(using=using, client=client, **filters)
             return obj, False
@@ -317,8 +316,6 @@ class QueryManager:
 
     async def upsert(self, *args: Any, **kwargs: Any) -> Any:
         """Not implemented yet."""
-        from oxyde.exceptions import ManagerError
-
         raise ManagerError("upsert() is not implemented yet")
 
 

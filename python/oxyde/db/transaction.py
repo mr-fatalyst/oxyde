@@ -75,7 +75,10 @@ from contextvars import ContextVar
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+import msgpack
+
 from oxyde.db.pool import _msgpack_encoder, _normalize_duration
+from oxyde.db.registry import get_connection
 
 if TYPE_CHECKING:
     from oxyde.db.pool import AsyncDatabase
@@ -155,8 +158,6 @@ class AsyncTransaction:
                 "Transaction can no longer be used because its timeout elapsed"
             )
 
-        import msgpack
-
         ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
         coro = _execute_in_transaction(self._database.name, self._tx_id, ir_bytes)
 
@@ -235,8 +236,6 @@ class AtomicTransactionContext:
             return self
 
         # Use provided database instance or get from registry
-        from oxyde.db.registry import get_connection
-
         database = (
             self._database
             if self._database is not None

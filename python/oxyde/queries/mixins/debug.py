@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 import msgpack
 
+from oxyde.core.wrapper import explain_query, render_sql_debug
+from oxyde.db.pool import _msgpack_encoder
 from oxyde.queries.base import SupportsExecute, TQuery, _resolve_pool_name
 
 if TYPE_CHECKING:
@@ -47,9 +49,6 @@ class DebugMixin:
             print(f"SQL: {sql}")
             print(f"Params: {params}")
         """
-        from oxyde.core.wrapper import render_sql_debug
-        from oxyde.db.pool import _msgpack_encoder
-
         # Serialize query IR
         query_ir = self.to_ir()
         ir_bytes = msgpack.packb(query_ir, default=_msgpack_encoder)
@@ -94,8 +93,6 @@ class DebugMixin:
             plan = await User.objects.filter(age__gte=18).explain()
             plan = await User.objects.filter(age__gte=18).explain(analyze=True)
         """
-        from oxyde.core.wrapper import explain_query
-        from oxyde.db.pool import _msgpack_encoder
 
         async def runner():
             # Resolve pool name from using/client

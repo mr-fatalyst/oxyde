@@ -135,6 +135,7 @@ def mock_get_connection(monkeypatch):
         return DummyDatabase(name)
 
     monkeypatch.setattr("oxyde.db.registry.get_connection", get_conn)
+    monkeypatch.setattr("oxyde.db.transaction.get_connection", get_conn)
 
 
 class TestAsyncTransaction:

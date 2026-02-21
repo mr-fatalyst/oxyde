@@ -49,6 +49,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from oxyde.core.ir import FilterNode, filter_and, filter_not, filter_or
+from oxyde.exceptions import FieldLookupError
+from oxyde.models.lookups import (
+    _allowed_lookups_for_meta,
+    _build_lookup_conditions,
+    _parse_lookup_path,
+    _resolve_column_meta,
+    _resolve_field_path,
+)
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
@@ -110,15 +118,6 @@ class Q:
         if not self._kwargs:
             return None
 
-        # Import here to avoid circular dependency
-        from oxyde.exceptions import FieldLookupError
-        from oxyde.models.lookups import (
-            _allowed_lookups_for_meta,
-            _build_lookup_conditions,
-            _parse_lookup_path,
-            _resolve_field_path,
-        )
-
         if model_class is None:
             raise ValueError(
                 "Q expression with kwargs requires model_class to resolve fields"
@@ -131,8 +130,6 @@ class Q:
 
             # Single field (no FK traversal)
             if len(field_path) == 1:
-                from oxyde.models.lookups import _resolve_column_meta
-
                 field_name = field_path[0]
                 column_meta = _resolve_column_meta(model_class, field_name)
 

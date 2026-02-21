@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, Any
 import msgpack
 
 from oxyde.core import ir
+from oxyde.queries.aggregates import Avg, Max, Min, Sum
 from oxyde.queries.base import SupportsExecute, TQuery, _resolve_execution_client
+from oxyde.queries.q import Q
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
@@ -81,8 +83,6 @@ class AggregationMixin:
         Examples:
             User.objects.group_by("status").having(count__gte=10)
         """
-        from oxyde.queries.q import Q
-
         clone = self._clone()
         conditions_to_add: list[ir.FilterNode] = []
 
@@ -208,8 +208,6 @@ class AggregationMixin:
         client: SupportsExecute | None = None,
     ):
         """Calculate sum of field values."""
-        from oxyde.queries.aggregates import Sum
-
         return await self._aggregate(Sum, field, "_sum", using=using, client=client)
 
     async def avg(
@@ -220,8 +218,6 @@ class AggregationMixin:
         client: SupportsExecute | None = None,
     ):
         """Calculate average of field values."""
-        from oxyde.queries.aggregates import Avg
-
         return await self._aggregate(Avg, field, "_avg", using=using, client=client)
 
     async def max(
@@ -232,8 +228,6 @@ class AggregationMixin:
         client: SupportsExecute | None = None,
     ):
         """Get maximum field value."""
-        from oxyde.queries.aggregates import Max
-
         return await self._aggregate(Max, field, "_max", using=using, client=client)
 
     async def min(
@@ -244,6 +238,4 @@ class AggregationMixin:
         client: SupportsExecute | None = None,
     ):
         """Get minimum field value."""
-        from oxyde.queries.aggregates import Min
-
         return await self._aggregate(Min, field, "_min", using=using, client=client)

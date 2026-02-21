@@ -58,6 +58,10 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
+import msgpack
+
+from oxyde.core.types import serialize_value
+
 try:
     from oxyde.core import close_all_pools, close_pool
     from oxyde.core import execute as _execute
@@ -103,8 +107,6 @@ except ImportError:
 
 def _msgpack_encoder(obj):
     """Encode non-native types for msgpack via TYPE_REGISTRY."""
-    from oxyde.core.types import serialize_value
-
     return serialize_value(obj)
 
 
@@ -286,8 +288,6 @@ class AsyncDatabase:
                 f"Database '{self.name}' not connected. Call connect() first."
             )
 
-        import msgpack
-
         ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
         result_bytes = await _execute(self.name, ir_bytes)
         return result_bytes
@@ -318,8 +318,6 @@ class AsyncDatabase:
                 f"Database '{self.name}' not connected. Call connect() first."
             )
 
-        import msgpack
-
         ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
 
         # Use batched execution for lower memory
@@ -346,8 +344,6 @@ class AsyncDatabase:
             raise RuntimeError(
                 f"Database '{self.name}' not connected. Call connect() first."
             )
-
-        import msgpack
 
         ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
         batch_size = self.settings.batch_size

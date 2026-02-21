@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from oxyde.core import ir
 from oxyde.queries.base import TQuery
+from oxyde.queries.q import Q
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
@@ -44,8 +45,6 @@ class FilteringMixin:
             .filter(Q(name="Bob"), age__lt=30)
             .filter(user__age__gte=18)  # FK traversal
         """
-        from oxyde.queries.q import Q
-
         clone = self._clone()
         conditions: list[ir.FilterNode] = []
 
@@ -97,8 +96,6 @@ class FilteringMixin:
             .exclude(Q(age__lt=18) | Q(age__gt=65))
             .exclude(user__age__lt=18)  # FK traversal
         """
-        from oxyde.queries.q import Q
-
         clone = self._clone()
         conditions_to_negate: list[ir.FilterNode] = []
 

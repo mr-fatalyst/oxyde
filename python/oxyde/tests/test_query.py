@@ -87,6 +87,7 @@ def atomic_stub_env(monkeypatch: pytest.MonkeyPatch):
     )
     reg_module = importlib.import_module("oxyde.db.registry")
     monkeypatch.setattr(reg_module, "get_connection", dummy_get_connection)
+    monkeypatch.setattr(tx_module, "get_connection", dummy_get_connection)
 
     return call_log
 

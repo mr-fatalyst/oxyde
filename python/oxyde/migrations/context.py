@@ -2,7 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
+
+import msgpack
+
+from oxyde.core import (
+    begin_transaction,
+    commit_transaction,
+    execute_in_transaction,
+    migration_to_sql,
+    rollback_transaction,
+)
+from oxyde.core.ir import build_raw_sql_ir
+from oxyde.db.pool import _msgpack_encoder
 
 if TYPE_CHECKING:
     from oxyde.db.pool import AsyncDatabase as DatabaseConnection
@@ -407,10 +420,6 @@ class MigrationContext:
         Args:
             op: Operation dictionary
         """
-        import json
-
-        from oxyde.core import migration_to_sql
-
         # Convert operation to SQL using Rust
         operations_json = json.dumps([op])
         sql_statements = migration_to_sql(operations_json, self._dialect)
@@ -456,14 +465,6 @@ class MigrationContext:
         if self._db_conn is None:
             raise RuntimeError("Cannot execute SQL: no database connection provided")
 
-        from oxyde.core import (
-            begin_transaction,
-            commit_transaction,
-            execute_in_transaction,
-            rollback_transaction,
-        )
-        from oxyde.core.ir import build_raw_sql_ir
-
         # MySQL doesn't support transactional DDL
         use_transaction = self._dialect in ("postgres", "sqlite")
 
@@ -475,10 +476,6 @@ class MigrationContext:
             for sql in self._sql_statements:
                 sql_ir = build_raw_sql_ir(sql=sql)
                 if tx_id is not None:
-                    import msgpack
-
-                    from oxyde.db.pool import _msgpack_encoder
-
                     ir_bytes = msgpack.packb(sql_ir, default=_msgpack_encoder)
                     await execute_in_transaction(self._db_conn.name, tx_id, ir_bytes)
                 else:
