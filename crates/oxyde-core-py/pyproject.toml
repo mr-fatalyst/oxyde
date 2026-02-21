@@ -35,6 +35,5 @@ Repository = "https://github.com/mr-fatalyst/oxyde"
 Issues = "https://github.com/mr-fatalyst/oxyde/issues"
 
 [tool.maturin]
-python-source = "python"
 module-name = "_oxyde_core"
 features = ["pyo3/extension-module"]
