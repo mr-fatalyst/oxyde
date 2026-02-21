@@ -9,6 +9,14 @@ from typing import TYPE_CHECKING, Any
 
 import msgpack
 
+from oxyde.core import (
+    begin_transaction,
+    commit_transaction,
+    execute_in_transaction,
+    rollback_transaction,
+)
+from oxyde.core.ir import build_raw_sql_ir
+from oxyde.db.pool import _msgpack_encoder
 from oxyde.db.registry import get_connection as _get_connection_async
 from oxyde.migrations.context import MigrationContext
 from oxyde.migrations.replay import (
@@ -83,71 +91,100 @@ def _check_migration_dependency(
         )
 
 
-async def _acquire_migration_lock(db_conn: AsyncDatabase, dialect: str) -> bool:
-    """Acquire advisory lock to prevent concurrent migrations.
+async def _acquire_migration_lock(
+    db_conn: AsyncDatabase, dialect: str
+) -> tuple[bool, int | None]:
+    """Acquire advisory lock on a dedicated connection.
+
+    Uses begin_transaction to pin a connection, ensuring the lock is held
+    on the same connection until explicitly released. This prevents the pool
+    from routing acquire and release to different connections (advisory locks
+    are session-scoped in PostgreSQL and MySQL).
 
     Args:
         db_conn: Database connection
         dialect: Database dialect
 
     Returns:
-        True if lock acquired, False if already locked by another process
+        Tuple of (lock_acquired, lock_tx_id). lock_tx_id must be passed
+        to _release_migration_lock to release on the same connection.
     """
-    from oxyde.core.ir import build_raw_sql_ir
+    if dialect == "sqlite":
+        return True, None
 
-    if dialect == "postgres":
-        # PostgreSQL: pg_try_advisory_lock returns true if acquired
-        sql = f"SELECT pg_try_advisory_lock({MIGRATION_LOCK_KEY})"
-        ir = build_raw_sql_ir(sql=sql)
-        result_bytes = await db_conn.execute(ir)
-        result = _parse_query_result(result_bytes)
-        if result and len(result) > 0:
-            return result[0].get("pg_try_advisory_lock", False)
-        return False
+    # Pin a connection via transaction so acquire and release use the same session
+    tx_id = await begin_transaction(db_conn.name)
 
-    elif dialect == "mysql":
-        # MySQL: GET_LOCK returns 1 if acquired, 0 if timeout, NULL if error
-        sql = "SELECT GET_LOCK('oxyde_migration', 0)"
-        ir = build_raw_sql_ir(sql=sql)
-        result_bytes = await db_conn.execute(ir)
-        result = _parse_query_result(result_bytes)
-        if result and len(result) > 0:
-            val = list(result[0].values())[0]
-            return val == 1
-        return False
+    try:
+        if dialect == "postgres":
+            sql = f"SELECT pg_try_advisory_lock({MIGRATION_LOCK_KEY})"
+            ir = build_raw_sql_ir(sql=sql)
+            ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
+            result_bytes = await execute_in_transaction(db_conn.name, tx_id, ir_bytes)
+            result = _parse_query_result(result_bytes)
+            if result and result[0].get("pg_try_advisory_lock", False):
+                return True, tx_id
+            await commit_transaction(tx_id)
+            return False, None
 
-    elif dialect == "sqlite":
-        # SQLite: File-level locking is automatic, no need for advisory lock
-        # But we use PRAGMA to enable exclusive mode temporarily
-        return True
+        elif dialect == "mysql":
+            sql = "SELECT GET_LOCK('oxyde_migration', 0)"
+            ir = build_raw_sql_ir(sql=sql)
+            ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
+            result_bytes = await execute_in_transaction(db_conn.name, tx_id, ir_bytes)
+            result = _parse_query_result(result_bytes)
+            if result and len(result) > 0:
+                val = list(result[0].values())[0]
+                if val == 1:
+                    return True, tx_id
+            await commit_transaction(tx_id)
+            return False, None
 
-    return True  # Unknown dialect - proceed without lock
+        # Unknown dialect — release connection, proceed without lock
+        await commit_transaction(tx_id)
+        return True, None
+
+    except Exception:
+        try:
+            await commit_transaction(tx_id)
+        except Exception:
+            pass
+        raise
 
 
-async def _release_migration_lock(db_conn: AsyncDatabase, dialect: str) -> None:
-    """Release advisory lock after migrations complete.
+async def _release_migration_lock(
+    db_conn: AsyncDatabase, dialect: str, lock_tx_id: int | None
+) -> None:
+    """Release advisory lock and close the dedicated connection.
 
     Args:
         db_conn: Database connection
         dialect: Database dialect
+        lock_tx_id: Transaction ID from _acquire_migration_lock
     """
-    from oxyde.core.ir import build_raw_sql_ir
+    if lock_tx_id is None:
+        return
 
     try:
         if dialect == "postgres":
             sql = f"SELECT pg_advisory_unlock({MIGRATION_LOCK_KEY})"
             ir = build_raw_sql_ir(sql=sql)
-            await db_conn.execute(ir)
+            ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
+            await execute_in_transaction(db_conn.name, lock_tx_id, ir_bytes)
 
         elif dialect == "mysql":
             sql = "SELECT RELEASE_LOCK('oxyde_migration')"
             ir = build_raw_sql_ir(sql=sql)
-            await db_conn.execute(ir)
+            ir_bytes = msgpack.packb(ir, default=_msgpack_encoder)
+            await execute_in_transaction(db_conn.name, lock_tx_id, ir_bytes)
 
-        # SQLite: No explicit unlock needed
+        await commit_transaction(lock_tx_id)
 
     except Exception:
-        pass  # Ignore errors during unlock
+        try:
+            await rollback_transaction(lock_tx_id)
+        except Exception:
+            pass
 
 
 def import_migration_module(filepath: Path) -> Any:
@@ -269,7 +306,7 @@ async def apply_migrations(
         dialect = "sqlite"  # Default to sqlite
 
     # Acquire advisory lock to prevent concurrent migrations
-    lock_acquired = await _acquire_migration_lock(db_conn, dialect)
+    lock_acquired, lock_tx_id = await _acquire_migration_lock(db_conn, dialect)
     if not lock_acquired:
         raise RuntimeError(
             "Cannot acquire migration lock. Another migration process may be running."
@@ -327,7 +364,7 @@ async def apply_migrations(
 
     finally:
         # Always release the lock
-        await _release_migration_lock(db_conn, dialect)
+        await _release_migration_lock(db_conn, dialect, lock_tx_id)
 
     return applied_migrations
 
@@ -405,7 +442,7 @@ async def rollback_migration(
         dialect = "sqlite"  # Default to sqlite
 
     # Acquire advisory lock
-    lock_acquired = await _acquire_migration_lock(db_conn, dialect)
+    lock_acquired, lock_tx_id = await _acquire_migration_lock(db_conn, dialect)
     if not lock_acquired:
         raise RuntimeError(
             "Cannot acquire migration lock. Another migration process may be running."
@@ -444,7 +481,7 @@ async def rollback_migration(
         await remove_migration(migration_name, db_alias)
 
     finally:
-        await _release_migration_lock(db_conn, dialect)
+        await _release_migration_lock(db_conn, dialect, lock_tx_id)
 
 
 async def rollback_migrations(
