@@ -21,14 +21,11 @@ Key Components:
     _db_meta (ClassVar[ModelMeta]):
         Stores table-level metadata: table_name, schema, indexes, constraints.
         Also holds field_metadata dict mapping field names to ColumnMeta.
+1        Populated eagerly at class definition time via finalize_pending().
 
     objects (ClassVar[QueryManager]):
         Django-style manager for queries. Auto-created in __init_subclass__.
         Example: User.objects.filter(age__gte=18).all()
-
-    ensure_field_metadata():
-        Lazily parses field annotations and db_* attributes into ColumnMeta.
-        Called automatically before queries to avoid circular imports.
 
     _resolve_fk_fields():
         Handles FK type annotations (field: Author) by auto-adding
@@ -37,8 +34,8 @@ Key Components:
 Internal Flow:
     1. Class definition triggers OxydeModelMeta.__new__()
     2. __init_subclass__() extracts Meta, creates _db_meta, registers table
-    3. First query calls ensure_field_metadata() → _parse_field_tags()
-    4. Field metadata cached in _db_meta.field_metadata for reuse
+    3. OxydeModelMeta.__new__() calls finalize_pending() after Pydantic completes
+    4. finalize_pending() resolves FKs, parses field tags, caches PK and col_types
 
 Example:
     class User(Model):
@@ -105,22 +102,17 @@ from oxyde.models.utils import _extract_max_length, _unpack_annotated, _unwrap_o
 def _get_pk_field_name(model_cls: type) -> str:
     """Get the primary key field name from a Model class.
 
-    Args:
-        model_cls: The Model class to inspect
-
-    Returns:
-        Primary key field name, defaults to "id" if not found
+    Uses cached pk_field if available (model is finalized),
+    otherwise scans model_fields for db_pk=True.
+    Defaults to "id" if no PK found.
     """
-    # Import here to avoid circular dependency
-    from oxyde.models.field import OxydeFieldInfo
-
-    # Check if model has already processed metadata
-    if hasattr(model_cls, "_db_meta") and model_cls._db_meta.field_metadata:
-        for field_name, meta in model_cls._db_meta.field_metadata.items():
-            if meta.primary_key:
-                return field_name
+    # Use cached PK if available (model is finalized)
+    if hasattr(model_cls, "_db_meta") and model_cls._db_meta.pk_field:
+        return model_cls._db_meta.pk_field
 
     # Fallback: check model_fields directly for db_pk=True
+    from oxyde.models.field import OxydeFieldInfo
+
     if hasattr(model_cls, "model_fields"):
         for field_name, field_info in model_cls.model_fields.items():
             if isinstance(field_info, OxydeFieldInfo) and getattr(
@@ -128,7 +120,6 @@ def _get_pk_field_name(model_cls: type) -> str:
             ):
                 return field_name
 
-    # Default to "id" if no PK found
     return "id"
 
 
@@ -182,11 +173,11 @@ class OxydeModelMeta(ModelMetaclass):
 
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
 
-        # Resolve FK fields AFTER Pydantic completes (model_fields is now populated)
-        # This also tries to resolve any previously pending models
-        from oxyde.models.registry import resolve_pending_fk
+        # Finalize all pending models AFTER Pydantic completes
+        # (model_fields is now populated). Resolves FKs, parses metadata, caches PK.
+        from oxyde.models.registry import finalize_pending
 
-        resolve_pending_fk()
+        finalize_pending()
 
         return cls
 
@@ -203,11 +194,6 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
     _db_meta: ClassVar[ModelMeta]
     objects: ClassVar[QueryManager]
     _is_table: ClassVar[bool] = False
-
-    def __init__(self, **data: Any) -> None:
-        # Ensure FK fields are in model_fields before Pydantic validates
-        self.__class__.ensure_field_metadata()
-        super().__init__(**data)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -296,19 +282,6 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         if relation_descriptors and is_table:
             for name, descriptor in relation_descriptors:
                 descriptor.contribute_to_model(cls, name)
-
-    @classmethod
-    def ensure_field_metadata(cls) -> None:
-        """Ensure field metadata has been parsed for table models."""
-        # First resolve FK fields if not done yet
-        fk_resolved = getattr(cls, "__fk_fields_resolved__", False)
-        pending_fk = getattr(cls, "__pending_fk_fields__", [])
-        if not fk_resolved and pending_fk:
-            cls._resolve_fk_fields()
-        if cls._is_table and not cls._db_meta.field_metadata:
-            cls._parse_field_tags()
-            # Compute col_types for IR after field_metadata is populated
-            cls._compute_col_types()
 
     @classmethod
     def _compute_col_types(cls) -> None:
@@ -656,15 +629,6 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         """Get the table name for this model."""
         return cls._db_meta.table_name or cls.__name__.lower()
 
-    @classmethod
-    def _get_primary_key_field(cls) -> str | None:
-        """Get primary key field name from model metadata."""
-        cls.ensure_field_metadata()
-        for field_name, meta in cls._db_meta.field_metadata.items():
-            if meta.primary_key:
-                return field_name
-        return None
-
     # =========================================================================
     # Lifecycle Hooks
     # =========================================================================
@@ -739,7 +703,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         update_fields: Iterable[str] | None = None,
     ) -> Model:
         manager = self.__class__.objects
-        pk_field = self._get_primary_key_field()
+        pk_field = self.__class__._db_meta.pk_field
         pk_value = getattr(self, pk_field) if pk_field else None
         is_create = not (pk_field and pk_value not in (None, PydanticUndefined))
 
@@ -782,7 +746,6 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                 raise NotFoundError(f"{cls_name} with {pk_field}={pk_value} not found")
 
             # Update instance from RETURNING * result
-            self.__class__.ensure_field_metadata()
             col_to_field = {
                 meta.db_column: field_name
                 for field_name, meta in self.__class__._db_meta.field_metadata.items()
@@ -807,7 +770,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         using: str | None = None,
     ) -> int:
         manager = self.__class__.objects
-        pk_field = self._get_primary_key_field()
+        pk_field = self.__class__._db_meta.pk_field
         if not pk_field:
             raise ManagerError("delete() requires a primary key")
         pk_value = getattr(self, pk_field)
@@ -854,7 +817,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             # ... time passes, data may have changed ...
             await user.refresh()  # Reload from DB
         """
-        pk_field = self._get_primary_key_field()
+        pk_field = self.__class__._db_meta.pk_field
         if not pk_field:
             raise ManagerError("refresh() requires a primary key")
         pk_value = getattr(self, pk_field)

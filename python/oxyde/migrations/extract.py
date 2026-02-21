@@ -31,7 +31,6 @@ def _resolve_fk_target(
     # Try to find by full key or class name
     for key, model_cls in tables.items():
         if key == target_key or model_cls.__name__ == target_key.split(".")[-1]:
-            model_cls.ensure_field_metadata()
             table_name = model_cls._db_meta.table_name or model_cls.__name__.lower()
 
             if target_field:
@@ -182,8 +181,6 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
     tables = {}
 
     for model_cls in iter_tables():
-        # Ensure field metadata is populated
-        model_cls.ensure_field_metadata()
         meta = model_cls._db_meta
 
         # Extract fields

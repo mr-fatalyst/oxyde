@@ -18,13 +18,19 @@ Functions:
         Remove model from registry (no-op if not registered).
 
     registered_tables() -> dict[str, type[Model]]:
-        Return copy of registry. Ensures field metadata is parsed.
+        Return copy of registry.
 
     iter_tables() -> tuple[type[Model], ...]:
         Return tuple of registered model classes.
 
     clear_registry():
         Remove all models (used in tests for cleanup).
+
+    finalize_pending():
+        Finalize all pending models: FK resolve + metadata parse + PK cache.
+
+    assert_no_pending_models():
+        Fail-fast check that all models are finalized.
 
 Auto-Registration:
     Models with Meta.is_table = True are automatically registered in
@@ -47,82 +53,110 @@ if TYPE_CHECKING:
     from oxyde.models.base import Model
 
 _TABLES: dict[str, type[Model]] = {}
-_PENDING_FK_MODELS: set[type[Model]] = set()
+_PENDING_MODELS: set[type[Model]] = set()
 
 
 def _model_key(model: type[Model]) -> str:
     return f"{model.__module__}.{model.__qualname__}"
 
 
-def _resolve_pending_fk_models() -> None:
-    """Try to resolve FK fields for all pending models."""
-    resolved = set()
-    for model in _PENDING_FK_MODELS:
-        model.__fk_fields_resolved__ = False  # type: ignore[attr-defined]
-        model._resolve_fk_fields()  # type: ignore[attr-defined]
-        if getattr(model, "__fk_fields_resolved__", False):
-            resolved.add(model)
+def _finalize_model(model: type[Model]) -> bool:
+    """Try to fully finalize a single model: FK resolve → parse → col_types → PK cache.
 
-    _PENDING_FK_MODELS.difference_update(resolved)
+    Returns True if model is fully finalized, False if it should be retried later.
+    """
+    # Step 1: Resolve FK fields if needed
+    pending_fk = getattr(model, "__pending_fk_fields__", [])
+    if pending_fk:
+        fk_resolved = getattr(model, "__fk_fields_resolved__", False)
+        if not fk_resolved:
+            model.__fk_fields_resolved__ = False  # type: ignore[attr-defined]
+            model._resolve_fk_fields()  # type: ignore[attr-defined]
+            if not getattr(model, "__fk_fields_resolved__", False):
+                return False
+
+    # Step 2: Parse field tags → field_metadata
+    if not model._db_meta.field_metadata:
+        try:
+            model._parse_field_tags()  # type: ignore[attr-defined]
+        except NameError:
+            return False
+
+    # Step 3: Compute col_types for IR
+    if model._db_meta.col_types is None:
+        model._compute_col_types()  # type: ignore[attr-defined]
+
+    # Step 4: Cache PK field
+    if model._db_meta.pk_field is None:
+        for field_name, meta in model._db_meta.field_metadata.items():
+            if meta.primary_key:
+                model._db_meta.pk_field = field_name
+                model._db_meta.pk_column = meta.db_column
+                break
+
+    return True
+
+
+def finalize_pending() -> None:
+    """Finalize all pending models: FK resolve + metadata parse + PK cache.
+
+    Called from OxydeModelMeta.__new__ after Pydantic completes model creation.
+    Models that can't be finalized (forward refs not yet available) stay in
+    _PENDING_MODELS and are retried on next class definition.
+    """
+    for model in list(_PENDING_MODELS):
+        if _finalize_model(model):
+            _PENDING_MODELS.discard(model)
 
 
 def register_table(model: type[Model], *, overwrite: bool = False) -> None:
     """Register an ORM model that represents a database table.
 
-    Note: FK resolution is NOT done here because model_fields is not yet
-    populated when this is called from __init_subclass__. FK resolution
-    is triggered from ModelMeta.__new__ after Pydantic completes.
+    All table models are added to _PENDING_MODELS for finalization.
+    Finalization is triggered from OxydeModelMeta.__new__ after Pydantic completes.
     """
     key = _model_key(model)
     existing = _TABLES.get(key)
     if existing is model:
         return
-    if existing is not None and not overwrite:
-        raise ValueError(f"Table '{key}' is already registered")
+    if existing is not None:
+        if not overwrite:
+            raise ValueError(f"Table '{key}' is already registered")
+        _PENDING_MODELS.discard(existing)
     _TABLES[key] = model
-
-    # Add to pending if has FK fields (will be resolved later)
-    pending_fk = getattr(model, "__pending_fk_fields__", [])
-    if pending_fk:
-        _PENDING_FK_MODELS.add(model)
+    _PENDING_MODELS.add(model)
 
 
 def unregister_table(model: type[Model]) -> None:
     """Remove a model from the registry if present."""
     _TABLES.pop(_model_key(model), None)
+    _PENDING_MODELS.discard(model)
 
 
 def registered_tables() -> dict[str, type[Model]]:
     """Return a copy of the registered table mapping."""
-    tables = dict(_TABLES)
-    for model in tables.values():
-        if hasattr(model, "ensure_field_metadata"):
-            model.ensure_field_metadata()  # type: ignore[attr-defined]
-    return tables
+    return dict(_TABLES)
 
 
 def iter_tables() -> tuple[type[Model], ...]:
-    """Return tuple of registered table classes."""
-    tables = tuple(_TABLES.values())
-    for model in tables:
-        if hasattr(model, "ensure_field_metadata"):
-            model.ensure_field_metadata()  # type: ignore[attr-defined]
-    return tables
+    """Return tuple of registered model classes."""
+    return tuple(_TABLES.values())
 
 
 def clear_registry() -> None:
     """Reset the registry (intended for tests)."""
     _TABLES.clear()
-    _PENDING_FK_MODELS.clear()
+    _PENDING_MODELS.clear()
 
 
-def resolve_pending_fk() -> None:
-    """Resolve FK fields for all pending models.
+def assert_no_pending_models() -> None:
+    """Verify all models are finalized. Call at startup after all imports.
 
-    Called from ModelMeta.__new__ after Pydantic completes model creation.
-    At this point model_fields is populated and FK fields can be resolved.
+    Raises RuntimeError if any models are still pending finalization.
     """
-    _resolve_pending_fk_models()
+    if _PENDING_MODELS:
+        names = ", ".join(m.__name__ for m in _PENDING_MODELS)
+        raise RuntimeError(f"Models not finalized (unresolved forward refs?): {names}")
 
 
 __all__ = [
@@ -131,5 +165,6 @@ __all__ = [
     "registered_tables",
     "iter_tables",
     "clear_registry",
-    "resolve_pending_fk",
+    "finalize_pending",
+    "assert_no_pending_models",
 ]

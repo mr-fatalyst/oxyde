@@ -68,7 +68,6 @@ class JoiningMixin:
 
     def _column_for_field(self, field: str) -> str:
         """Get database column name for a field."""
-        self.model_class.ensure_field_metadata()
         meta = self.model_class._db_meta.field_metadata.get(field)
         if meta is not None:
             return meta.db_column
@@ -104,7 +103,6 @@ class JoiningMixin:
         prefix: list[str] = []
 
         for segment in segments:
-            current_model.ensure_field_metadata()
             column_meta = current_model._db_meta.field_metadata.get(segment)
             if column_meta is None or column_meta.foreign_key is None:
                 raise FieldLookupError(

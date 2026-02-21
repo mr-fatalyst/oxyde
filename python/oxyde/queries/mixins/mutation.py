@@ -150,11 +150,7 @@ class MutationMixin:
 
     def _primary_key_field(self) -> str | None:
         """Get primary key field name."""
-        self.model_class.ensure_field_metadata()
-        for field_name, meta in self.model_class._db_meta.field_metadata.items():
-            if meta.primary_key:
-                return field_name
-        return None
+        return self.model_class._db_meta.pk_field
 
     async def _run_mutation(
         self, query: Any, client: SupportsExecute
@@ -224,7 +220,6 @@ class MutationMixin:
         # Update instance from RETURNING * result
         if "rows" in result and result["rows"]:
             # Build db_column -> field_name mapping
-            self.model_class.ensure_field_metadata()
             col_to_field = {
                 meta.db_column: field_name
                 for field_name, meta in self.model_class._db_meta.field_metadata.items()

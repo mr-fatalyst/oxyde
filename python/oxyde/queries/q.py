@@ -124,7 +124,6 @@ class Q:
                 "Q expression with kwargs requires model_class to resolve fields"
             )
 
-        model_class.ensure_field_metadata()
         conditions: list[FilterNode] = []
 
         for key, value in self._kwargs.items():

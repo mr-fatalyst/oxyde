@@ -96,17 +96,15 @@ def _resolve_registered_model(model_key: str) -> type[Model]:
 
 
 def _primary_key_meta(model_class: type[Model]):
-    """Get primary key metadata from model."""
-    model_class.ensure_field_metadata()
-    for meta in model_class._db_meta.field_metadata.values():
-        if meta.primary_key:
-            return meta
+    """Get primary key metadata from model (uses cached pk_field)."""
+    pk = model_class._db_meta.pk_field
+    if pk is not None:
+        return model_class._db_meta.field_metadata[pk]
     raise FieldLookupError(f"{model_class.__name__} has no primary key field")
 
 
 def _build_col_types(model_class: type[Model]) -> dict[str, str] | None:
     """Get cached col_types mapping from model metadata."""
-    model_class.ensure_field_metadata()
     return model_class._db_meta.col_types
 
 
@@ -120,7 +118,6 @@ def _collect_model_columns(model_class: type[Model]) -> list[tuple[str, str]]:
     with synthetic FK columns (author_id: int) - we use the synthetic ones
     to avoid type conflicts during hydration.
     """
-    model_class.ensure_field_metadata()
     result = []
     for meta in model_class._db_meta.field_metadata.values():
         # Skip virtual relation fields (db_reverse_fk, db_m2m)
@@ -138,7 +135,6 @@ def _map_values_to_columns(
     values: dict[str, Any],
 ) -> dict[str, Any]:
     """Map field names to database column names."""
-    model_class.ensure_field_metadata()
     metadata = model_class._db_meta.field_metadata
     mapped: dict[str, Any] = {}
     for key, value in values.items():

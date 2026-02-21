@@ -224,9 +224,6 @@ def test_relation_descriptor_registers_metadata() -> None:
         class Meta:
             is_table = True
 
-    # Need to trigger metadata parsing
-    BlogPost.ensure_field_metadata()
-
     relations = BlogPost._db_meta.relations
     assert "comments" in relations
     info = relations["comments"]
@@ -849,9 +846,6 @@ def test_fk_filter_parses_nested_path() -> None:
         class Meta:
             is_table = True
 
-    # Ensure metadata is populated
-    Post.ensure_field_metadata()
-
     # Filter by FK traversal
     query = Post.objects.filter(author__age__gte=18)
     ir = query.to_ir()
@@ -889,8 +883,6 @@ def test_fk_filter_exact_lookup() -> None:
         class Meta:
             is_table = True
 
-    Article.ensure_field_metadata()
-
     query = Article.objects.filter(writer__name="Alice")
     ir = query.to_ir()
 
@@ -919,8 +911,6 @@ def test_fk_filter_string_lookups() -> None:
 
         class Meta:
             is_table = True
-
-    Comment.ensure_field_metadata()
 
     query = Comment.objects.filter(person__email__icontains="@gmail")
     ir = query.to_ir()
@@ -953,8 +943,6 @@ def test_fk_filter_in_q_expression() -> None:
 
         class Meta:
             is_table = True
-
-    Pet.ensure_field_metadata()
 
     # Q expression with FK traversal and OR
     query = Pet.objects.filter(
@@ -1000,8 +988,6 @@ def test_fk_filter_exclude() -> None:
         class Meta:
             is_table = True
 
-    Order.ensure_field_metadata()
-
     query = Order.objects.exclude(account__active=False)
     ir = query.to_ir()
 
@@ -1034,8 +1020,6 @@ def test_fk_filter_invalid_path_raises() -> None:
 
         class Meta:
             is_table = True
-
-    Product.ensure_field_metadata()
 
     # nonexistent field in FK chain
     with pytest.raises(FieldError):
@@ -1086,8 +1070,6 @@ def test_multi_level_fk_traversal() -> None:
         class Meta:
             is_table = True
 
-    Post.ensure_field_metadata()
-
     # 3-level traversal: post -> user -> profile -> country
     query = Post.objects.filter(user__profile__country__name="USA")
     ir = query.to_ir()
@@ -1133,8 +1115,6 @@ def test_q_multiple_fk_paths() -> None:
         class Meta:
             is_table = True
 
-    Article.ensure_field_metadata()
-
     # Two different FK traversals in one Q expression
     query = Article.objects.filter(
         Q(author__age__gte=18) & Q(editor__name__icontains="smith")
@@ -1171,8 +1151,6 @@ def test_fk_traversal_with_isnull() -> None:
 
         class Meta:
             is_table = True
-
-    Team.ensure_field_metadata()
 
     query = Team.objects.filter(manager__name__isnull=True)
     ir = query.to_ir()

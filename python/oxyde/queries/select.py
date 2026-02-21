@@ -205,9 +205,6 @@ class Query(
 
         table_name = self.model_class.get_table_name()
 
-        # Ensure FK fields are resolved before building IR
-        self.model_class.ensure_field_metadata()
-
         # Get fields to select (exclude virtual relation fields and FK model fields)
         if self._selected_fields is None:
             fields = []
@@ -261,13 +258,13 @@ class Query(
                 self._column_for_field(field) for field in self._group_by_fields
             ]
 
-        # Use cached col_types from model metadata (computed in ensure_field_metadata)
+        # Use cached col_types from model metadata (computed at finalization)
         col_types = self.model_class._db_meta.col_types
 
         # Pass pk_column only for JOIN queries (needed for deduplication)
         pk_column = None
         if self._join_specs:
-            pk_column = self.model_class._get_primary_key_field()
+            pk_column = self.model_class._db_meta.pk_column
 
         return ir.build_select_ir(
             table=table_name,

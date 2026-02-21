@@ -601,7 +601,6 @@ class ExecutionMixin:
         grouped: dict[Any, list[Model]] = {}
         if unique_ids:
             # Determine FK column: if remote_field is a virtual FK, use its db_column
-            target_model.ensure_field_metadata()
             fk_meta = target_model._db_meta.field_metadata.get(relation.remote_field)
             if fk_meta and fk_meta.foreign_key:
                 fk_column = fk_meta.db_column  # e.g., "post_id"
@@ -671,7 +670,6 @@ class ExecutionMixin:
                 f"Through model '{relation.through}' not found in registry"
             )
 
-        through_model.ensure_field_metadata()
         target_model = _resolve_registered_model(relation.target)
 
         # Find FK fields in through model

@@ -227,7 +227,6 @@ def _resolve_field_path(
 
     # Traverse all but the last field (those must be FK fields)
     for i, field_name in enumerate(field_path[:-1]):
-        current_model.ensure_field_metadata()
         meta = current_model._db_meta.field_metadata.get(field_name)
 
         if meta is None:
@@ -258,7 +257,6 @@ def _resolve_field_path(
 
 def _resolve_column_meta(model_class: type[Model], field_name: str) -> ColumnMeta:
     """Resolve column metadata for a field, creating basic metadata if needed."""
-    model_class.ensure_field_metadata()
     meta = model_class._db_meta.field_metadata.get(field_name)
     if meta is not None:
         return meta
