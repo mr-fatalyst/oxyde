@@ -488,13 +488,28 @@ class ExecutionMixin:
         related_cache: dict[tuple[str, Any], Model] = {}
 
         for model, row in zip(models, rows):
+            # Track resolved PKs per path so nested specs can find their FK
+            resolved_pks: dict[str, Any] = {}
+
             for spec in ordered_specs:
                 path = spec.path
                 rel_data = relations.get(path, {})
 
-                # Get FK value from main row
-                fk_col = spec.source_column  # e.g., "user_id"
-                pk_value = row.get(fk_col)
+                fk_col = spec.source_column  # e.g., "author_id" or "profile_id"
+
+                if spec.parent_path is None:
+                    # Direct join. FK is in the main row
+                    pk_value = row.get(fk_col)
+                else:
+                    # Nested join. FK is in the parent relation's data
+                    parent_pk = resolved_pks.get(spec.parent_path)
+                    if parent_pk is not None:
+                        parent_data = relations.get(spec.parent_path, {}).get(
+                            parent_pk, {}
+                        )
+                        pk_value = parent_data.get(fk_col)
+                    else:
+                        pk_value = None
 
                 if pk_value is None:
                     # Null FK - set relation to None
@@ -502,6 +517,9 @@ class ExecutionMixin:
                     if parent is not None:
                         setattr(parent, spec.attr_name, None)
                     continue
+
+                # Track for nested specs that need this level's PK
+                resolved_pks[path] = pk_value
 
                 cache_key = (path, pk_value)
 

@@ -792,6 +792,90 @@ class TestDedupHydration:
         # Check instance reuse - same author_id should be same instance
         assert articles[0].author is articles[1].author
 
+    @pytest.mark.asyncio
+    async def test_nested_dedup_hydration(self):
+        """Test that nested JOINs hydrate correctly in dedup format."""
+
+        class Profile(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            bio: str = ""
+
+            class Meta:
+                is_table = True
+
+        class Author(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+            profile: Profile | None = None
+
+            class Meta:
+                is_table = True
+
+        class Post(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            title: str = ""
+            author: Author | None = None
+
+            class Meta:
+                is_table = True
+
+        registered_tables()
+
+        class DedupStubClient:
+            """Stub that simulates execute_batched_dedup response."""
+
+            def __init__(self, dedup_result: dict):
+                self._result = dedup_result
+                self.calls: list = []
+
+            async def execute(self, ir: dict) -> bytes:
+                self.calls.append(ir)
+                return msgpack.packb([])
+
+            async def execute_batched_dedup(self, ir: dict) -> dict:
+                self.calls.append(ir)
+                return self._result
+
+        dedup_result = {
+            "main": [
+                {"id": 1, "title": "Post 1", "author_id": 10},
+                {"id": 2, "title": "Post 2", "author_id": 10},
+                {"id": 3, "title": "Post 3", "author_id": 20},
+            ],
+            "relations": {
+                "author": {
+                    10: {"id": 10, "name": "Alice", "profile_id": 100},
+                    20: {"id": 20, "name": "Bob", "profile_id": 200},
+                },
+                "author__profile": {
+                    100: {"id": 100, "bio": "Alice's bio"},
+                    200: {"id": 200, "bio": "Bob's bio"},
+                },
+            },
+        }
+
+        stub = DedupStubClient(dedup_result)
+        posts = await (
+            Post.objects.join("author").join("author__profile").fetch_models(stub)
+        )
+
+        assert len(posts) == 3
+
+        # First level: author hydrated correctly
+        assert posts[0].author is not None
+        assert posts[0].author.name == "Alice"
+        assert posts[2].author.name == "Bob"
+
+        # Second level: profile hydrated from author's data (NOT from Post row)
+        assert posts[0].author.profile is not None
+        assert posts[0].author.profile.bio == "Alice's bio"
+        assert posts[2].author.profile is not None
+        assert posts[2].author.profile.bio == "Bob's bio"
+
+        # Instance reuse across posts with same author
+        assert posts[0].author is posts[1].author
+        assert posts[0].author.profile is posts[1].author.profile
+
 
 class TestNestedJoinHydration:
     """Test nested JOIN hydration (multi-level)."""
