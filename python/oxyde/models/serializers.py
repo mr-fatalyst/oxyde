@@ -41,6 +41,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from oxyde.exceptions import ManagerError
+from oxyde.models.field import OxydeFieldInfo
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
@@ -52,8 +53,6 @@ def _get_virtual_fields(model_class: type[Model]) -> set[str]:
     These fields don't correspond to actual database columns and must be
     excluded from INSERT/UPDATE operations.
     """
-    from oxyde.models.field import OxydeFieldInfo
-
     virtual: set[str] = set()
     for field_name, field_info in model_class.model_fields.items():
         if isinstance(field_info, OxydeFieldInfo):

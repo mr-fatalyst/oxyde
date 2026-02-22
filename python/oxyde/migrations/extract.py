@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic.fields import PydanticUndefined
 
+from oxyde.models.base import Model
 from oxyde.models.registry import iter_tables, registered_tables
 
 
@@ -175,9 +176,6 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
             }
         }
     """
-    # Import here to avoid circular dependency
-    from oxyde.models.base import Model
-
     tables = {}
 
     for model_cls in iter_tables():

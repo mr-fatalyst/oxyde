@@ -6,6 +6,8 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
+from oxyde.migrations.context import MigrationContext
+
 
 class SchemaState:
     """Represents database schema in memory.
@@ -257,9 +259,6 @@ def replay_migrations(migrations_dir: str = "migrations") -> dict[str, Any]:
     Returns:
         Schema snapshot after replaying all migrations
     """
-    # Lazy import to avoid circular dependency
-    from oxyde.migrations.context import MigrationContext
-
     state = SchemaState()
     migration_files = sorted(Path(migrations_dir).glob("[0-9]*.py"))
 

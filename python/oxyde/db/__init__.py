@@ -57,7 +57,12 @@ from typing import Any
 
 from . import transaction
 from .pool import AsyncDatabase, PoolSettings
-from .registry import disconnect_all, get_connection, register_connection
+from .registry import (
+    disconnect_all,
+    get_connection,
+    register_connection,
+    unregister_connection,
+)
 from .transaction import (
     AsyncTransaction,
     TransactionTimeoutError,
@@ -147,8 +152,6 @@ async def connect(
         async with db.connect("sqlite://test.db") as conn:
             users = await User.objects.all()
     """
-    from .registry import unregister_connection
-
     database = AsyncDatabase(
         url,
         name=name,

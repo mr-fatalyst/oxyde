@@ -10,9 +10,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import msgpack
+from pydantic import TypeAdapter
 
 from oxyde.core import ir
 from oxyde.exceptions import FieldLookupError, MultipleObjectsReturned, NotFoundError
+from oxyde.models.registry import registered_tables
 from oxyde.queries.base import (
     _TYPE_ADAPTER_CACHE,
     _TYPE_ADAPTER_LOCK,
@@ -136,8 +138,6 @@ class ExecutionMixin:
             with _TYPE_ADAPTER_LOCK:
                 # Double-check after acquiring lock
                 if model_class not in _TYPE_ADAPTER_CACHE:
-                    from pydantic import TypeAdapter
-
                     _TYPE_ADAPTER_CACHE[model_class] = TypeAdapter(list[model_class])
 
         adapter = _TYPE_ADAPTER_CACHE[model_class]
@@ -649,8 +649,6 @@ class ExecutionMixin:
         relation_name: str,
     ) -> None:
         """Prefetch many-to-many relation."""
-        from oxyde.models.registry import registered_tables
-
         if not parents or not relation.through:
             return
 
