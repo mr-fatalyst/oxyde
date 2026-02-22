@@ -539,6 +539,35 @@ def test_join_ir_contains_join_spec() -> None:
     clear_registry()
 
 
+def test_union_ir_contains_union_query() -> None:
+    """Test that union() includes union_query."""
+    clear_registry()
+
+    class Item(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        status: str = ""
+
+        class Meta:
+            is_table = True
+
+    q1 = Item.objects.filter(status="active")
+    q2 = Item.objects.filter(status="premium")
+
+    # UNION (distinct)
+    ir = q1.union(q2).to_ir()
+    assert "union_query" in ir
+    assert ir["union_query"]["op"] == "select"
+    assert ir["union_query"]["table"] == "item"
+    assert ir.get("union_all") is None or ir["union_all"] is False
+
+    # UNION ALL
+    ir_all = q1.union_all(q2).to_ir()
+    assert "union_query" in ir_all
+    assert ir_all["union_all"] is True
+
+    clear_registry()
+
+
 def test_year_month_day_lookups() -> None:
     clear_registry()
 

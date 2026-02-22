@@ -141,6 +141,8 @@ def build_select_ir(
     count: bool | None = None,
     lock: str | None = None,
     pk_column: str | None = None,
+    union_query: dict[str, Any] | None = None,
+    union_all: bool | None = None,
 ) -> dict[str, Any]:
     """Build a SELECT query IR payload.
 
@@ -192,6 +194,10 @@ def build_select_ir(
         payload["lock"] = lock
     if pk_column is not None:
         payload["pk_column"] = pk_column
+    if union_query is not None:
+        payload["union_query"] = union_query
+    if union_all is not None:
+        payload["union_all"] = union_all
     return payload
 
 

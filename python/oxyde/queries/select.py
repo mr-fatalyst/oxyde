@@ -266,6 +266,11 @@ class Query(
         if self._join_specs:
             pk_column = self.model_class._db_meta.pk_column
 
+        # Build union IR recursively
+        union_ir = None
+        if self._union_query is not None:
+            union_ir = self._union_query.to_ir()
+
         return ir.build_select_ir(
             table=table_name,
             columns=fields,
@@ -283,6 +288,8 @@ class Query(
             aggregates=aggregates_ir,
             lock=self._lock_type,
             pk_column=pk_column,
+            union_query=union_ir,
+            union_all=self._union_all or None,
         )
 
 
