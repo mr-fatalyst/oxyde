@@ -58,6 +58,7 @@ from oxyde.db.registry import get_connection
 from oxyde.db.transaction import AsyncTransaction, get_active_transaction
 from oxyde.exceptions import FieldLookupError, ManagerError
 from oxyde.models.registry import registered_tables
+from oxyde.models.serializers import _get_virtual_fields
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
@@ -114,23 +115,15 @@ def _build_col_types(model_class: type[Model]) -> dict[str, str] | None:
 def _collect_model_columns(model_class: type[Model]) -> list[tuple[str, str]]:
     """Collect all (field_name, db_column) pairs from model.
 
-    Excludes virtual relation fields (db_reverse_fk, db_m2m) that don't
-    have corresponding database columns.
-
-    Also excludes virtual FK fields (author: User) since they share db_column
-    with synthetic FK columns (author_id: int) - we use the synthetic ones
-    to avoid type conflicts during hydration.
+    Excludes virtual fields (reverse FK, M2M, FK model fields) using
+    _get_virtual_fields() as the single source of truth.
     """
-    result = []
-    for meta in model_class._db_meta.field_metadata.values():
-        # Skip virtual relation fields (db_reverse_fk, db_m2m)
-        if meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
-            continue
-        # Skip virtual FK fields (author: User) - use synthetic author_id instead
-        if meta.foreign_key is not None:
-            continue
-        result.append((meta.name, meta.db_column))
-    return result
+    virtual = _get_virtual_fields(model_class)
+    return [
+        (meta.name, meta.db_column)
+        for meta in model_class._db_meta.field_metadata.values()
+        if meta.name not in virtual
+    ]
 
 
 def _map_values_to_columns(

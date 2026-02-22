@@ -41,25 +41,25 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from oxyde.exceptions import ManagerError
-from oxyde.models.field import OxydeFieldInfo
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
 
 
 def _get_virtual_fields(model_class: type[Model]) -> set[str]:
-    """Get field names that are virtual (db_reverse_fk, db_m2m).
+    """Get field names that are virtual and don't correspond to database columns.
 
-    These fields don't correspond to actual database columns and must be
-    excluded from INSERT/UPDATE operations.
+    Virtual fields include:
+    - db_reverse_fk: reverse FK relations (e.g., posts: list[Post])
+    - db_m2m: many-to-many relations (e.g., tags: list[Tag])
+    - FK model fields: (e.g., author: Author) — real column is author_id
     """
     virtual: set[str] = set()
-    for field_name, field_info in model_class.model_fields.items():
-        if isinstance(field_info, OxydeFieldInfo):
-            if getattr(field_info, "db_reverse_fk", None) or getattr(
-                field_info, "db_m2m", False
-            ):
-                virtual.add(field_name)
+    for name, meta in model_class._db_meta.field_metadata.items():
+        if meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
+            virtual.add(name)
+        elif meta.foreign_key is not None:
+            virtual.add(name)
     return virtual
 
 

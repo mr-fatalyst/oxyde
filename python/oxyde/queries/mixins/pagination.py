@@ -27,12 +27,16 @@ class PaginationMixin:
 
     def limit(self: TQuery, value: int) -> TQuery:
         """Set LIMIT."""
+        if value < 0:
+            raise ValueError(f"limit() requires a non-negative value, got {value}")
         clone = self._clone()
         clone._limit_value = value
         return clone
 
     def offset(self: TQuery, value: int) -> TQuery:
         """Set OFFSET."""
+        if value < 0:
+            raise ValueError(f"offset() requires a non-negative value, got {value}")
         clone = self._clone()
         clone._offset_value = value
         return clone

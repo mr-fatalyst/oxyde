@@ -557,6 +557,42 @@ class TestSelfReferentialRelations:
         assert field.db_reverse_fk == "parent_id"
 
 
+class TestFKSerialization:
+    """Test that FK model fields are excluded from INSERT/UPDATE serialization."""
+
+    def test_fk_model_field_excluded_from_insert(self):
+        """Author should not appear in INSERT data."""
+        from oxyde.models.serializers import _dump_insert_data
+
+        class Writer(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+
+            class Meta:
+                is_table = True
+
+        class Article(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            title: str = ""
+            writer: Writer | None = None
+
+            class Meta:
+                is_table = True
+
+        registered_tables()
+
+        writer = Writer(id=5, name="Alice")
+        article = Article(id=1, title="Test", writer=writer)
+
+        data = _dump_insert_data(article)
+
+        # writer (Model object → dict) must NOT be in serialized data
+        assert "writer" not in data
+        # writer_id (real FK column) must be present
+        assert data["writer_id"] == 5
+        assert data["title"] == "Test"
+
+
 class TestRelationValidation:
     """Test relation validation."""
 

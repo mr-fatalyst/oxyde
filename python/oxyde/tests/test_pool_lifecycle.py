@@ -185,7 +185,7 @@ class TestMsgpackEncoder:
         assert result == "2024-01-15T12:30:45"
 
     def test_encode_date(self):
-        """Test encoding date (was BUG-2)."""
+        """Test encoding date."""
         from datetime import date
 
         d = date(2024, 1, 15)
@@ -193,7 +193,7 @@ class TestMsgpackEncoder:
         assert result == "2024-01-15"
 
     def test_encode_uuid(self):
-        """Test encoding UUID (was BUG-2)."""
+        """Test encoding UUID."""
         from uuid import UUID
 
         u = UUID("12345678-1234-5678-1234-567812345678")
@@ -201,7 +201,7 @@ class TestMsgpackEncoder:
         assert result == "12345678-1234-5678-1234-567812345678"
 
     def test_encode_decimal(self):
-        """Test encoding Decimal (was BUG-2)."""
+        """Test encoding Decimal."""
         from decimal import Decimal
 
         d = Decimal("3.14")
