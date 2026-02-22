@@ -116,12 +116,16 @@ def _normalize_duration(value: float | int | timedelta | None) -> float | None:
     if value is None:
         return None
     if isinstance(value, timedelta):
-        return value.total_seconds()
-    if isinstance(value, (int, float)):
-        return float(value)
-    raise TypeError(
-        f"Duration value must be int, float, or timedelta, got {type(value).__name__}"
-    )
+        result = value.total_seconds()
+    elif isinstance(value, (int, float)):
+        result = float(value)
+    else:
+        raise TypeError(
+            f"Duration value must be int, float, or timedelta, got {type(value).__name__}"
+        )
+    if result < 0:
+        raise ValueError(f"Duration must be non-negative, got {result}")
+    return result
 
 
 def _validate_url_scheme(url: str) -> None:
