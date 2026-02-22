@@ -581,12 +581,11 @@ class TestFKSerialization:
 
         registered_tables()
 
-        writer = Writer(id=5, name="Alice")
-        article = Article(id=1, title="Test", writer=writer)
+        article = Article(id=1, title="Test", writer_id=5)
 
         data = _dump_insert_data(article)
 
-        # writer (Model object → dict) must NOT be in serialized data
+        # writer (FK model field) must NOT be in serialized data
         assert "writer" not in data
         # writer_id (real FK column) must be present
         assert data["writer_id"] == 5

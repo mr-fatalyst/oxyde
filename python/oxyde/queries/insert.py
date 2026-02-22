@@ -73,7 +73,7 @@ class InsertQuery:
         pk_column = self._get_pk_column()
         col_types = _build_col_types(self.model_class)
 
-        if self._bulk_values:
+        if self._bulk_values is not None:
             if not self._bulk_values:
                 raise ValueError("Bulk INSERT requires at least one row")
 
