@@ -56,6 +56,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from oxyde.core import ir
+from oxyde.models.utils import _unwrap_optional
 from oxyde.queries.base import TQuery, _model_key
 from oxyde.queries.joins import _JoinDescriptor
 from oxyde.queries.mixins import (
@@ -201,7 +202,6 @@ class Query(
     def to_ir(self) -> dict[str, Any]:
         """Convert query to IR format for Rust execution."""
         from oxyde.models.base import Model
-        from oxyde.models.utils import _unwrap_optional
 
         table_name = self.model_class.get_table_name()
 

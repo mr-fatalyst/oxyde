@@ -78,15 +78,18 @@ from typing import (
 
 from pydantic import BaseModel, ConfigDict
 from pydantic._internal._model_construction import ModelMetaclass
+from pydantic.errors import PydanticUndefinedAnnotation
 from pydantic.fields import FieldInfo, PydanticUndefined
 
 from oxyde.core import register_validator
+from oxyde.core.ir_types import get_ir_type
 
 if TYPE_CHECKING:
     from oxyde.queries.base import SupportsExecute
     from oxyde.queries.manager import QueryManager
 
 from oxyde.exceptions import FieldError, ManagerError, NotFoundError
+from oxyde.models.field import Field, OxydeFieldInfo
 from oxyde.models.metadata import (
     ColumnMeta,
     ForeignKeyInfo,
@@ -94,7 +97,7 @@ from oxyde.models.metadata import (
     RelationDescriptorBase,
     RelationInfo,
 )
-from oxyde.models.registry import register_table
+from oxyde.models.registry import finalize_pending, register_table
 from oxyde.models.serializers import _dump_update_data
 from oxyde.models.utils import _extract_max_length, _unpack_annotated, _unwrap_optional
 
@@ -111,8 +114,6 @@ def _get_pk_field_name(model_cls: type) -> str:
         return model_cls._db_meta.pk_field
 
     # Fallback: check model_fields directly for db_pk=True
-    from oxyde.models.field import OxydeFieldInfo
-
     if hasattr(model_cls, "model_fields"):
         for field_name, field_info in model_cls.model_fields.items():
             if isinstance(field_info, OxydeFieldInfo) and getattr(
@@ -128,9 +129,6 @@ class OxydeModelMeta(ModelMetaclass):
 
     def __new__(mcs, name: str, bases: tuple, namespace: dict, **kwargs: Any):
         """Create new Model class with auto-configured relation fields."""
-        # Import here to avoid circular dependency
-        from oxyde.models.field import OxydeFieldInfo
-
         # Track FK fields that need column generation (resolved lazily)
         pending_fk_fields: list[tuple[str, Any, FieldInfo | None]] = []
 
@@ -175,8 +173,6 @@ class OxydeModelMeta(ModelMetaclass):
 
         # Finalize all pending models AFTER Pydantic completes
         # (model_fields is now populated). Resolves FKs, parses metadata, caches PK.
-        from oxyde.models.registry import finalize_pending
-
         finalize_pending()
 
         return cls
@@ -286,8 +282,6 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
     @classmethod
     def _compute_col_types(cls) -> None:
         """Compute IR type hints from field metadata (cached in _db_meta.col_types)."""
-        from oxyde.core.ir_types import get_ir_type
-
         if cls._db_meta.col_types is not None:
             return  # Already computed
 
@@ -317,7 +311,6 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         if not pending_fk:
             return
 
-        from oxyde.models.field import Field, OxydeFieldInfo
         from oxyde.queries.manager import QueryManager
         from oxyde.queries.select import Query
 
@@ -420,8 +413,6 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
 
         # Rebuild model to include new fields
         # May fail if other forward refs are not yet resolvable
-        from pydantic.errors import PydanticUndefinedAnnotation
-
         try:
             cls.model_rebuild(force=True)
         except PydanticUndefinedAnnotation:
@@ -466,8 +457,6 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             python_type, optional_flag = _unwrap_optional(base_hint)
 
             # Extract db_* attributes from OxydeFieldInfo (or use defaults)
-            from oxyde.models.field import OxydeFieldInfo
-
             def get_db_attr(
                 field: FieldInfo, attr_name: str, default: Any = None
             ) -> Any:
