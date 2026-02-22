@@ -53,6 +53,9 @@ from typing import (
 
 from pydantic import TypeAdapter
 
+from oxyde.db.pool import AsyncDatabase
+from oxyde.db.registry import get_connection
+from oxyde.db.transaction import AsyncTransaction, get_active_transaction
 from oxyde.exceptions import FieldLookupError, ManagerError
 from oxyde.models.registry import registered_tables
 
@@ -153,8 +156,6 @@ async def _resolve_execution_client(
         raise ManagerError("Provide either 'client' or 'using', not both")
     if client is not None:
         return client
-    from oxyde.db.registry import get_connection
-    from oxyde.db.transaction import get_active_transaction
 
     alias = using or "default"
     active_tx = get_active_transaction(alias)
@@ -185,9 +186,6 @@ def _resolve_pool_name(
 
     if client is not None:
         # Try to get pool name from client
-        from oxyde.db.pool import AsyncDatabase
-        from oxyde.db.transaction import AsyncTransaction
-
         if isinstance(client, AsyncDatabase):
             return client.name
         elif isinstance(client, AsyncTransaction):

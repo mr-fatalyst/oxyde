@@ -61,6 +61,7 @@ from typing import Any
 import msgpack
 
 from oxyde.core.types import serialize_value
+from oxyde.db.registry import register_connection
 
 try:
     from oxyde.core import close_all_pools, close_pool
@@ -237,8 +238,6 @@ class AsyncDatabase:
         self._overwrite = overwrite
 
         if auto_register:
-            from oxyde.db.registry import register_connection
-
             register_connection(self, overwrite=overwrite)
 
     @property

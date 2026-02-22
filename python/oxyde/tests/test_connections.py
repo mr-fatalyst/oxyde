@@ -65,6 +65,7 @@ async def test_register_and_retrieve_connection(
     monkeypatch.setattr(_pool_module, "_init_pool_overwrite", stub.init_pool)
     monkeypatch.setattr(_pool_module, "close_pool", stub.close_pool)
     monkeypatch.setattr(_pool_module, "close_all_pools", stub.close_all_pools)
+    monkeypatch.setattr(_reg_module, "close_all_pools", stub.close_all_pools)
     monkeypatch.setattr(_pool_module, "_execute", stub.execute)
     monkeypatch.setattr(
         _tx_module, "_execute_in_transaction", stub.execute_in_transaction
@@ -117,6 +118,7 @@ async def test_transaction_context(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_pool_module, "_init_pool_overwrite", stub.init_pool)
     monkeypatch.setattr(_pool_module, "close_pool", stub.close_pool)
     monkeypatch.setattr(_pool_module, "close_all_pools", stub.close_all_pools)
+    monkeypatch.setattr(_reg_module, "close_all_pools", stub.close_all_pools)
     monkeypatch.setattr(_pool_module, "_execute", stub.execute)
     monkeypatch.setattr(
         _tx_module, "_execute_in_transaction", stub.execute_in_transaction
@@ -172,6 +174,7 @@ async def test_transaction_timeout_rolls_back(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(_pool_module, "_init_pool_overwrite", stub.init_pool)
     monkeypatch.setattr(_pool_module, "close_pool", stub.close_pool)
     monkeypatch.setattr(_pool_module, "close_all_pools", stub.close_all_pools)
+    monkeypatch.setattr(_reg_module, "close_all_pools", stub.close_all_pools)
     monkeypatch.setattr(_pool_module, "_execute", stub.execute)
     monkeypatch.setattr(
         _tx_module, "_execute_in_transaction", slow_execute_in_transaction

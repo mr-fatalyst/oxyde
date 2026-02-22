@@ -507,6 +507,7 @@ class TestConnectionRegistry:
         monkeypatch.setattr("oxyde.db.pool._init_pool", mock_init_pool)
         monkeypatch.setattr("oxyde.db.pool._init_pool_overwrite", mock_init_pool)
         monkeypatch.setattr("oxyde.db.pool.close_all_pools", mock_close_all_pools)
+        monkeypatch.setattr("oxyde.db.registry.close_all_pools", mock_close_all_pools)
 
         db1 = AsyncDatabase(url="sqlite:///test1.db", name="db1")
         db2 = AsyncDatabase(url="sqlite:///test2.db", name="db2")

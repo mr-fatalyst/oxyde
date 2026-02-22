@@ -66,10 +66,11 @@ from oxyde.core.types import TYPE_REGISTRY
 from oxyde.exceptions import FieldError, FieldLookupError, FieldLookupValueError
 from oxyde.models.metadata import ColumnMeta
 from oxyde.models.utils import _unpack_annotated, _unwrap_optional
+from oxyde.queries.base import _resolve_registered_model
+from oxyde.queries.conditions import Condition
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
-    from oxyde.queries.conditions import Condition
 
 
 # Lookup constants
@@ -215,8 +216,6 @@ def _resolve_field_path(
         FieldError: If field doesn't exist
         FieldLookupError: If path traverses non-FK field
     """
-    from oxyde.queries.base import _resolve_registered_model
-
     joins: list[tuple[str, type[Model]]] = []
     current_model = model_class
 
@@ -280,9 +279,6 @@ def _build_lookup_conditions(
     column_meta: ColumnMeta,
 ) -> list[Condition]:
     """Build query conditions for a given field lookup."""
-    # Import locally to avoid circular dependency
-    from oxyde.queries.conditions import Condition
-
     lookup = lookup or "exact"
     db_column = column_meta.db_column
 
@@ -394,8 +390,6 @@ def _build_year_conditions(
     field_name: str, value: Any, meta: ColumnMeta
 ) -> list[Condition]:
     """Build conditions for year lookup."""
-    from oxyde.queries.conditions import Condition
-
     (year,) = _ensure_date_inputs(value, 1, "year")
     if isinstance(meta.python_type, type) and issubclass(meta.python_type, datetime):
         start = datetime(year, 1, 1)
@@ -417,8 +411,6 @@ def _build_month_conditions(
     field_name: str, value: Any, meta: ColumnMeta
 ) -> list[Condition]:
     """Build conditions for month lookup."""
-    from oxyde.queries.conditions import Condition
-
     year, month = _ensure_date_inputs(value, 2, "month")
     if not 1 <= month <= 12:
         raise FieldLookupValueError("Lookup 'month' requires month in range 1..12")
@@ -452,8 +444,6 @@ def _build_day_conditions(
     field_name: str, value: Any, meta: ColumnMeta
 ) -> list[Condition]:
     """Build conditions for day lookup."""
-    from oxyde.queries.conditions import Condition
-
     year, month, day = _ensure_date_inputs(value, 3, "day")
     try:
         if isinstance(meta.python_type, type) and issubclass(

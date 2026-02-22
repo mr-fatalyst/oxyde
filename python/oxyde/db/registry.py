@@ -45,6 +45,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from oxyde.core import close_all_pools
+
 if TYPE_CHECKING:
     from oxyde.db.pool import AsyncDatabase
 
@@ -92,8 +94,6 @@ async def get_connection(
 
 async def disconnect_all() -> None:
     """Disconnect all registered pools and clear the registry."""
-    from oxyde.db.pool import close_all_pools
-
     # Mark all Python-side connections as disconnected
     for db in _CONNECTIONS.values():
         db._connected = False
