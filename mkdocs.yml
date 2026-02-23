@@ -82,6 +82,7 @@ nav:
     - Internals (Rust Core): advanced/internals.md
   - Cheatsheet: cheatsheet.md
   - FAQ: faq.md
+  - Changelog: changelog.md
 
 extra:
   version:

@@ -39,13 +39,17 @@ dev = [
     "ruff>=0.14.7",
     "pre-commit>=4.5.0",
 ]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5",
+]
 
 [project.scripts]
 oxyde = "oxyde.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/mr-fatalyst/oxyde"
-Documentation = "https://github.com/mr-fatalyst/oxyde#readme"
+Documentation = "https://oxyde.fatalyst.dev/"
 Repository = "https://github.com/mr-fatalyst/oxyde"
 Issues = "https://github.com/mr-fatalyst/oxyde/issues"
 
