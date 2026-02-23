@@ -80,10 +80,10 @@ def makemigrations(
             typer.echo(f"   ✅ Replayed {migration_count} migration(s)")
         except Exception as e:
             typer.secho(
-                f"   ⚠️  Error replaying migrations: {e}", fg=typer.colors.YELLOW
+                f"   ❌ Error replaying migrations: {e}", fg=typer.colors.RED
             )
-            typer.echo("   Using empty schema as baseline")
-            old_schema = {"version": 1, "tables": {}}
+            typer.echo("   Fix the broken migration(s) before running makemigrations.")
+            raise typer.Exit(1)
 
     # Step 3: Compute diff
     typer.echo()
@@ -296,7 +296,7 @@ def migrate(
 
     try:
         result = asyncio.run(run_migrate())
-        if result is None:
+        if result is None or result[0] is None:
             raise typer.Exit(1)
 
         action, migrations = result
