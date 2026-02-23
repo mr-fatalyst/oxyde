@@ -79,9 +79,7 @@ def makemigrations(
             migration_count = len(list(migrations_path.glob("[0-9]*.py")))
             typer.echo(f"   ✅ Replayed {migration_count} migration(s)")
         except Exception as e:
-            typer.secho(
-                f"   ❌ Error replaying migrations: {e}", fg=typer.colors.RED
-            )
+            typer.secho(f"   ❌ Error replaying migrations: {e}", fg=typer.colors.RED)
             typer.echo("   Fix the broken migration(s) before running makemigrations.")
             raise typer.Exit(1)
 
