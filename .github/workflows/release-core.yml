@@ -94,6 +94,27 @@ jobs:
           sccache: 'true'
           manylinux: ${{ matrix.platform.manylinux }}
 
+      - name: Set up Python 3.13t (macOS/Windows)
+        if: runner.os != 'Linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13t'
+
+      - name: Set up Python 3.14t (macOS/Windows)
+        if: runner.os != 'Linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14t'
+
+      - name: Build free-threaded wheels (macOS/Windows)
+        if: runner.os != 'Linux'
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist -m crates/oxyde-core-py/Cargo.toml -i 3.13t 3.14t
+          sccache: 'true'
+          manylinux: ${{ matrix.platform.manylinux }}
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:

@@ -1545,7 +1545,7 @@ fn migration_to_sql(operations_json: &str, dialect: &str) -> PyResult<Vec<String
 // ============================================================================
 
 /// Python module definition
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn _oxyde_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__abi_version__", ABI_VERSION)?;
 
