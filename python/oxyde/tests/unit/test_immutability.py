@@ -5,15 +5,6 @@ from __future__ import annotations
 import pytest
 
 from oxyde import Field, Model
-from oxyde.models.registry import clear_registry
-
-
-@pytest.fixture(autouse=True)
-def cleanup_registry():
-    """Clean up registry before and after each test."""
-    clear_registry()
-    yield
-    clear_registry()
 
 
 class TestModel(Model):

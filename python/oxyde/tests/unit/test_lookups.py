@@ -16,7 +16,7 @@ from oxyde.models.lookups import (
     _resolve_column_meta,
     _split_lookup_key,
 )
-from oxyde.models.registry import clear_registry, registered_tables
+from oxyde.models.registry import registered_tables
 
 
 def get_filter_condition(ir: dict[str, Any]) -> dict[str, Any]:
@@ -29,14 +29,6 @@ def get_filter_condition(ir: dict[str, Any]) -> dict[str, Any]:
         return tree
     # AND with conditions - return first
     raise ValueError(f"Expected single condition, got {tree.get('type')}")
-
-
-@pytest.fixture(autouse=True)
-def cleanup_registry():
-    """Clean up registry before and after each test."""
-    clear_registry()
-    yield
-    clear_registry()
 
 
 class TestModel(Model):

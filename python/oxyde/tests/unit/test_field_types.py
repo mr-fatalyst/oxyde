@@ -10,15 +10,7 @@ import pytest
 
 from oxyde import Field, Model
 from oxyde.models.field import OxydeFieldInfo
-from oxyde.models.registry import clear_registry, registered_tables
-
-
-@pytest.fixture(autouse=True)
-def cleanup_registry():
-    """Clean up registry before and after each test."""
-    clear_registry()
-    yield
-    clear_registry()
+from oxyde.models.registry import registered_tables
 
 
 class TestOxydeFieldInfoInit:

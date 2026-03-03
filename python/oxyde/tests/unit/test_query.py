@@ -20,21 +20,7 @@ from oxyde.exceptions import (
 )
 from oxyde.models.registry import clear_registry, registered_tables
 from oxyde.queries import F
-
-
-class StubExecuteClient:
-    def __init__(self, payloads: list[Any]):
-        self.payloads = list(payloads)
-        self.calls: list[dict[str, Any]] = []
-
-    async def execute(self, ir: dict[str, Any]) -> bytes:
-        self.calls.append(ir)
-        if not self.payloads:
-            raise RuntimeError("stub payloads exhausted")
-        payload = self.payloads.pop(0)
-        if isinstance(payload, bytes):
-            return payload
-        return msgpack.packb(payload)
+from oxyde.tests.helpers import StubExecuteClient
 
 
 @pytest.fixture

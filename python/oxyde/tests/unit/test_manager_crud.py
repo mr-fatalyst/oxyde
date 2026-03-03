@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-import msgpack
 import pytest
 
 from oxyde import Field, Model
@@ -14,32 +11,7 @@ from oxyde.exceptions import (
     MultipleObjectsReturned,
     NotFoundError,
 )
-from oxyde.models.registry import clear_registry
-
-
-@pytest.fixture(autouse=True)
-def cleanup_registry():
-    """Clean up registry before and after each test."""
-    clear_registry()
-    yield
-    clear_registry()
-
-
-class StubExecuteClient:
-    """Stub client for testing - returns msgpack encoded data."""
-
-    def __init__(self, payloads: list):
-        self.payloads = list(payloads)
-        self.calls: list[dict[str, Any]] = []
-
-    async def execute(self, ir: dict[str, Any]) -> bytes:
-        self.calls.append(ir)
-        if not self.payloads:
-            raise RuntimeError("stub payloads exhausted")
-        payload = self.payloads.pop(0)
-        if isinstance(payload, bytes):
-            return payload
-        return msgpack.packb(payload)
+from oxyde.tests.helpers import StubExecuteClient
 
 
 class TestModel(Model):

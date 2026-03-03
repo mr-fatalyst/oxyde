@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from oxyde import Field, Model
-from oxyde.models.registry import clear_registry, registered_tables
+from oxyde.models.registry import registered_tables
 from oxyde.queries import F
 from oxyde.queries.expressions import (
     _coerce_expression,
@@ -13,14 +13,6 @@ from oxyde.queries.expressions import (
     _serialize_value_for_ir,
 )
 from oxyde.queries.q import Q
-
-
-@pytest.fixture(autouse=True)
-def cleanup_registry():
-    """Clean up registry before and after each test."""
-    clear_registry()
-    yield
-    clear_registry()
 
 
 class TestModel(Model):

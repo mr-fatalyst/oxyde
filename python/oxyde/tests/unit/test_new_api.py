@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from oxyde import Avg, Coalesce, Concat, Count, Max, Min, Model, Q, RawSQL, Sum
+from oxyde.models.registry import register_table
 
 
 class SampleModel(Model):
@@ -19,6 +20,12 @@ class SampleModel(Model):
     class Meta:
         is_table = True
         table_name = "sample_model"
+
+
+@pytest.fixture(autouse=True)
+def _register_models():
+    """Re-register module-level models after cleanup_registry clears them."""
+    register_table(SampleModel, overwrite=True)
 
 
 def test_q_expressions():
