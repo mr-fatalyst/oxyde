@@ -1,5 +1,6 @@
 //! Transaction management
 
+pub(crate) mod api;
 pub(crate) mod inner;
 pub(crate) mod registry;
 

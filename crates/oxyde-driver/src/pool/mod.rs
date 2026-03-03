@@ -1,7 +1,8 @@
 //! Connection pool management
 
+pub mod api;
 pub mod handle;
-pub mod registry;
+pub(crate) mod registry;
 
 pub use handle::{DatabaseBackend, DbPool, PoolHandle};
 pub(crate) use registry::ConnectionRegistry;

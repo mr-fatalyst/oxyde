@@ -15,9 +15,9 @@ pub(crate) enum DbConn {
 macro_rules! with_conn {
     ($conn:expr, |$c:ident| $body:expr) => {
         match $conn {
-            DbConn::Postgres($c) => $body,
-            DbConn::MySql($c) => $body,
-            DbConn::Sqlite($c) => $body,
+            $crate::transaction::DbConn::Postgres($c) => $body,
+            $crate::transaction::DbConn::MySql($c) => $body,
+            $crate::transaction::DbConn::Sqlite($c) => $body,
         }
     };
 }
