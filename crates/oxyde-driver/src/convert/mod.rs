@@ -43,5 +43,4 @@ pub use pyo3_convert::{
     sqlite_rows_to_pylist,
 };
 
-/// Columnar result type alias for consistency across backends
-pub type ColumnarResult = (Vec<String>, Vec<Vec<serde_json::Value>>);
+pub use oxyde_codec::ColumnarResult;

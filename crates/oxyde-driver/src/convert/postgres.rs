@@ -245,8 +245,7 @@ fn fallback_string_pg(row: &PgRow, idx: usize) -> serde_json::Value {
     }
 }
 
-/// Columnar result: (column_names, rows_as_value_arrays)
-pub type ColumnarResult = (Vec<String>, Vec<Vec<serde_json::Value>>);
+use super::ColumnarResult;
 
 /// Convert PostgreSQL rows to columnar format.
 /// Returns (column_names, rows) where each row is Vec<Value> in column order.

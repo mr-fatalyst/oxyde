@@ -3,8 +3,10 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use rust_decimal::Decimal;
 
-use crate::error::{DriverError, Result};
+use crate::error::Result;
 use sea_query::Value;
+
+use super::common::unsupported_param;
 
 pub type MySqlQuery<'q> = sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>;
 
@@ -63,42 +65,8 @@ pub fn bind_mysql_value<'q>(query: MySqlQuery<'q>, value: &'q Value) -> Result<M
         // Decimal
         Value::Decimal(Some(d)) => query.bind(**d),
         Value::Decimal(None) => query.bind(Option::<Decimal>::None),
-        // Array (serialized as JSON string, MySQL doesn't support native arrays)
-        Value::Array(_, Some(arr)) => {
-            let json = array_to_json(arr.as_ref())?;
-            query.bind(json)
-        }
-        Value::Array(_, None) => query.bind(Option::<String>::None),
         #[allow(unreachable_patterns)]
         other => return Err(unsupported_param("MySQL", other)),
     };
     Ok(query)
-}
-
-fn unsupported_param(db: &str, value: &Value) -> DriverError {
-    DriverError::ExecutionError(format!(
-        "Unsupported parameter type for {}: {:?}",
-        db, value
-    ))
-}
-
-/// Convert sea_query array to JSON string
-fn array_to_json(values: &[Value]) -> Result<String> {
-    let json_values: Vec<serde_json::Value> = values
-        .iter()
-        .map(|v| match v {
-            Value::Bool(Some(b)) => serde_json::Value::Bool(*b),
-            Value::Int(Some(i)) => serde_json::Value::Number((*i).into()),
-            Value::BigInt(Some(i)) => serde_json::Value::Number((*i).into()),
-            Value::Double(Some(d)) => serde_json::Number::from_f64(*d)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null),
-            Value::String(Some(s)) => serde_json::Value::String(s.as_ref().clone()),
-            Value::Uuid(Some(u)) => serde_json::Value::String(u.to_string()),
-            _ => serde_json::Value::Null,
-        })
-        .collect();
-
-    serde_json::to_string(&json_values)
-        .map_err(|e| DriverError::ExecutionError(format!("Failed to serialize array: {}", e)))
 }

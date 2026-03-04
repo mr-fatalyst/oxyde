@@ -220,8 +220,7 @@ fn fallback_string_mysql(row: &MySqlRow, idx: usize) -> serde_json::Value {
     }
 }
 
-/// Columnar result: (column_names, rows_as_value_arrays)
-pub type ColumnarResult = (Vec<String>, Vec<Vec<serde_json::Value>>);
+use super::ColumnarResult;
 
 /// Convert MySQL rows to columnar format.
 /// Returns (column_names, rows) where each row is Vec<Value> in column order.

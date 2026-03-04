@@ -194,12 +194,7 @@ fn fallback_string_sqlite(row: &SqliteRow, idx: usize) -> serde_json::Value {
     }
 }
 
-/// Columnar result: (column_names, rows_as_value_arrays)
-/// This format is more memory-efficient than Vec<HashMap> because:
-/// 1. Column names are stored once, not repeated per row
-/// 2. No HashMap overhead per row (~48 bytes per entry)
-/// 3. Smaller msgpack serialization (no repeated keys)
-pub type ColumnarResult = (Vec<String>, Vec<Vec<serde_json::Value>>);
+use super::ColumnarResult;
 
 /// Convert SQLite rows to columnar format.
 /// Returns (column_names, rows) where each row is Vec<Value> in column order.

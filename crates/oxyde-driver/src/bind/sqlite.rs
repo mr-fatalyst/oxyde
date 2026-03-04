@@ -2,8 +2,10 @@
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
-use crate::error::{DriverError, Result};
+use crate::error::Result;
 use sea_query::Value;
+
+use super::common::{cast_u64_to_i64, unsupported_param};
 
 // Note: SQLite stores UUID, JSON, Decimal as TEXT
 // rust_decimal and uuid crates are not needed here since we serialize to string
@@ -65,52 +67,8 @@ pub fn bind_sqlite_value<'q>(query: SqliteQuery<'q>, value: &'q Value) -> Result
         // Decimal (stored as TEXT in SQLite for precision)
         Value::Decimal(Some(d)) => query.bind(d.to_string()),
         Value::Decimal(None) => query.bind(Option::<String>::None),
-        // Array (serialized as JSON TEXT in SQLite)
-        Value::Array(_, Some(arr)) => {
-            let json = array_to_json(arr.as_ref())?;
-            query.bind(json)
-        }
-        Value::Array(_, None) => query.bind(Option::<String>::None),
         #[allow(unreachable_patterns)]
         other => return Err(unsupported_param("SQLite", other)),
     };
     Ok(query)
-}
-
-fn cast_u64_to_i64(value: u64, db: &str) -> Result<i64> {
-    if value > i64::MAX as u64 {
-        return Err(DriverError::ExecutionError(format!(
-            "Parameter out of range for {}: {}",
-            db, value
-        )));
-    }
-    Ok(value as i64)
-}
-
-fn unsupported_param(db: &str, value: &Value) -> DriverError {
-    DriverError::ExecutionError(format!(
-        "Unsupported parameter type for {}: {:?}",
-        db, value
-    ))
-}
-
-/// Convert sea_query array to JSON string
-fn array_to_json(values: &[Value]) -> Result<String> {
-    let json_values: Vec<serde_json::Value> = values
-        .iter()
-        .map(|v| match v {
-            Value::Bool(Some(b)) => serde_json::Value::Bool(*b),
-            Value::Int(Some(i)) => serde_json::Value::Number((*i).into()),
-            Value::BigInt(Some(i)) => serde_json::Value::Number((*i).into()),
-            Value::Double(Some(d)) => serde_json::Number::from_f64(*d)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null),
-            Value::String(Some(s)) => serde_json::Value::String(s.as_ref().clone()),
-            Value::Uuid(Some(u)) => serde_json::Value::String(u.to_string()),
-            _ => serde_json::Value::Null,
-        })
-        .collect();
-
-    serde_json::to_string(&json_values)
-        .map_err(|e| DriverError::ExecutionError(format!("Failed to serialize array: {}", e)))
 }
