@@ -8,10 +8,11 @@ use sea_query::Value;
 use std::collections::HashMap;
 
 use crate::bind::{bind_mysql, bind_postgres, bind_sqlite};
-use crate::convert::{
-    convert_mysql_rows_columnar, convert_mysql_rows_typed, convert_pg_rows_columnar,
-    convert_pg_rows_typed, convert_sqlite_rows_columnar, convert_sqlite_rows_typed, ColumnarResult,
-};
+use crate::convert::encoder::{encode_mutation_returning, encode_rows_columnar};
+use crate::convert::mysql_enc::MySqlEncoder;
+use crate::convert::postgres_enc::PgEncoder;
+use crate::convert::sqlite_enc::SqliteEncoder;
+use crate::convert::{convert_mysql_rows_typed, convert_pg_rows_typed, convert_sqlite_rows_typed};
 use crate::error::{DriverError, Result};
 use crate::pool::DbPool;
 use crate::transaction::DbConn;
@@ -37,13 +38,21 @@ pub trait PoolExec {
         col_types: Option<&HashMap<String, String>>,
     ) -> Result<Vec<HashMap<String, serde_json::Value>>>;
 
-    /// Execute a SELECT query and return columnar format
+    /// Execute a SELECT query and return pre-encoded msgpack bytes + row count.
     async fn query_columnar(
         &self,
         sql: &str,
         params: &[Value],
         col_types: Option<&HashMap<String, String>>,
-    ) -> Result<ColumnarResult>;
+    ) -> Result<(Vec<u8>, usize)>;
+
+    /// Execute a mutation with RETURNING clause, return pre-encoded msgpack map.
+    async fn query_mutation_returning(
+        &self,
+        sql: &str,
+        params: &[Value],
+        col_types: Option<&HashMap<String, String>>,
+    ) -> Result<Vec<u8>>;
 
     /// Execute a statement (INSERT/UPDATE/DELETE) and return affected rows
     async fn execute(&self, sql: &str, params: &[Value]) -> Result<u64>;
@@ -64,13 +73,21 @@ pub trait ConnExec {
         col_types: Option<&HashMap<String, String>>,
     ) -> Result<Vec<HashMap<String, serde_json::Value>>>;
 
-    /// Execute a SELECT query and return columnar format
+    /// Execute a SELECT query and return pre-encoded msgpack bytes + row count.
     async fn query_columnar(
         &mut self,
         sql: &str,
         params: &[Value],
         col_types: Option<&HashMap<String, String>>,
-    ) -> Result<ColumnarResult>;
+    ) -> Result<(Vec<u8>, usize)>;
+
+    /// Execute a mutation with RETURNING clause, return pre-encoded msgpack map.
+    async fn query_mutation_returning(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+        col_types: Option<&HashMap<String, String>>,
+    ) -> Result<Vec<u8>>;
 
     /// Execute a statement and return affected rows
     async fn execute(&mut self, sql: &str, params: &[Value]) -> Result<u64>;
@@ -112,22 +129,47 @@ impl PoolExec for DbPool {
         sql: &str,
         params: &[Value],
         col_types: Option<&HashMap<String, String>>,
-    ) -> Result<ColumnarResult> {
+    ) -> Result<(Vec<u8>, usize)> {
         match self {
             DbPool::Postgres(pool) => {
                 let query = bind_postgres(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(pool).await.map_err(exec_err)?;
-                Ok(convert_pg_rows_columnar(rows, col_types))
+                Ok(encode_rows_columnar::<PgEncoder>(&rows, col_types))
             }
             DbPool::MySql(pool) => {
                 let query = bind_mysql(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(pool).await.map_err(exec_err)?;
-                Ok(convert_mysql_rows_columnar(rows, col_types))
+                Ok(encode_rows_columnar::<MySqlEncoder>(&rows, col_types))
             }
             DbPool::Sqlite(pool) => {
                 let query = bind_sqlite(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(pool).await.map_err(exec_err)?;
-                Ok(convert_sqlite_rows_columnar(rows, col_types))
+                Ok(encode_rows_columnar::<SqliteEncoder>(&rows, col_types))
+            }
+        }
+    }
+
+    async fn query_mutation_returning(
+        &self,
+        sql: &str,
+        params: &[Value],
+        col_types: Option<&HashMap<String, String>>,
+    ) -> Result<Vec<u8>> {
+        match self {
+            DbPool::Postgres(pool) => {
+                let query = bind_postgres(sqlx::query(sql), params)?;
+                let rows = query.fetch_all(pool).await.map_err(exec_err)?;
+                Ok(encode_mutation_returning::<PgEncoder>(&rows, col_types))
+            }
+            DbPool::MySql(pool) => {
+                let query = bind_mysql(sqlx::query(sql), params)?;
+                let rows = query.fetch_all(pool).await.map_err(exec_err)?;
+                Ok(encode_mutation_returning::<MySqlEncoder>(&rows, col_types))
+            }
+            DbPool::Sqlite(pool) => {
+                let query = bind_sqlite(sqlx::query(sql), params)?;
+                let rows = query.fetch_all(pool).await.map_err(exec_err)?;
+                Ok(encode_mutation_returning::<SqliteEncoder>(&rows, col_types))
             }
         }
     }
@@ -197,22 +239,47 @@ impl ConnExec for DbConn {
         sql: &str,
         params: &[Value],
         col_types: Option<&HashMap<String, String>>,
-    ) -> Result<ColumnarResult> {
+    ) -> Result<(Vec<u8>, usize)> {
         match self {
             DbConn::Postgres(conn) => {
                 let query = bind_postgres(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_pg_rows_columnar(rows, col_types))
+                Ok(encode_rows_columnar::<PgEncoder>(&rows, col_types))
             }
             DbConn::MySql(conn) => {
                 let query = bind_mysql(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_mysql_rows_columnar(rows, col_types))
+                Ok(encode_rows_columnar::<MySqlEncoder>(&rows, col_types))
             }
             DbConn::Sqlite(conn) => {
                 let query = bind_sqlite(sqlx::query(sql), params)?;
                 let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
-                Ok(convert_sqlite_rows_columnar(rows, col_types))
+                Ok(encode_rows_columnar::<SqliteEncoder>(&rows, col_types))
+            }
+        }
+    }
+
+    async fn query_mutation_returning(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+        col_types: Option<&HashMap<String, String>>,
+    ) -> Result<Vec<u8>> {
+        match self {
+            DbConn::Postgres(conn) => {
+                let query = bind_postgres(sqlx::query(sql), params)?;
+                let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
+                Ok(encode_mutation_returning::<PgEncoder>(&rows, col_types))
+            }
+            DbConn::MySql(conn) => {
+                let query = bind_mysql(sqlx::query(sql), params)?;
+                let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
+                Ok(encode_mutation_returning::<MySqlEncoder>(&rows, col_types))
+            }
+            DbConn::Sqlite(conn) => {
+                let query = bind_sqlite(sqlx::query(sql), params)?;
+                let rows = query.fetch_all(conn.as_mut()).await.map_err(exec_err)?;
+                Ok(encode_mutation_returning::<SqliteEncoder>(&rows, col_types))
             }
         }
     }

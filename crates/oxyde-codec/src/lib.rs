@@ -432,20 +432,6 @@ impl QueryIR {
     }
 }
 
-/// Columnar result format: (column_names, rows_as_arrays)
-/// More memory-efficient than Vec<HashMap>:
-/// - Column names stored once, not per row
-/// - No HashMap overhead (~48 bytes per entry)
-/// - ~30% smaller msgpack serialization
-pub type ColumnarResult = (Vec<String>, Vec<Vec<serde_json::Value>>);
-
-/// Serialize columnar results to MessagePack
-/// Format: [columns, rows] where rows is array of arrays
-pub fn serialize_columnar_results(result: ColumnarResult) -> Result<Vec<u8>> {
-    rmp_serde::to_vec(&result)
-        .map_err(|e| CodecError::SerializationError(format!("Failed to serialize: {}", e)))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

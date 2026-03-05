@@ -1,46 +1,25 @@
-//! Type conversion utilities for database rows
+//! Type conversion utilities for database rows.
 //!
-//! Each module provides batch conversion with pre-computed column metadata:
-//! - `convert_*_rows(Vec<Row>)` - batch convert with cached column names/types
-//! - `convert_*_rows_typed(Vec<Row>, Option<col_types>)` - type-aware batch convert
-//! - `convert_*_rows_columnar(Vec<Row>, Option<col_types>)` - memory-efficient columnar format
+//! ## Encoder modules (new — direct msgpack)
 //!
-//! When `col_types` (from Python IR) is provided, uses type hints for decoding
-//! instead of calling expensive `type_info()` per column.
+//! `encoder` defines the `CellEncoder` trait and generic columnar encoding.
+//! `postgres_enc`, `mysql_enc`, `sqlite_enc` implement it per backend.
+//! These write directly to `Vec<u8>` msgpack buffers, no intermediate serde_json.
 //!
-//! This avoids repeated `Column::name()` and `Column::type_info()` calls per cell.
+//! ## Legacy modules (serde_json path)
 //!
-//! ## Columnar Format
-//!
-//! The columnar format `(Vec<String>, Vec<Vec<Value>>)` is more memory-efficient:
-//! - Column names stored once, not repeated per row
-//! - No HashMap overhead (~48 bytes per entry saved)
-//! - Smaller msgpack serialization (no repeated keys)
+//! `postgres`, `mysql`, `sqlite` convert rows to `HashMap<String, serde_json::Value>`.
+//! Still used by the non-columnar `query()` method in traits (driver tests, etc).
 
 pub mod mysql;
 pub mod postgres;
 pub mod sqlite;
 
-#[cfg(feature = "pyo3")]
-pub mod pyo3_convert;
+pub mod encoder;
+pub mod mysql_enc;
+pub mod postgres_enc;
+pub mod sqlite_enc;
 
-pub use mysql::{convert_mysql_rows_columnar, convert_mysql_rows_typed};
-pub use postgres::{convert_pg_rows, convert_pg_rows_columnar, convert_pg_rows_typed};
-pub use sqlite::{convert_sqlite_rows, convert_sqlite_rows_columnar, convert_sqlite_rows_typed};
-
-/// Column metadata for batched conversion
-#[derive(Debug, Clone)]
-pub struct StreamingColumnMeta {
-    pub name: String,
-    pub db_type: String,
-    pub ir_type: Option<String>,
-}
-
-#[cfg(feature = "pyo3")]
-pub use pyo3_convert::{
-    decode_mysql_cell_to_py, decode_pg_cell_to_py, decode_sqlite_cell_to_py, extract_mysql_columns,
-    extract_pg_columns, extract_sqlite_columns, mysql_rows_to_pylist, pg_rows_to_pylist,
-    sqlite_rows_to_pylist,
-};
-
-pub use oxyde_codec::ColumnarResult;
+pub use mysql::convert_mysql_rows_typed;
+pub use postgres::{convert_pg_rows, convert_pg_rows_typed};
+pub use sqlite::{convert_sqlite_rows, convert_sqlite_rows_typed};

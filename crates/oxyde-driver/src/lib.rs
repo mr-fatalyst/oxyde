@@ -154,8 +154,9 @@ pub use transaction::api::{
 
 // Query / statement execution
 pub use execute::query::{
-    execute_query, execute_query_columnar, execute_query_columnar_in_transaction,
-    execute_query_in_transaction, execute_statement, execute_statement_in_transaction,
+    execute_mutation_returning, execute_mutation_returning_in_transaction, execute_query,
+    execute_query_columnar, execute_query_columnar_in_transaction, execute_query_in_transaction,
+    execute_statement, execute_statement_in_transaction,
 };
 
 // INSERT RETURNING
@@ -163,18 +164,6 @@ pub use execute::insert::{execute_insert_returning, execute_insert_returning_in_
 
 // EXPLAIN
 pub use explain::explain_query;
-
-// PyO3 direct conversion (when feature enabled)
-#[cfg(feature = "pyo3")]
-pub use convert::{
-    decode_mysql_cell_to_py, decode_pg_cell_to_py, decode_sqlite_cell_to_py, extract_mysql_columns,
-    extract_pg_columns, extract_sqlite_columns, mysql_rows_to_pylist, pg_rows_to_pylist,
-    sqlite_rows_to_pylist, StreamingColumnMeta,
-};
-
-// Bind functions (public when pyo3 feature enabled for direct conversion)
-#[cfg(feature = "pyo3")]
-pub use bind::{bind_mysql, bind_postgres, bind_sqlite};
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 

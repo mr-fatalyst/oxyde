@@ -3,10 +3,11 @@
 use std::time::Instant;
 
 use crate::convert::{backend_to_dialect, json_to_py, value_to_py, values_to_py};
-use crate::types::{InsertResult, MutationResult, MutationWithReturningResult};
+use crate::types::{InsertResult, MutationResult};
 use oxyde_codec::QueryIR;
 use oxyde_driver::{
-    execute_insert_returning, execute_insert_returning_in_transaction, execute_query_columnar,
+    execute_insert_returning, execute_insert_returning_in_transaction, execute_mutation_returning,
+    execute_mutation_returning_in_transaction, execute_query_columnar,
     execute_query_columnar_in_transaction, execute_statement, execute_statement_in_transaction,
     explain_query, pool_backend as driver_pool_backend, ExplainFormat, ExplainOptions,
 };
@@ -54,25 +55,18 @@ pub(crate) fn execute<'py>(
 
         let results = match ir.op {
             oxyde_codec::Operation::Select | oxyde_codec::Operation::Raw => {
-                // Always use columnar format for memory efficiency
                 let exec_start = Instant::now();
-                let (columns, rows) =
+                let (result, num_rows) =
                     execute_query_columnar(&pool_name, &sql, &params, ir.col_types.as_ref())
                         .await
                         .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
                 let exec_us = exec_start.elapsed().as_micros();
-                let num_rows = rows.len();
-
-                let serialize_start = Instant::now();
-                let result = oxyde_codec::serialize_columnar_results((columns, rows))
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
-                let serialize_us = serialize_start.elapsed().as_micros();
 
                 if profile {
                     let total_us = total_start.elapsed().as_micros();
                     eprintln!(
-                        "[OXYDE_PROFILE] SELECT columnar ({} rows): exec={} µs, serialize={} µs, total={} µs, bytes={}",
-                        num_rows, exec_us, serialize_us, total_us, result.len()
+                        "[OXYDE_PROFILE] SELECT columnar ({} rows): exec={} µs, total={} µs, bytes={}",
+                        num_rows, exec_us, total_us, result.len()
                     );
                 }
                 result
@@ -81,17 +75,9 @@ pub(crate) fn execute<'py>(
                 // Single insert with RETURNING * (ir.returning=true) returns full rows
                 // Bulk insert returns only PKs for efficiency
                 if ir.returning.unwrap_or(false) {
-                    // Single insert: use RETURNING * and return full row data
-                    let (columns, rows) = execute_query_columnar(&pool_name, &sql, &params, None)
+                    execute_mutation_returning(&pool_name, &sql, &params, None)
                         .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
-
-                    rmp_serde::to_vec_named(&MutationWithReturningResult {
-                        affected: rows.len(),
-                        columns,
-                        rows,
-                    })
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
                     // Bulk insert: return only PKs
                     let pk_column = ir.pk_column.as_deref();
@@ -113,28 +99,19 @@ pub(crate) fn execute<'py>(
                     "UPDATE"
                 };
 
-                // If RETURNING clause is requested, use columnar format
+                // If RETURNING clause is requested, use mutation returning format
                 if ir.returning.unwrap_or(false) {
                     let exec_start = Instant::now();
-                    let (columns, rows) = execute_query_columnar(&pool_name, &sql, &params, None)
+                    let result = execute_mutation_returning(&pool_name, &sql, &params, None)
                         .await
                         .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
                     let exec_us = exec_start.elapsed().as_micros();
 
-                    let serialize_start = Instant::now();
-                    let result = rmp_serde::to_vec_named(&MutationWithReturningResult {
-                        affected: rows.len(),
-                        columns,
-                        rows,
-                    })
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
-                    let serialize_us = serialize_start.elapsed().as_micros();
-
                     if profile {
                         let total_us = total_start.elapsed().as_micros();
                         eprintln!(
-                            "[OXYDE_PROFILE] {} RETURNING: exec={} µs, serialize={} µs, total={} µs",
-                            op_name, exec_us, serialize_us, total_us
+                            "[OXYDE_PROFILE] {} RETURNING: exec={} µs, total={} µs",
+                            op_name, exec_us, total_us
                         );
                     }
                     result
@@ -192,8 +169,7 @@ pub(crate) fn execute_in_transaction<'py>(
 
         let results = match ir.op {
             oxyde_codec::Operation::Select | oxyde_codec::Operation::Raw => {
-                // Always use columnar format
-                let (columns, rows) = execute_query_columnar_in_transaction(
+                let (result, _num_rows) = execute_query_columnar_in_transaction(
                     tx_id,
                     &sql,
                     &params,
@@ -201,25 +177,13 @@ pub(crate) fn execute_in_transaction<'py>(
                 )
                 .await
                 .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
-
-                oxyde_codec::serialize_columnar_results((columns, rows))
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                result
             }
             oxyde_codec::Operation::Insert => {
-                // Single insert with RETURNING * returns full rows
-                // Bulk insert returns only PKs for efficiency
                 if ir.returning.unwrap_or(false) {
-                    let (columns, rows) =
-                        execute_query_columnar_in_transaction(tx_id, &sql, &params, None)
-                            .await
-                            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
-
-                    rmp_serde::to_vec_named(&MutationWithReturningResult {
-                        affected: rows.len(),
-                        columns,
-                        rows,
-                    })
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    execute_mutation_returning_in_transaction(tx_id, &sql, &params, None)
+                        .await
+                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
                     let pk_column = ir.pk_column.as_deref();
                     let ids =
@@ -235,19 +199,10 @@ pub(crate) fn execute_in_transaction<'py>(
                 }
             }
             oxyde_codec::Operation::Update | oxyde_codec::Operation::Delete => {
-                // If RETURNING clause is requested, use columnar format
                 if ir.returning.unwrap_or(false) {
-                    let (columns, rows) =
-                        execute_query_columnar_in_transaction(tx_id, &sql, &params, None)
-                            .await
-                            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
-
-                    rmp_serde::to_vec_named(&MutationWithReturningResult {
-                        affected: rows.len(),
-                        columns,
-                        rows,
-                    })
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    execute_mutation_returning_in_transaction(tx_id, &sql, &params, None)
+                        .await
+                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
                     let affected = execute_statement_in_transaction(tx_id, &sql, &params)
                         .await

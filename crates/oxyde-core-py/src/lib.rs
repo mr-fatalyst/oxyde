@@ -73,7 +73,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod convert;
-mod direct;
 mod execute;
 mod migration;
 mod pool;
@@ -94,10 +93,6 @@ fn _oxyde_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pool::close_pool, m)?)?;
     m.add_function(wrap_pyfunction!(pool::close_all_pools, m)?)?;
     m.add_function(wrap_pyfunction!(execute::execute, m)?)?;
-    m.add_function(wrap_pyfunction!(direct::execute_to_pylist, m)?)?;
-    m.add_function(wrap_pyfunction!(direct::execute_select_direct, m)?)?;
-    m.add_function(wrap_pyfunction!(direct::execute_select_batched, m)?)?;
-    m.add_function(wrap_pyfunction!(direct::execute_select_batched_dedup, m)?)?;
     m.add_function(wrap_pyfunction!(pool::begin_transaction, m)?)?;
     m.add_function(wrap_pyfunction!(pool::commit_transaction, m)?)?;
     m.add_function(wrap_pyfunction!(pool::rollback_transaction, m)?)?;

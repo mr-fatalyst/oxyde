@@ -24,6 +24,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 rust_decimal = { version = "1", features = ["serde"] }
 base64 = "0.21"
+rmp = "0.8"
 oxyde-codec = { path = "../oxyde-codec" }
 
 [dev-dependencies]
