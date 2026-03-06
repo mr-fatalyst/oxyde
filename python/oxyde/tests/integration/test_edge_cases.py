@@ -68,15 +68,6 @@ class TestLargeBatch:
 
 
 class TestUnion:
-    @pytest.mark.skip(
-        reason=(
-            "ORDER BY on union queries is applied to the first sub-query "
-            "instead of wrapping the entire UNION. SQLite error: "
-            "'ORDER BY clause should come after UNION not before'. "
-            "Fix: Rust SQL generation (oxyde-query) should place ORDER BY "
-            "after the combined UNION statement, not inside the first SELECT."
-        )
-    )
     @pytest.mark.asyncio
     async def test_union(self, db):
         """UNION removes duplicates."""
@@ -88,12 +79,6 @@ class TestUnion:
         # Union of {1,2} and {1,2,3,5} = {1,2,3,5}
         assert ids == [1, 2, 3, 5]
 
-    @pytest.mark.skip(
-        reason=(
-            "Same ORDER BY placement issue as test_union. "
-            "ORDER BY is attached to first SELECT instead of outer UNION ALL."
-        )
-    )
     @pytest.mark.asyncio
     async def test_union_all(self, db):
         """UNION ALL keeps duplicates."""

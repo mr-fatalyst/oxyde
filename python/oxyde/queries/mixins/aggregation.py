@@ -7,12 +7,22 @@ from typing import TYPE_CHECKING, Any
 import msgpack
 
 from oxyde.core import ir
+from oxyde.models.lookups import ALL_LOOKUPS
 from oxyde.queries.aggregates import Avg, Max, Min, Sum
 from oxyde.queries.base import SupportsExecute, TQuery, _resolve_execution_client
 from oxyde.queries.q import Q
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
+
+# Lookup → SQL operator mapping for annotation fields in HAVING
+_HAVING_LOOKUP_OPS: dict[str, str] = {
+    "exact": "=",
+    "gt": ">",
+    "gte": ">=",
+    "lt": "<",
+    "lte": "<=",
+}
 
 
 class AggregationMixin:
@@ -76,12 +86,16 @@ class AggregationMixin:
         """
         Add HAVING clause for filtering grouped results.
 
+        Supports both annotation aliases and model fields:
+            .having(total__gt=100)   # 'total' from annotate(total=Sum(...))
+            .having(Q(total__gt=100) | Q(total__lt=10))
+
         Args:
             *q_exprs: Q expressions
             **kwargs: Field lookups
 
         Examples:
-            User.objects.group_by("status").having(count__gte=10)
+            Post.objects.annotate(total=Sum("views")).group_by("author_id").having(total__gt=100)
         """
         clone = self._clone()
         conditions_to_add: list[ir.FilterNode] = []
@@ -93,10 +107,32 @@ class AggregationMixin:
                     conditions_to_add.append(node)
 
         if kwargs:
-            q_from_kwargs = Q(**kwargs)
-            node = q_from_kwargs.to_filter_node(self.model_class)
-            if node:
-                conditions_to_add.append(node)
+            annotation_kwargs = {}
+            model_kwargs = {}
+            for key, value in kwargs.items():
+                field_name, _ = _split_having_key(key)
+                if field_name in self._annotations:
+                    annotation_kwargs[key] = value
+                else:
+                    model_kwargs[key] = value
+
+            for key, value in annotation_kwargs.items():
+                field_name, lookup = _split_having_key(key)
+                operator = _HAVING_LOOKUP_OPS.get(lookup)
+                if operator is None:
+                    raise ValueError(
+                        f"Unsupported lookup '{lookup}' for annotation "
+                        f"'{field_name}' in having(). "
+                        f"Supported: {', '.join(sorted(_HAVING_LOOKUP_OPS))}"
+                    )
+                conditions_to_add.append(
+                    ir.filter_condition(field_name, operator, value)
+                )
+
+            if model_kwargs:
+                node = Q(**model_kwargs).to_filter_node(self.model_class)
+                if node:
+                    conditions_to_add.append(node)
 
         if conditions_to_add:
             if clone._having:
@@ -239,3 +275,18 @@ class AggregationMixin:
     ):
         """Get minimum field value."""
         return await self._aggregate(Min, field, "_min", using=using, client=client)
+
+
+def _split_having_key(key: str) -> tuple[str, str]:
+    """Split a having kwarg key into (field_name, lookup).
+
+    Examples:
+        "total__gt" -> ("total", "gt")
+        "total"     -> ("total", "exact")
+    """
+    if "__" not in key:
+        return key, "exact"
+    parts = key.rsplit("__", 1)
+    if parts[1] in ALL_LOOKUPS:
+        return parts[0], parts[1]
+    return key, "exact"

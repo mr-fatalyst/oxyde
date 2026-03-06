@@ -61,6 +61,7 @@ class ExecutionMixin:
     _limit_value: int | None
     _offset_value: int | None
     _order_by_fields: list[tuple[str, str]]
+    _group_by_fields: list[str]
 
     def _clone(self: TQuery) -> TQuery:
         """Must be implemented by the main Query class."""
@@ -149,6 +150,13 @@ class ExecutionMixin:
 
         JOIN relations use Rust-side dedup encoding (3-element msgpack array).
         """
+        if self._group_by_fields:
+            raise TypeError(
+                "group_by() returns partial rows that cannot be hydrated "
+                "into model instances. Use .values() or .fetch_all() instead. "
+                "Example: .group_by('field').values().all()"
+            )
+
         # Get or create cached TypeAdapter (thread-safe)
         model_class = self.model_class
         if model_class not in _TYPE_ADAPTER_CACHE:

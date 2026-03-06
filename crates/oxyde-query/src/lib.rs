@@ -411,4 +411,74 @@ mod tests {
             sql
         );
     }
+
+    #[test]
+    fn test_union_order_by_after_union() {
+        let union_ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into(), "title".into()]),
+            filter_tree: Some(filter_cond("published", "=", rmpv_int(1))),
+            ..Default::default()
+        };
+        let ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into(), "title".into()]),
+            filter_tree: Some(filter_cond("author_id", "=", rmpv_int(1))),
+            union_query: Some(Box::new(union_ir)),
+            order_by: Some(vec![("id".into(), "ASC".into())]),
+            ..Default::default()
+        };
+
+        for dialect in [Dialect::Sqlite, Dialect::Postgres, Dialect::Mysql] {
+            let (sql, _) = build_sql(&ir, dialect).unwrap();
+            let union_pos = sql.find("UNION").expect("should contain UNION");
+            let order_pos = sql.find("ORDER BY").expect("should contain ORDER BY");
+            assert!(
+                order_pos > union_pos,
+                "{dialect:?}: ORDER BY should come after UNION.\nSQL: {sql}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_union_all_generates_correct_sql() {
+        let union_ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_cond("id", "=", rmpv_int(3))),
+            ..Default::default()
+        };
+        let ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_cond("id", "=", rmpv_int(1))),
+            union_query: Some(Box::new(union_ir)),
+            union_all: Some(true),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Sqlite).unwrap();
+        assert!(sql.contains("UNION ALL"), "should contain UNION ALL: {sql}");
+        assert_eq!(params.len(), 2, "should have 2 params: {params:?}");
+    }
+
+    #[test]
+    fn test_union_with_postgres_placeholders() {
+        let union_ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_cond("status", "=", rmpv_str("draft"))),
+            ..Default::default()
+        };
+        let ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_cond("status", "=", rmpv_str("active"))),
+            union_query: Some(Box::new(union_ir)),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("$1"), "should have $1: {sql}");
+        assert!(sql.contains("$2"), "should have $2: {sql}");
+        assert_eq!(params.len(), 2);
+    }
 }

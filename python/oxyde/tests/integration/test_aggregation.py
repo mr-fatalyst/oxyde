@@ -36,37 +36,30 @@ class TestAggregateShortcuts:
 
 
 class TestAnnotateGroupBy:
-    @pytest.mark.skip(
-        reason=(
-            "annotate().group_by().all() tries to hydrate partial rows "
-            "into full Pydantic models. GROUP BY returns only grouped "
-            "columns + aggregates (e.g. {author_id, n}), but Post "
-            "requires 'title'. Fix: either support .values() with "
-            "group_by, or teach fetch_models to handle partial rows."
-        )
-    )
     @pytest.mark.asyncio
     async def test_count_group_by(self, db):
-        """Count posts per author."""
+        """Count posts per author using values() + group_by."""
         rows = await (
             Post.objects.annotate(n=Count("id"))
             .group_by("author_id")
             .order_by("author_id")
+            .values("author_id", "n")
             .all(client=db)
         )
         assert len(rows) == 3
-        counts = [r.n for r in rows]
+        counts = [r["n"] for r in rows]
         assert counts == [2, 2, 2]  # Alice=2, Bob=2, Charlie=2
 
-    @pytest.mark.skip(
-        reason=(
-            "having() uses the same field resolution as filter(), so it "
-            "only recognizes real model fields. Annotation aliases like "
-            "'total' from annotate(total=Sum(...)) are not resolvable — "
-            "raises FieldError. Fix: teach having() to check "
-            "_annotations dict before falling back to model fields."
-        )
-    )
+    @pytest.mark.asyncio
+    async def test_group_by_without_values_raises(self, db):
+        """group_by().all() without values() raises TypeError."""
+        with pytest.raises(TypeError, match="group_by.*values"):
+            await (
+                Post.objects.annotate(n=Count("id"))
+                .group_by("author_id")
+                .all(client=db)
+            )
+
     @pytest.mark.asyncio
     async def test_having(self, db):
         """Group by author_id, keep only those with sum views > 100."""
@@ -74,6 +67,7 @@ class TestAnnotateGroupBy:
             Post.objects.annotate(total=Sum("views"))
             .group_by("author_id")
             .having(total__gt=100)
+            .values("author_id", "total")
             .all(client=db)
         )
         # Alice: 120+35=155, Bob: 80+0=80, Charlie: 200+0=200

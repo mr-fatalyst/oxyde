@@ -3,17 +3,18 @@
 use oxyde_codec::{JoinSpec, LockType as OxydeLockType, QueryIR};
 use sea_query::{
     Alias, Asterisk, ColumnRef, Expr, Func, LockType as SeaLockType, MysqlQueryBuilder, Order,
-    PostgresQueryBuilder, Query, SeaRc, SqliteQueryBuilder, UnionType, Value,
+    PostgresQueryBuilder, Query, SeaRc, SelectStatement, SqliteQueryBuilder, UnionType, Value,
 };
 
 use crate::aggregate::build_aggregate;
 use crate::error::Result;
 use crate::filter::build_filter_node;
-use crate::utils::{renumber_postgres_placeholders, ColumnIdent, TableIdent};
+use crate::utils::{ColumnIdent, TableIdent};
 use crate::Dialect;
 
-/// Build SELECT query from QueryIR
-pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value>)> {
+/// Build a `SelectStatement` from QueryIR (without serializing to string).
+/// Used recursively for UNION sub-queries.
+fn build_select_statement(ir: &QueryIR) -> Result<SelectStatement> {
     let table = TableIdent(ir.table.clone());
     let mut query = Query::select();
     query.from(table.clone());
@@ -24,7 +25,6 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
 
     // Add aggregates or columns
     if let Some(aggregates) = &ir.aggregates {
-        // Add all aggregate expressions
         for agg in aggregates {
             let agg_expr = build_aggregate(agg)?;
             if let Some(alias) = &agg.alias {
@@ -33,7 +33,6 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                 query.expr(agg_expr);
             }
         }
-        // If GROUP BY is present, also add grouped columns
         if let Some(group_by) = &ir.group_by {
             for field in group_by {
                 let column_ref = ColumnRef::TableColumn(
@@ -61,20 +60,17 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         query.column(Asterisk);
     }
 
-    // Determine default table for filter qualification (needed for JOINs to avoid ambiguity)
     let default_table = if ir.joins.is_some() {
         Some(ir.table.as_str())
     } else {
         None
     };
 
-    // Add filters
     if let Some(filter_tree) = &ir.filter_tree {
         let expr = build_filter_node(filter_tree, default_table)?;
         query.and_where(expr);
     }
 
-    // Add GROUP BY (with table qualification for JOINs to avoid ambiguity)
     if let Some(group_by) = &ir.group_by {
         for field in group_by {
             let col_expr = if ir.joins.is_some() {
@@ -89,13 +85,27 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         }
     }
 
-    // Add HAVING
     if let Some(having) = &ir.having {
         let expr = build_filter_node(having, default_table)?;
         query.and_having(expr);
     }
 
-    // Add order by (with table qualification for JOINs to avoid ambiguity)
+    if let Some(joins) = &ir.joins {
+        apply_select_joins(&mut query, joins, &table)?;
+    }
+
+    // UNION via sea-query (recursive)
+    if let Some(union_query_ir) = &ir.union_query {
+        let union_stmt = build_select_statement(union_query_ir)?;
+        let union_type = if ir.union_all.unwrap_or(false) {
+            UnionType::All
+        } else {
+            UnionType::Distinct
+        };
+        query.union(union_type, union_stmt);
+    }
+
+    // ORDER BY, LIMIT, OFFSET — placed after UNION by sea-query
     if let Some(order_by) = &ir.order_by {
         for (field, direction) in order_by {
             let order = match direction.to_uppercase().as_str() {
@@ -115,21 +125,14 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         }
     }
 
-    // Add limit
     if let Some(limit) = ir.limit {
         query.limit(limit as u64);
     }
 
-    // Add offset
     if let Some(offset) = ir.offset {
         query.offset(offset as u64);
     }
 
-    if let Some(joins) = &ir.joins {
-        apply_select_joins(&mut query, joins, &table)?;
-    }
-
-    // Add FOR UPDATE / FOR SHARE
     if let Some(lock_type) = &ir.lock {
         match lock_type {
             OxydeLockType::Update => query.lock(SeaLockType::Update),
@@ -137,100 +140,54 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         };
     }
 
-    // Handle UNION
-    if let Some(union_query_ir) = &ir.union_query {
-        let (union_sql, union_values) = crate::build_sql(union_query_ir, dialect)?;
-        let union_type = if ir.union_all.unwrap_or(false) {
-            UnionType::All
-        } else {
-            UnionType::Distinct
-        };
+    Ok(query)
+}
 
-        // Build the UNION manually since sea_query's union support is limited
-        let (base_sql, base_values) = match dialect {
-            Dialect::Postgres => query.build(PostgresQueryBuilder),
-            Dialect::Sqlite => query.build(SqliteQueryBuilder),
-            Dialect::Mysql => query.build(MysqlQueryBuilder),
-        };
-
-        // Renumber placeholders in union query for PostgreSQL
-        // PostgreSQL uses $1, $2, $3... so we need to offset the union query placeholders
-        let union_sql_renumbered = match dialect {
-            Dialect::Postgres => renumber_postgres_placeholders(&union_sql, base_values.0.len()),
-            _ => union_sql, // MySQL and SQLite use ? placeholders, no renumbering needed
-        };
-
-        // Construct UNION manually since sea_query's union support is limited
-        let union_keyword = match union_type {
-            UnionType::All => "UNION ALL",
-            UnionType::Distinct => "UNION",
-            UnionType::Intersect => "INTERSECT",
-            UnionType::Except => "EXCEPT",
-        };
-        let combined_sql = format!("{} {} {}", base_sql, union_keyword, union_sql_renumbered);
-        let mut combined_values = base_values.0;
-        combined_values.extend(union_values);
-
-        // Handle EXISTS wrapping if needed
-        if ir.exists.unwrap_or(false) {
-            let exists_sql = format!("SELECT EXISTS({})", combined_sql);
-            return Ok((exists_sql, combined_values));
-        }
-
-        return Ok((combined_sql, combined_values));
-    }
-
-    // Handle COUNT(*) - short path
-    if ir.count.unwrap_or(false) {
-        // Build minimal query: SELECT COUNT(*) FROM table WHERE ...
-        let mut count_query = Query::select();
-        count_query.from(table.clone());
-        count_query.expr_as(Func::count(Expr::col(Asterisk)), Alias::new("_count"));
-
-        // Determine default table for filter qualification (needed for JOINs)
-        let count_default_table = if ir.joins.is_some() {
-            Some(ir.table.as_str())
-        } else {
-            None
-        };
-
-        // Add filters
-        if let Some(filter_tree) = &ir.filter_tree {
-            let expr = build_filter_node(filter_tree, count_default_table)?;
-            count_query.and_where(expr);
-        }
-
-        // Add joins if needed for filtering (without columns - only JOIN clause)
-        if let Some(joins) = &ir.joins {
-            apply_joins_only(&mut count_query, joins, &table)?;
-        }
-
-        let (sql, values) = match dialect {
-            Dialect::Postgres => count_query.build(PostgresQueryBuilder),
-            Dialect::Sqlite => count_query.build(SqliteQueryBuilder),
-            Dialect::Mysql => count_query.build(MysqlQueryBuilder),
-        };
-        return Ok((sql, values.0));
-    }
-
-    // Handle EXISTS wrapping
-    if ir.exists.unwrap_or(false) {
-        let (base_sql, base_values) = match dialect {
-            Dialect::Postgres => query.build(PostgresQueryBuilder),
-            Dialect::Sqlite => query.build(SqliteQueryBuilder),
-            Dialect::Mysql => query.build(MysqlQueryBuilder),
-        };
-        let exists_sql = format!("SELECT EXISTS({})", base_sql);
-        return Ok((exists_sql, base_values.0));
-    }
-
+/// Helper to build SQL string from a `SelectStatement` for the given dialect.
+fn build_query_string(query: SelectStatement, dialect: Dialect) -> (String, Vec<Value>) {
     let (sql, values) = match dialect {
         Dialect::Postgres => query.build(PostgresQueryBuilder),
         Dialect::Sqlite => query.build(SqliteQueryBuilder),
         Dialect::Mysql => query.build(MysqlQueryBuilder),
     };
+    (sql, values.0)
+}
 
-    Ok((sql, values.0))
+/// Build SELECT query from QueryIR
+pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value>)> {
+    // COUNT(*) — separate minimal query
+    if ir.count.unwrap_or(false) {
+        let table = TableIdent(ir.table.clone());
+        let mut count_query = Query::select();
+        count_query.from(table.clone());
+        count_query.expr_as(Func::count(Expr::col(Asterisk)), Alias::new("_count"));
+
+        let default_table = if ir.joins.is_some() {
+            Some(ir.table.as_str())
+        } else {
+            None
+        };
+
+        if let Some(filter_tree) = &ir.filter_tree {
+            let expr = build_filter_node(filter_tree, default_table)?;
+            count_query.and_where(expr);
+        }
+
+        if let Some(joins) = &ir.joins {
+            apply_joins_only(&mut count_query, joins, &table)?;
+        }
+
+        return Ok(build_query_string(count_query, dialect));
+    }
+
+    let query = build_select_statement(ir)?;
+    let (sql, values) = build_query_string(query, dialect);
+
+    if ir.exists.unwrap_or(false) {
+        return Ok((format!("SELECT EXISTS({sql})"), values));
+    }
+
+    Ok((sql, values))
 }
 
 fn apply_select_joins(
