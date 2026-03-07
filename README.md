@@ -32,11 +32,11 @@
 
 Benchmarks vs popular Python ORMs (avg ops/sec, higher is better):
 
-| Database   | Oxyde | Tortoise | Piccolo | SQLAlchemy | SQLModel | Peewee | Django |
-|------------|-------|----------|---------|------------|----------|--------|--------|
-| PostgreSQL | 924   | 748      | 746     | 336        | 324      | 61     | 59     |
-| MySQL      | 1037  | 1019     | —       | 434        | 420      | 371    | 313    |
-| SQLite     | 1232  | 1477     | 295     | 342        | 336      | 449    | 434    |
+| Database   | Oxyde | Tortoise | Piccolo | Django | SQLAlchemy | SQLModel | Peewee |
+|------------|-------|----------|---------|--------|------------|----------|--------|
+| PostgreSQL | 1,433 | 896      | 956     | 733    | 455        | 433      | 79     |
+| MySQL      | 1,284 | 783      | —       | 816    | 523        | 503      | 467    |
+| SQLite     | 2,575 | 1,884    | 468     | 1,283  | 592        | 560      | 553    |
 
 Full benchmark report: **[Documentation](https://oxyde.fatalyst.dev/latest/advanced/benchmarks/)**
 
