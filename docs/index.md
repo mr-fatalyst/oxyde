@@ -124,3 +124,19 @@ async with transaction.atomic():
 > **SQLite < 3.35**: Falls back to `last_insert_rowid()` which may return incorrect IDs with concurrent inserts.
 >
 > **MySQL**: No RETURNING clause — uses `last_insert_id()`. Bulk INSERT returns calculated ID range which may be incorrect with concurrent inserts.
+
+## Ecosystem
+
+### Oxyde Admin
+
+Auto-generated admin panel for Oxyde ORM with zero boilerplate.
+
+- Automatic CRUD, search, filters, export
+- FastAPI, Litestar, Sanic, Quart, Falcon
+- Theming, authentication, bulk operations
+
+```bash
+pip install oxyde-admin
+```
+
+[:octicons-arrow-right-24: GitHub](https://github.com/mr-fatalyst/oxyde-admin)

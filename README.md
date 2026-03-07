@@ -153,6 +153,22 @@ sqlite:///:memory:
 mysql://user:password@localhost:3306/database
 ```
 
+## Ecosystem
+
+### Oxyde Admin
+
+Auto-generated admin panel for Oxyde ORM with zero boilerplate.
+
+- Automatic CRUD, search, filters, export
+- FastAPI, Litestar, Sanic, Quart, Falcon
+- Theming, authentication, bulk operations
+
+```bash
+pip install oxyde-admin
+```
+
+[GitHub →](https://github.com/mr-fatalyst/oxyde-admin)
+
 ## Documentation
 
 Full documentation: **[https://oxyde.fatalyst.dev/](https://oxyde.fatalyst.dev/)**
