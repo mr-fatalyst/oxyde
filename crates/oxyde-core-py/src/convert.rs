@@ -11,6 +11,7 @@ use pyo3::types::{PyBool, PyBytes, PyDict, PyList, PyString};
 use sea_query::Value as QueryValue;
 use serde_json::Value as JsonValue;
 
+/// Map driver's `DatabaseBackend` to query's `Dialect`.
 pub(crate) fn backend_to_dialect(backend: DatabaseBackend) -> Dialect {
     match backend {
         DatabaseBackend::Postgres => Dialect::Postgres,
@@ -19,6 +20,7 @@ pub(crate) fn backend_to_dialect(backend: DatabaseBackend) -> Dialect {
     }
 }
 
+/// Extract `PoolSettings` from a Python dict or object with `to_payload()` method.
 pub(crate) fn extract_pool_settings(
     _py: Python<'_>,
     settings: Option<Bound<'_, PyAny>>,
@@ -55,6 +57,7 @@ pub(crate) fn extract_pool_settings(
     )))
 }
 
+/// Convert sea_query `Value` slice to a Python list.
 pub(crate) fn values_to_py<'py>(
     py: Python<'py>,
     values: &[QueryValue],
@@ -66,6 +69,7 @@ pub(crate) fn values_to_py<'py>(
     Ok(list.into_any())
 }
 
+/// Convert a single sea_query `Value` to a Python object.
 #[allow(unreachable_patterns)]
 pub(crate) fn value_to_py(py: Python<'_>, value: &QueryValue) -> Py<PyAny> {
     match value {
@@ -106,6 +110,7 @@ pub(crate) fn value_to_py(py: Python<'_>, value: &QueryValue) -> Py<PyAny> {
     }
 }
 
+/// Recursively convert `serde_json::Value` to a Python object.
 pub(crate) fn json_to_py(py: Python<'_>, value: &JsonValue) -> PyResult<Py<PyAny>> {
     Ok(match value {
         JsonValue::Null => py.None(),

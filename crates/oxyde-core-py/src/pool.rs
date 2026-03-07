@@ -13,6 +13,7 @@ use oxyde_driver::{
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
+/// Initialize a named connection pool → Coroutine.
 #[pyfunction]
 pub(crate) fn init_pool<'py>(
     py: Python<'py>,
@@ -29,6 +30,7 @@ pub(crate) fn init_pool<'py>(
     })
 }
 
+/// Initialize a named connection pool, replacing existing if present → Coroutine.
 #[pyfunction]
 pub(crate) fn init_pool_overwrite<'py>(
     py: Python<'py>,
@@ -45,6 +47,7 @@ pub(crate) fn init_pool_overwrite<'py>(
     })
 }
 
+/// Close and remove a named connection pool → Coroutine.
 #[pyfunction]
 pub(crate) fn close_pool(py: Python<'_>, name: String) -> PyResult<Bound<'_, PyAny>> {
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -55,6 +58,7 @@ pub(crate) fn close_pool(py: Python<'_>, name: String) -> PyResult<Bound<'_, PyA
     })
 }
 
+/// Close all connection pools, rolling back active transactions → Coroutine.
 #[pyfunction]
 pub(crate) fn close_all_pools(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -65,6 +69,7 @@ pub(crate) fn close_all_pools(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     })
 }
 
+/// Begin a new transaction on the named pool → Coroutine[int] (transaction ID).
 #[pyfunction]
 pub(crate) fn begin_transaction(py: Python<'_>, pool_name: String) -> PyResult<Bound<'_, PyAny>> {
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -75,6 +80,7 @@ pub(crate) fn begin_transaction(py: Python<'_>, pool_name: String) -> PyResult<B
     })
 }
 
+/// Commit a transaction → Coroutine.
 #[pyfunction]
 pub(crate) fn commit_transaction(py: Python<'_>, tx_id: u64) -> PyResult<Bound<'_, PyAny>> {
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -85,6 +91,7 @@ pub(crate) fn commit_transaction(py: Python<'_>, tx_id: u64) -> PyResult<Bound<'
     })
 }
 
+/// Rollback a transaction → Coroutine.
 #[pyfunction]
 pub(crate) fn rollback_transaction(py: Python<'_>, tx_id: u64) -> PyResult<Bound<'_, PyAny>> {
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -95,6 +102,7 @@ pub(crate) fn rollback_transaction(py: Python<'_>, tx_id: u64) -> PyResult<Bound
     })
 }
 
+/// Create a named savepoint within a transaction → Coroutine.
 #[pyfunction]
 pub(crate) fn create_savepoint(
     py: Python<'_>,
@@ -109,6 +117,7 @@ pub(crate) fn create_savepoint(
     })
 }
 
+/// Rollback to a named savepoint → Coroutine.
 #[pyfunction]
 pub(crate) fn rollback_to_savepoint(
     py: Python<'_>,
@@ -123,6 +132,7 @@ pub(crate) fn rollback_to_savepoint(
     })
 }
 
+/// Release a savepoint → Coroutine.
 #[pyfunction]
 pub(crate) fn release_savepoint(
     py: Python<'_>,

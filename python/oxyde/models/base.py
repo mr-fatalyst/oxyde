@@ -21,7 +21,7 @@ Key Components:
     _db_meta (ClassVar[ModelMeta]):
         Stores table-level metadata: table_name, schema, indexes, constraints.
         Also holds field_metadata dict mapping field names to ColumnMeta.
-1        Populated eagerly at class definition time via finalize_pending().
+        Populated eagerly at class definition time via finalize_pending().
 
     objects (ClassVar[QueryManager]):
         Django-style manager for queries. Auto-created in __init_subclass__.

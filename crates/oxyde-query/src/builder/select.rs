@@ -190,6 +190,7 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
     Ok((sql, values))
 }
 
+/// Apply LEFT JOINs and add joined columns to SELECT (with `prefix__field` aliases).
 fn apply_select_joins(
     query: &mut sea_query::SelectStatement,
     joins: &[JoinSpec],

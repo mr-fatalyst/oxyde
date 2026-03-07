@@ -25,6 +25,7 @@ fn is_profiling_enabled() -> bool {
         .unwrap_or(false)
 }
 
+/// Execute a query: deserialize IR → validate → build SQL → execute → msgpack bytes → Coroutine[bytes].
 #[pyfunction]
 pub(crate) fn execute<'py>(
     py: Python<'py>,
@@ -158,6 +159,7 @@ pub(crate) fn execute<'py>(
     })
 }
 
+/// Execute a query within a transaction → Coroutine[bytes].
 #[pyfunction]
 pub(crate) fn execute_in_transaction<'py>(
     py: Python<'py>,
@@ -247,6 +249,7 @@ pub(crate) fn execute_in_transaction<'py>(
     })
 }
 
+/// Render SQL from IR without executing (requires pool for dialect detection) → Coroutine[(str, list)].
 #[pyfunction]
 pub(crate) fn render_sql<'py>(
     py: Python<'py>,
@@ -275,6 +278,7 @@ pub(crate) fn render_sql<'py>(
     })
 }
 
+/// Render SQL from IR without pool (sync, defaults to Postgres dialect) → (str, list).
 #[pyfunction]
 pub(crate) fn render_sql_debug<'py>(
     py: Python<'py>,
@@ -311,6 +315,7 @@ pub(crate) fn render_sql_debug<'py>(
     PyTuple::new(py, &[sql_obj.into_any(), params_obj])
 }
 
+/// Run EXPLAIN (ANALYZE) on a query, return plan as JSON or text → Coroutine.
 #[pyfunction]
 pub(crate) fn explain<'py>(
     py: Python<'py>,

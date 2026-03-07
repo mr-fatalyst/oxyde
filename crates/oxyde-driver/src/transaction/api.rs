@@ -6,6 +6,7 @@ use crate::error::{DriverError, Result};
 use crate::transaction::{begin_on_pool, with_conn, TransactionInner, TransactionState};
 use crate::{ensure_cleanup_task, registry, transaction_registry};
 
+/// Begin a new transaction on the named pool, returns transaction ID.
 pub async fn begin_transaction(pool_name: &str) -> Result<u64> {
     info!("Beginning transaction on pool '{}'", pool_name);
     let handle = registry().get(pool_name).await?;
@@ -32,6 +33,7 @@ pub async fn begin_transaction(pool_name: &str) -> Result<u64> {
     Ok(tx_id)
 }
 
+/// Commit a transaction and release the connection back to the pool.
 pub async fn commit_transaction(tx_id: u64) -> Result<()> {
     info!("Committing transaction {}", tx_id);
     let registry = transaction_registry();
@@ -57,6 +59,7 @@ pub async fn commit_transaction(tx_id: u64) -> Result<()> {
     Ok(())
 }
 
+/// Rollback a transaction and release the connection back to the pool.
 pub async fn rollback_transaction(tx_id: u64) -> Result<()> {
     info!("Rolling back transaction {}", tx_id);
     let registry = transaction_registry();
@@ -82,6 +85,7 @@ pub async fn rollback_transaction(tx_id: u64) -> Result<()> {
     Ok(())
 }
 
+/// Create a named savepoint within a transaction.
 pub async fn create_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
     info!(
         "Creating savepoint '{}' in transaction {}",
@@ -109,6 +113,7 @@ pub async fn create_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Rollback to a named savepoint, undoing changes since the savepoint.
 pub async fn rollback_to_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
     info!(
         "Rolling back to savepoint '{}' in transaction {}",
@@ -138,6 +143,7 @@ pub async fn rollback_to_savepoint(tx_id: u64, savepoint_name: &str) -> Result<(
     Ok(())
 }
 
+/// Release a savepoint, making its changes permanent within the transaction.
 pub async fn release_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
     info!(
         "Releasing savepoint '{}' in transaction {}",

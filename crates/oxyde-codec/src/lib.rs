@@ -59,6 +59,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
+/// Errors that can occur during IR serialization, deserialization, or validation.
 #[derive(Debug, Error)]
 pub enum CodecError {
     #[error("Serialization error: {0}")]
@@ -288,12 +289,14 @@ pub struct QueryIR {
     pub pk_column: Option<String>,
 }
 
+/// Single row in a bulk update: filters identify the row, values are the new data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BulkUpdateRow {
     pub filters: HashMap<String, rmpv::Value>,
     pub values: HashMap<String, rmpv::Value>,
 }
 
+/// Bulk update payload: multiple rows, each with its own filters and values.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BulkUpdate {
     pub rows: Vec<BulkUpdateRow>,

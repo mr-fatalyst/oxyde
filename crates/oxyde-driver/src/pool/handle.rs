@@ -2,6 +2,7 @@
 
 use sqlx::{mysql::MySqlPool, postgres::PgPool, sqlite::SqlitePool};
 
+/// Supported database backend type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DatabaseBackend {
     Postgres,
@@ -17,6 +18,7 @@ pub enum DbPool {
     Sqlite(SqlitePool),
 }
 
+/// Named pool handle: backend type + connection pool.
 #[derive(Clone)]
 pub struct PoolHandle {
     pub(crate) backend: DatabaseBackend,

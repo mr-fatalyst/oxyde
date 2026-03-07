@@ -13,10 +13,12 @@ use crate::pool::{DatabaseBackend, DbPool, PoolHandle};
 use crate::settings::PoolSettings;
 use crate::{registry, transaction_registry};
 
+/// Initialize a named connection pool. Fails if pool with this name already exists.
 pub async fn init_pool(name: &str, url: &str, settings: PoolSettings) -> Result<()> {
     init_pool_inner(name, url, settings, false).await
 }
 
+/// Initialize a named connection pool, replacing existing pool if present.
 pub async fn init_pool_overwrite(name: &str, url: &str, settings: PoolSettings) -> Result<()> {
     init_pool_inner(name, url, settings, true).await
 }
@@ -142,6 +144,7 @@ async fn init_pool_inner(
     Ok(())
 }
 
+/// Close and remove a named connection pool.
 pub async fn close_pool(name: &str) -> Result<()> {
     info!("Closing pool '{}'", name);
     let handle = registry().remove(name).await?;
@@ -149,6 +152,7 @@ pub async fn close_pool(name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Close all connection pools, rolling back any active transactions first.
 pub async fn close_all_pools() -> Result<()> {
     info!("Closing all pools");
 
@@ -170,6 +174,7 @@ pub async fn close_all_pools() -> Result<()> {
     Ok(())
 }
 
+/// Get the database backend type for a named pool.
 pub async fn pool_backend(name: &str) -> Result<DatabaseBackend> {
     registry().get(name).await.map(|handle| handle.backend)
 }

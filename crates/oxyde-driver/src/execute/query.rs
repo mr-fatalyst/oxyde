@@ -91,6 +91,7 @@ pub async fn execute_mutation_returning(
     pool.query_mutation_returning(sql, params, col_types).await
 }
 
+/// Execute a statement (INSERT/UPDATE/DELETE without RETURNING) and return affected row count.
 pub async fn execute_statement(pool_name: &str, sql: &str, params: &[Value]) -> Result<u64> {
     debug!(
         "Executing statement on '{}': {} ({} params)",
@@ -189,6 +190,7 @@ pub async fn execute_mutation_returning_in_transaction(
     conn.query_mutation_returning(sql, params, col_types).await
 }
 
+/// Execute a statement within a transaction, return affected row count.
 pub async fn execute_statement_in_transaction(
     tx_id: u64,
     sql: &str,

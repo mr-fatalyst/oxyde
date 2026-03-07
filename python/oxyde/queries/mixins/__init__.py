@@ -5,19 +5,19 @@ category of query operations. This keeps the code organized and testable.
 
 Mixins:
     FilteringMixin:
-        filter(), exclude(), where() - WHERE clause building
-        _build_filter_tree() - combine conditions into FilterNode
+        filter(), exclude() - WHERE clause building
 
     PaginationMixin:
+        select() - choose specific columns
         limit(), offset() - result pagination
         order_by() - ORDER BY clause
         distinct() - DISTINCT modifier
         values(), values_list() - return dicts/tuples instead of models
+        __getitem__ - slice syntax for limit/offset
 
     JoiningMixin:
         join() - eager loading with SQL JOINs
         prefetch() - prefetch related objects (separate queries)
-        _resolve_join_path() - FK relationship resolution
 
     AggregationMixin:
         annotate() - add computed columns (COUNT, SUM, etc.)
@@ -27,17 +27,20 @@ Mixins:
 
     ExecutionMixin:
         fetch_all(), fetch_one() - raw execution returning dicts
+        fetch_rows() - raw execution returning list of tuples
         fetch_models() - execution returning model instances
         fetch_msgpack() - execution returning raw MessagePack bytes
-        all(), exists() - convenience methods
+        all(), first(), last(), exists() - convenience methods
 
     MutationMixin:
-        update() - UPDATE from SELECT query
+        create(), bulk_create() - INSERT operations
+        update(), bulk_update() - UPDATE operations
         delete() - DELETE from SELECT query
         increment() - atomic increment via F()
 
     DebugMixin:
         sql() - get generated SQL string
+        query - property to inspect IR dict
         explain() - get query execution plan
         union(), union_all() - combine queries
 
