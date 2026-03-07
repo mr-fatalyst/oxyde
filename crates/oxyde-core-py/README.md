@@ -4,10 +4,10 @@ Native Rust backend for [Oxyde ORM](https://github.com/mr-fatalyst/oxyde). Provi
 
 ## Core Technologies
 
-- **[PyO3](https://pyo3.rs)** — Rust bindings for Python, async support via `pyo3-asyncio`
+- **[PyO3](https://pyo3.rs)** — Rust bindings for Python, async support via `pyo3-async-runtimes`
 - **[sqlx](https://github.com/launchbadge/sqlx)** — Async SQL toolkit with compile-time checked queries
 - **[sea-query](https://github.com/SeaQL/sea-query)** — Dynamic SQL query builder for multiple backends
-- **[MessagePack](https://msgpack.org)** — Binary serialization (~2KB per query), faster than JSON
+- **[MessagePack](https://msgpack.org)** — Compact binary serialization, faster than JSON
 - **[tokio](https://tokio.rs)** — Async runtime, GIL released during I/O operations
 
 ## Why Rust?

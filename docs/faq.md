@@ -10,7 +10,7 @@ Oxyde is a high-performance async Python ORM with a Rust core. It combines:
 
 - **Python API**: Pydantic v2 models with Django-style query syntax
 - **Rust Core**: High-performance SQL generation and execution via sqlx
-- **MessagePack Protocol**: Efficient binary communication (~2KB payloads)
+- **MessagePack Protocol**: Efficient binary communication
 
 ### Why Rust?
 

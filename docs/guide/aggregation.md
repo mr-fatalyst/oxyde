@@ -42,8 +42,8 @@ unique_count = await User.objects.annotate(
 | Function | Description | Example |
 |----------|-------------|---------|
 | `Count` | Count rows | `Count("*")`, `Count("id", distinct=True)` |
-| `Sum` | Sum values | `Sum("amount")` |
-| `Avg` | Average | `Avg("price")` |
+| `Sum` | Sum values | `Sum("amount")`, `Sum("amount", distinct=True)` |
+| `Avg` | Average | `Avg("price")`, `Avg("price", distinct=True)` |
 | `Max` | Maximum | `Max("created_at")` |
 | `Min` | Minimum | `Min("price")` |
 

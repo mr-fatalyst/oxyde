@@ -18,6 +18,9 @@
 
 ---
 
+!!! warning "Heads up!"
+    Oxyde is a young project under active development. The API may evolve between minor versions. Feedback, bug reports, and ideas are very welcome. Feel free to [open an issue](https://github.com/mr-fatalyst/oxyde/issues)!
+
 ## Quick Links
 
 <div class="grid cards" markdown>

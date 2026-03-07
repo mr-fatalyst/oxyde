@@ -4,39 +4,33 @@ This section documents Oxyde's Rust architecture for advanced users and contribu
 
 ## Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Python Layer                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │ Model  │  │   Query     │  │    db.*     │              │
-│  │  (Pydantic) │  │  (Builder)  │  │ (Async API) │              │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
-│         │                │                │                      │
-│         └────────────────┼────────────────┘                      │
-│                          │                                       │
-│                    MessagePack (~2KB)                            │
-│                          │                                       │
-└──────────────────────────┼───────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                        Rust Core                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
-│  │ oxyde-codec │  │ oxyde-query │  │oxyde-driver │              │
-│  │  (IR Parse) │  │ (SQL Gen)   │  │(Connection) │              │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
-│         │                │                │                      │
-│         └────────────────┼────────────────┘                      │
-│                          │                                       │
-│                       sqlx                                       │
-│                          │                                       │
-└──────────────────────────┼───────────────────────────────────────┘
-                           │
-                           ▼
-              ┌─────────────────────────┐
-              │   Database              │
-              │  PostgreSQL/SQLite/MySQL│
-              └─────────────────────────┘
+```mermaid
+graph TD
+    subgraph Python["Python Layer"]
+        Model["Model<br/>(Pydantic)"]
+        Query["Query<br/>(Builder)"]
+        DB["db.*<br/>(Async API)"]
+        Model & Query & DB --> MP_OUT["msgpack.packb(ir)"]
+    end
+
+    MP_OUT -->|"MessagePack"| CorePy["oxyde-core-py<br/>(PyO3 bridge)"]
+
+    subgraph Rust["Rust Core"]
+        CorePy --> Codec["oxyde-codec<br/>(IR deserialize)"]
+        Codec --> QGen["oxyde-query<br/>(SQL generation)"]
+        QGen --> Driver["oxyde-driver<br/>(execute via sqlx)"]
+        Driver --> Sqlx["sqlx"]
+    end
+
+    Sqlx -->|"query"| Database[(PostgreSQL / SQLite / MySQL)]
+    Database -->|"rows"| Sqlx
+    Sqlx --> Encode["oxyde-driver<br/>(encode to msgpack)"]
+    Encode -->|"MessagePack bytes"| MP_IN["msgpack.unpackb()"]
+
+    subgraph Python2["Python Layer"]
+        MP_IN --> Pydantic["Pydantic validation"]
+        Pydantic --> Instances["Model instances"]
+    end
 ```
 
 ## Rust Crates
@@ -51,14 +45,22 @@ Key types:
 
 ```rust
 pub struct QueryIR {
-    pub operation: Operation,
+    pub op: Operation,
     pub table: String,
-    pub columns: Option<Vec<String>>,
+    pub cols: Option<Vec<String>>,
     pub filter_tree: Option<FilterNode>,
-    pub limit: Option<u32>,
-    pub offset: Option<u32>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
     pub order_by: Option<Vec<(String, String)>>,
-    // ... more fields
+    pub values: Option<HashMap<String, rmpv::Value>>,
+    pub col_types: Option<HashMap<String, String>>,
+    pub joins: Option<Vec<JoinSpec>>,
+    pub aggregates: Option<Vec<Aggregate>>,
+    pub group_by: Option<Vec<String>>,
+    pub having: Option<FilterNode>,
+    pub returning: Option<bool>,
+    pub distinct: Option<bool>,
+    // ... more fields (bulk_values, union_query, etc.)
 }
 
 pub enum Operation {
@@ -66,17 +68,21 @@ pub enum Operation {
     Insert,
     Update,
     Delete,
+    Raw,
 }
 
 pub enum FilterNode {
-    Condition {
-        field: String,
-        op: String,
-        value: Value,
-    },
-    And(Vec<FilterNode>),
-    Or(Vec<FilterNode>),
-    Not(Box<FilterNode>),
+    Condition(Filter),
+    And { conditions: Vec<FilterNode> },
+    Or { conditions: Vec<FilterNode> },
+    Not { condition: Box<FilterNode> },
+}
+
+pub struct Filter {
+    pub field: String,
+    pub operator: String,
+    pub value: rmpv::Value,
+    pub column: Option<String>,
 }
 ```
 
@@ -84,17 +90,20 @@ pub enum FilterNode {
 
 **Purpose**: Generate SQL from IR using sea-query.
 
-**Location**: `crates/oxyde-query/src/lib.rs`
+**Location**: `crates/oxyde-query/src/`
+
+Modules: `builder/` (select, insert, update, delete, bulk), `filter/`, `aggregate/`, `utils/`, `error/`.
 
 Key functions:
 
 ```rust
 pub fn build_sql(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value>)> {
-    match ir.operation {
+    match ir.op {
         Operation::Select => build_select(ir, dialect),
         Operation::Insert => build_insert(ir, dialect),
         Operation::Update => build_update(ir, dialect),
         Operation::Delete => build_delete(ir, dialect),
+        Operation::Raw => build_raw(ir, dialect),
     }
 }
 
@@ -109,18 +118,21 @@ pub enum Dialect {
 
 **Purpose**: Connection pooling, query execution, transaction management.
 
-**Location**: `crates/oxyde-driver/src/lib.rs`
+**Location**: `crates/oxyde-driver/src/`
+
+Modules: `pool/` (registry, handle, api), `transaction/` (registry, inner, api), `convert/` (encoder, postgres, sqlite, mysql), `execute/` (query, insert, traits), `bind/`, `explain/`.
 
 Key components:
 
 ```rust
-// Connection pool registry (global)
-static POOL_REGISTRY: OnceCell<ConnectionRegistry> = OnceCell::const_new();
+// Global registries (once_cell::sync::OnceCell)
+static REGISTRY: OnceCell<ConnectionRegistry> = OnceCell::new();
+static TRANSACTION_REGISTRY: OnceCell<TransactionRegistry> = OnceCell::new();
 
 // Pool handle for each connection
 pub struct PoolHandle {
-    pub pool: DbPool,
-    pub backend: DatabaseBackend,
+    pub(crate) backend: DatabaseBackend,
+    pub(crate) pool: DbPool,
 }
 
 pub enum DbPool {
@@ -130,10 +142,13 @@ pub enum DbPool {
 }
 
 // Transaction management
-pub struct TransactionInner {
-    pub conn: Option<DbConn>,
-    pub state: TransactionState,
-    pub created_at: Instant,
+pub(crate) struct TransactionInner {
+    pub(crate) _pool_name: String,
+    pub(crate) _backend: DatabaseBackend,
+    pub(crate) conn: Option<DbConn>,
+    pub(crate) state: TransactionState,
+    pub(crate) created_at: Instant,
+    pub(crate) last_activity: Instant,
 }
 ```
 
@@ -141,18 +156,24 @@ pub struct TransactionInner {
 
 **Purpose**: Schema diffing and migration generation.
 
-**Location**: `crates/oxyde-migrate/src/lib.rs`
+**Location**: `crates/oxyde-migrate/src/`
+
+Modules: `diff.rs` (schema diff), `op.rs` (migration operations), `sql.rs` (SQL generation via sea-query), `types.rs` (Dialect, Snapshot, errors).
 
 Key functions:
 
 ```rust
-pub fn compute_diff(old_schema: &Schema, new_schema: &Schema) -> Vec<Operation> {
-    // Compare tables, columns, indexes
-    // Generate add/drop/alter operations
+// Compute diff between two schema snapshots
+pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Vec<MigrationOp>
+
+// Migration struct with SQL generation
+pub struct Migration {
+    pub name: String,
+    pub operations: Vec<MigrationOp>,
 }
 
-pub fn generate_migration(operations: &[Operation], dialect: Dialect) -> String {
-    // Generate SQL migration script
+impl Migration {
+    pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>>
 }
 ```
 
@@ -160,80 +181,56 @@ pub fn generate_migration(operations: &[Operation], dialect: Dialect) -> String 
 
 **Purpose**: PyO3 bindings exposing Rust functions to Python.
 
-**Location**: `crates/oxyde-core-py/src/lib.rs`
+**Location**: `crates/oxyde-core-py/src/`
+
+Modules: `execute.rs` (query execution), `pool.rs` (pool management), `migration.rs` (migration helpers), `convert.rs` (type conversion), `types.rs`.
 
 Exposed functions:
 
 ```rust
+// Pool management (pool.rs)
 #[pyfunction]
-fn init_pool(py: Python, name: String, url: String, settings: Option<HashMap<String, Value>>) -> PyResult<&PyAny> {
-    pyo3_asyncio::tokio::future_into_py(py, async move {
-        // Initialize pool in registry
-    })
-}
+fn init_pool<'py>(py: Python<'py>, name: String, url: String,
+    settings: Option<HashMap<String, JsonValue>>) -> PyResult<Bound<'py, PyAny>>
 
+// Query execution (execute.rs)
 #[pyfunction]
-fn execute(py: Python, pool_name: String, ir_bytes: &[u8]) -> PyResult<&PyAny> {
-    pyo3_asyncio::tokio::future_into_py(py, async move {
-        // 1. Deserialize IR from MessagePack
-        // 2. Build SQL
-        // 3. Execute via sqlx
-        // 4. Serialize results to MessagePack
-    })
-}
+fn execute<'py>(py: Python<'py>, pool_name: String,
+    ir_bytes: &Bound<'py, PyBytes>) -> PyResult<Bound<'py, PyAny>>
 
+// Transactions (execute.rs)
 #[pyfunction]
-fn begin_transaction(py: Python, pool_name: String) -> PyResult<&PyAny> { ... }
-
-#[pyfunction]
-fn commit_transaction(py: Python, tx_id: u64) -> PyResult<&PyAny> { ... }
-
-#[pyfunction]
-fn rollback_transaction(py: Python, tx_id: u64) -> PyResult<&PyAny> { ... }
+fn begin_transaction<'py>(py: Python<'py>, pool_name: String) -> PyResult<Bound<'py, PyAny>>
+fn commit_transaction<'py>(py: Python<'py>, tx_id: u64) -> PyResult<Bound<'py, PyAny>>
+fn rollback_transaction<'py>(py: Python<'py>, tx_id: u64) -> PyResult<Bound<'py, PyAny>>
 ```
+
+All async functions use `pyo3_async_runtimes::tokio::future_into_py` to return Python coroutines.
 
 ## Data Flow
 
 ### Query Execution
 
-```
-Python                          Rust
-──────                          ────
-User.objects.filter(age=18)
-        │
-        ▼
-Query._build_filter_tree()
-        │
-        ▼
-query.to_ir() → dict
-        │
-        ▼
-msgpack.packb(ir) → bytes (~2KB)
-        │
-        ├────────────────────────▶ oxyde-codec: deserialize
-        │                                  │
-        │                                  ▼
-        │                          oxyde-query: build_sql()
-        │                                  │
-        │                                  ▼
-        │                          oxyde-driver: execute()
-        │                                  │
-        │                                  ▼
-        │                          sqlx → Database
-        │                                  │
-        │                                  ▼
-        │                          oxyde-driver: serialize results
-        │                                  │
-        ◀────────────────────────────────┘
-        │
-        ▼
-msgpack.unpackb(result_bytes)
-        │
-        ▼
-Pydantic: Model.model_validate()
-        │
-        ▼
-User instances
+```mermaid
+sequenceDiagram
+    participant P as Python
+    participant R as Rust Core
+    participant DB as Database
+
+    P->>P: Query._build_filter_tree()
+    P->>P: query.to_ir() → dict
+    P->>P: msgpack.packb(ir) → bytes
+    P->>R: execute(pool_name, ir_bytes)
+    Note over R: GIL released
+    R->>R: oxyde-codec: deserialize IR
+    R->>R: oxyde-query: build_sql()
+    R->>DB: sqlx execute
+    DB-->>R: rows
+    R->>R: oxyde-driver: encode to msgpack
+    R-->>P: msgpack bytes
+    Note over P: GIL re-acquired
+    P->>P: msgpack.unpackb(result_bytes)
+    P->>P: Pydantic validate → Model instances
 ```
 
 ### IR Format Example
@@ -244,15 +241,15 @@ User.objects.filter(age__gte=18, status="active").order_by("-created_at").limit(
 
 # Generated IR (Python dict → MessagePack)
 {
-    "type": "select",
+    "op": "select",
     "table": "users",
     "model": "myapp.models.User",
-    "columns": ["id", "name", "email", "age", "status", "created_at"],
+    "cols": ["id", "name", "email", "age", "status", "created_at"],
     "filter_tree": {
         "type": "and",
-        "children": [
-            {"type": "condition", "field": "age", "op": "gte", "value": 18},
-            {"type": "condition", "field": "status", "op": "eq", "value": "active"}
+        "conditions": [
+            {"type": "condition", "field": "age", "operator": "gte", "value": 18},
+            {"type": "condition", "field": "status", "operator": "eq", "value": "active"}
         ]
     },
     "order_by": [["created_at", "desc"]],
@@ -266,13 +263,15 @@ Rust async operations release Python's GIL:
 
 ```rust
 #[pyfunction]
-fn execute(py: Python, pool_name: String, ir_bytes: &[u8]) -> PyResult<&PyAny> {
-    // Deserialize outside async (holds GIL)
-    let ir: QueryIR = rmp_serde::from_slice(ir_bytes)?;
+fn execute<'py>(py: Python<'py>, pool_name: String,
+    ir_bytes: &Bound<'py, PyBytes>) -> PyResult<Bound<'py, PyAny>> {
+    // Copy bytes while holding GIL
+    let ir_data = ir_bytes.as_bytes().to_vec();
 
     // Release GIL for async I/O
-    pyo3_asyncio::tokio::future_into_py(py, async move {
+    pyo3_async_runtimes::tokio::future_into_py(py, async move {
         // This runs without GIL
+        let ir = QueryIR::from_msgpack(&ir_data)?;
         let result = execute_query(&ir).await?;
         Ok(result)
     })
@@ -284,7 +283,7 @@ fn execute(py: Python, pool_name: String, ir_bytes: &[u8]) -> PyResult<&PyAny> {
 Global registry for connection pools:
 
 ```rust
-pub struct ConnectionRegistry {
+pub(crate) struct ConnectionRegistry {
     pools: RwLock<HashMap<String, PoolHandle>>,
 }
 
@@ -298,12 +297,7 @@ impl ConnectionRegistry {
         Ok(())
     }
 
-    pub async fn get(&self, name: &str) -> Result<PoolHandle> {
-        let guard = self.pools.read().await;
-        guard.get(name)
-            .cloned()
-            .ok_or_else(|| DriverError::PoolNotFound(name.to_string()))
-    }
+    pub async fn insert_or_replace(&self, name: String, handle: PoolHandle) -> Option<PoolHandle>
 }
 ```
 
@@ -312,27 +306,14 @@ impl ConnectionRegistry {
 Transactions are stored in a separate registry:
 
 ```rust
-pub struct TransactionRegistry {
-    transactions: RwLock<HashMap<u64, TransactionInner>>,
-    next_id: AtomicU64,
+pub(crate) struct TransactionRegistry {
+    transactions: RwLock<HashMap<u64, Arc<Mutex<TransactionInner>>>>,
+    pool_settings: RwLock<HashMap<String, PoolTimeoutSettings>>,
+    locked_counts: Mutex<HashMap<u64, u32>>,
 }
 
-impl TransactionRegistry {
-    pub async fn begin(&self, pool_name: &str) -> Result<u64> {
-        let tx_id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let pool = POOL_REGISTRY.get()?.get(pool_name).await?;
-        let conn = begin_on_pool(&pool.pool, pool.backend).await?;
-
-        let inner = TransactionInner {
-            conn: Some(conn),
-            state: TransactionState::Active,
-            created_at: Instant::now(),
-        };
-
-        self.transactions.write().await.insert(tx_id, inner);
-        Ok(tx_id)
-    }
-}
+// Transaction IDs are generated by a separate atomic counter:
+pub(crate) static TRANSACTION_ID: AtomicU64 = AtomicU64::new(1);
 ```
 
 ## Building from Source
@@ -366,8 +347,8 @@ python your_script.py
 ```python
 query = User.objects.filter(age__gte=18)
 ir = query.to_ir()
-import json
-print(json.dumps(ir, indent=2))
+from pprint import pprint
+pprint(ir)
 ```
 
 ### Check SQL

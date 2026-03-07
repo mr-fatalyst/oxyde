@@ -4,18 +4,15 @@ Oxyde is designed for high performance through its Rust core. This guide covers 
 
 ## Architecture Overview
 
-```
-Python Layer                Rust Core                Database
-┌─────────────┐          ┌─────────────┐           ┌───────────┐
-│ Pydantic    │──────────│ SQL Gen     │───────────│ PostgreSQL│
-│ Models      │ msgpack  │ Connection  │    sqlx   │ SQLite    │
-│ QuerySet    │  ~2KB    │ Pool        │           │ MySQL     │
-└─────────────┘          └─────────────┘           └───────────┘
+```mermaid
+graph LR
+    Python["Python Layer<br/>Pydantic Models<br/>QuerySet"] -->|"msgpack"| Rust["Rust Core<br/>SQL Gen<br/>Connection Pool"]
+    Rust -->|"sqlx"| DB["Database<br/>PostgreSQL / SQLite / MySQL"]
 ```
 
 Key performance characteristics:
 
-- **MessagePack protocol**: ~2KB binary payloads
+- **MessagePack protocol**: Compact binary payloads
 - **Rust SQL generation**: sea-query for fast SQL building
 - **Native async**: sqlx releases Python GIL during I/O
 - **Connection pooling**: Efficient connection reuse

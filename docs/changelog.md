@@ -4,6 +4,66 @@ All notable changes to Oxyde are documented here.
 
 ---
 
+## 0.5.0
+
+### Breaking Changes
+
+#### `update()` returns row count by default
+
+`update()` now returns `int` (number of affected rows) instead of `list[dict]`. This aligns with Django's `update()` behavior. Pass `returning=True` to get the previous behavior.
+
+```python
+# Before (0.4.x)
+rows = await Post.objects.filter(id=42).update(status="published")
+# rows was list[dict]
+
+# After (0.5.0)
+count = await Post.objects.filter(id=42).update(status="published")
+# count is int
+
+rows = await Post.objects.filter(id=42).update(status="published", returning=True)
+# rows is list[dict] (explicit opt-in)
+```
+
+#### `execute_to_pylist()`, `execute_batched_dedup()` removed from `AsyncDatabase`
+
+The Python-side batched/dedup execution methods have been removed. JOIN deduplication is now handled entirely in the Rust core encoder. Use `execute()` for all queries.
+
+#### `batch_size` removed from `PoolSettings`
+
+The `batch_size` parameter is no longer needed since batching is handled by the Rust core.
+
+---
+
+### Bug Fixes
+
+- **`distinct` ignored in aggregates** — `Count("field", distinct=True)` (and `Sum`, `Avg`) now correctly generates `COUNT(DISTINCT field)`. The `distinct` flag was not propagated through the IR.
+- **`refresh()` overwrote virtual fields** — calling `refresh()` on a model instance with `reverse_fk` or `m2m` relations would overwrite them with raw data from the database. Virtual relation fields are now skipped.
+- **`timedelta` not deserialized** — `timedelta` columns came back as raw integers (microseconds). Now correctly converted back to `datetime.timedelta` objects on the Python side.
+- **`group_by()` produced incorrect SQL** — custom group-by implementation replaced with native sea-query group-by, fixing edge cases with table qualification and JOIN queries.
+- **`union()` / `union_all()` rewritten** — custom union SQL generation replaced with native sea-query `UNION` support. Fixes ordering and parenthesization issues. Union sub-queries are now built recursively.
+- **`datetime` cast incorrect** — fixed datetime value conversion in the Rust driver layer.
+- **Binary data corrupted through serde** — binary fields (`bytes`) were mangled by the `serde_json::Value` intermediate layer. Replaced by `rmpv::Value` for lossless binary round-trip.
+
+---
+
+### Improvements
+
+- **serde_json eliminated from data path** — the entire row encoding pipeline now goes directly from sqlx rows to MessagePack via `rmpv`, removing the `serde_json::Value` intermediate representation. This fixes binary/timedelta data corruption and reduces allocations.
+- **`CellEncoder` trait** — new unified trait in `oxyde-driver` for columnar row encoding. Each backend (Postgres, SQLite, MySQL) implements `CellEncoder` with type-specific decoding; generic functions handle the columnar structure.
+- **JOIN dedup moved to Rust** — relation deduplication for JOIN queries is now performed in the Rust encoder (`encoder.rs`), replacing the Python-side `execute_batched_dedup` path. Results use a compact 3-element msgpack format: `[main_columns, main_rows, relations_map]`.
+- **`having()` supports annotation aliases** — `having(total__gt=100)` now correctly resolves `total` from `annotate(total=Sum(...))` instead of treating it as a model field. Supported lookups: `exact`, `gt`, `gte`, `lt`, `lte`.
+- **`group_by()` guards model hydration** — calling `.all()` on a `group_by()` query now raises `TypeError` with a clear message suggesting `.values()` or `.fetch_all()` instead.
+- **Aggregate `DISTINCT` support** — `Count`, `Sum`, and `Avg` now accept `distinct=True` at both the IR and SQL generation levels. `Max`/`Min` ignore it (as `DISTINCT` is meaningless for those).
+- **Rust crate modularization** — `oxyde-core-py`, `oxyde-driver`, and `oxyde-migrate` monolithic `lib.rs` files split into focused modules (`convert.rs`, `execute.rs`, `pool.rs`, `migration.rs`, `diff.rs`, `op.rs`, `sql.rs`, etc.).
+- **Migrations use native sea-query** — migration SQL generation now uses sea-query builders instead of hand-crafted SQL strings, improving dialect compatibility.
+- **Migration code deduplicated** — shared utilities (`detect_dialect`, `load_migration_module`, `parse_query_result`) extracted to `oxyde.migrations.utils`.
+- **Test suite restructured** — tests organized into `unit/`, `smoke/`, and `integration/` directories with shared helpers (`StubExecuteClient`). New integration tests cover CRUD, aggregation, filtering, pagination, relations, transactions, field types, and edge cases against real SQLite.
+- **Free-threaded Python support** — CI now builds wheels for Python 3.13t and 3.14t (free-threaded / no-GIL builds).
+- **`typer` bumped to >= 0.24** — resolves deprecation warnings.
+
+---
+
 ## 0.4.0
 
 ### Breaking Changes

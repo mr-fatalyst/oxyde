@@ -74,7 +74,7 @@ if user:
 
 #### first() / last()
 
-Get first or last record by primary key:
+Get first or last record (first applies LIMIT 1; last reverses ordering or defaults to PK descending):
 
 ```python
 first_user = await User.objects.first()
@@ -267,9 +267,12 @@ else:
 Bulk update matching records:
 
 ```python
-# Returns list of updated rows (RETURNING *)
-rows = await User.objects.filter(status="pending").update(status="active")
-print(f"Updated {len(rows)} users")
+# Returns number of affected rows
+count = await User.objects.filter(status="pending").update(status="active")
+print(f"Updated {count} users")
+
+# Pass returning=True to get updated rows as list[dict]
+rows = await User.objects.filter(status="pending").update(status="active", returning=True)
 ```
 
 With F expressions:

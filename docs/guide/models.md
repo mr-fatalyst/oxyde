@@ -44,7 +44,6 @@ class User(Model):
 | `indexes` | `list[Index]` | `[]` | Composite indexes |
 | `constraints` | `list[Check]` | `[]` | CHECK constraints |
 | `unique_together` | `list[tuple]` | `[]` | Composite unique constraints |
-| `primary_key` | `tuple[str, ...]` | None | Composite primary key |
 
 ## Type Annotations
 
@@ -103,18 +102,6 @@ class User(Model):
 
     class Meta:
         is_table = True
-```
-
-### Composite Primary Key
-
-```python
-class UserRole(Model):
-    user_id: int
-    role_id: int
-
-    class Meta:
-        is_table = True
-        primary_key = ("user_id", "role_id")
 ```
 
 ## Indexes
@@ -301,7 +288,7 @@ class User(Model):
     class Meta:
         is_table = True
 
-    async def pre_save(self, *, is_create: bool, update_fields: list[str] | None = None):
+    async def pre_save(self, *, is_create: bool, update_fields: set[str] | None = None):
         """Called before save()."""
         from datetime import datetime
         now = datetime.utcnow()
@@ -309,7 +296,7 @@ class User(Model):
             self.created_at = now
         self.updated_at = now
 
-    async def post_save(self, *, is_create: bool, update_fields: list[str] | None = None):
+    async def post_save(self, *, is_create: bool, update_fields: set[str] | None = None):
         """Called after save()."""
         if is_create:
             print(f"Created user {self.id}")

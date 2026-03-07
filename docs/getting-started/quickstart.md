@@ -187,8 +187,11 @@ user = await User.objects.get(id=1)
 user.name = "Alice Smith"
 await user.save()
 
-# Bulk update (returns updated rows)
-rows = await User.objects.filter(age__lt=18).update(status="minor")
+# Bulk update (returns affected row count)
+count = await User.objects.filter(age__lt=18).update(status="minor")
+
+# With returning=True to get updated rows back
+rows = await User.objects.filter(age__lt=18).update(status="minor", returning=True)
 ```
 
 ### Delete

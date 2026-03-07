@@ -25,7 +25,7 @@ class User(Model):
 | `db_pk` | `bool` | `False` | Primary key |
 | `db_index` | `bool` | `False` | Create index |
 | `db_index_name` | `str` | Auto | Custom index name |
-| `db_index_method` | `str` | `"btree"` | Index method: btree, hash, gin, gist |
+| `db_index_method` | `str` | None | Index method: btree, hash, gin, gist |
 | `db_unique` | `bool` | `False` | UNIQUE constraint |
 | `db_nullable` | `bool` | None | Override NULL/NOT NULL (None = infer from type) |
 | `db_column` | `str` | Field name | Database column name |
