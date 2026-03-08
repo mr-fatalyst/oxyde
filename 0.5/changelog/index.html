@@ -1261,6 +1261,56 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#051-2026-03-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.1 - 2026-03-08
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.5.1 - 2026-03-08">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#050-2026-03-07" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1323,7 +1373,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#bug-fixes" class="md-nav__link">
+  <a href="#bug-fixes_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Bug Fixes
@@ -1334,7 +1384,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#improvements" class="md-nav__link">
+  <a href="#improvements_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Improvements
@@ -1434,7 +1484,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#bug-fixes_1" class="md-nav__link">
+  <a href="#bug-fixes_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Bug Fixes
@@ -1445,7 +1495,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#improvements_1" class="md-nav__link">
+  <a href="#improvements_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Improvements
@@ -1495,6 +1545,56 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#051-2026-03-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.1 - 2026-03-08
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.5.1 - 2026-03-08">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#050-2026-03-07" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1557,7 +1657,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#bug-fixes" class="md-nav__link">
+  <a href="#bug-fixes_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Bug Fixes
@@ -1568,7 +1668,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#improvements" class="md-nav__link">
+  <a href="#improvements_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Improvements
@@ -1668,7 +1768,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#bug-fixes_1" class="md-nav__link">
+  <a href="#bug-fixes_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Bug Fixes
@@ -1679,7 +1779,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#improvements_1" class="md-nav__link">
+  <a href="#improvements_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Improvements
@@ -1717,6 +1817,21 @@
 <h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
 <p>All notable changes to Oxyde are documented here.</p>
 <hr />
+<h2 id="051-2026-03-08">0.5.1 - 2026-03-08<a class="headerlink" href="#051-2026-03-08" title="Permanent link">&para;</a></h2>
+<h3 id="bug-fixes">Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>Optional["Model"]</code> not detected as FK</strong> — <code>Optional["Author"]</code> (with a string forward reference) was not recognized as a foreign key because <code>ForwardRef</code> was not handled in the metaclass FK detection. Now works correctly alongside <code>Author | None</code> and <code>from __future__ import annotations</code>.</li>
+<li><strong>Python 3.14 compatibility</strong> — FK detection relied on reading <code>namespace["__annotations__"]</code> in the metaclass <code>__new__</code>, which is empty on Python 3.14 (PEP 749: lazy annotations). Moved FK detection after class creation, using Pydantic's <code>model_fields</code> which works on all Python versions.</li>
+</ul>
+<h3 id="improvements">Improvements<a class="headerlink" href="#improvements" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Metaclass cleanup</strong> — extracted <code>_build_globalns()</code> and <code>_get_db_attr()</code> helpers, reducing duplication in <code>_resolve_fk_fields()</code> and <code>_parse_field_tags()</code>. Relation field detection uses <code>OxydeFieldInfo.is_virtual</code> property.</li>
+</ul>
+<h3 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Fixed FK annotation examples</strong> — replaced <code>"Author" | None</code> (TypeError on Python 3.10-3.13) with <code>Author | None</code> across all docs. Added a detailed note on type annotations, forward references, and <code>from __future__ import annotations</code>.</li>
+</ul>
+<hr />
 <h2 id="050-2026-03-07">0.5.0 - 2026-03-07<a class="headerlink" href="#050-2026-03-07" title="Permanent link">&para;</a></h2>
 <h3 id="breaking-changes">Breaking Changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h3>
 <h4 id="update-returns-row-count-by-default"><code>update()</code> returns row count by default<a class="headerlink" href="#update-returns-row-count-by-default" title="Permanent link">&para;</a></h4>
@@ -1737,7 +1852,7 @@
 <h4 id="batch_size-removed-from-poolsettings"><code>batch_size</code> removed from <code>PoolSettings</code><a class="headerlink" href="#batch_size-removed-from-poolsettings" title="Permanent link">&para;</a></h4>
 <p>The <code>batch_size</code> parameter is no longer needed since batching is handled by the Rust core.</p>
 <hr />
-<h3 id="bug-fixes">Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
+<h3 id="bug-fixes_1">Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>distinct</code> ignored in aggregates</strong> — <code>Count("field", distinct=True)</code> (and <code>Sum</code>, <code>Avg</code>) now correctly generates <code>COUNT(DISTINCT field)</code>. The <code>distinct</code> flag was not propagated through the IR.</li>
 <li><strong><code>refresh()</code> overwrote virtual fields</strong> — calling <code>refresh()</code> on a model instance with <code>reverse_fk</code> or <code>m2m</code> relations would overwrite them with raw data from the database. Virtual relation fields are now skipped.</li>
@@ -1748,7 +1863,7 @@
 <li><strong>Binary data corrupted through serde</strong> — binary fields (<code>bytes</code>) were mangled by the <code>serde_json::Value</code> intermediate layer. Replaced by <code>rmpv::Value</code> for lossless binary round-trip.</li>
 </ul>
 <hr />
-<h3 id="improvements">Improvements<a class="headerlink" href="#improvements" title="Permanent link">&para;</a></h3>
+<h3 id="improvements_1">Improvements<a class="headerlink" href="#improvements_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>serde_json eliminated from data path</strong> — the entire row encoding pipeline now goes directly from sqlx rows to MessagePack via <code>rmpv</code>, removing the <code>serde_json::Value</code> intermediate representation. This fixes binary/timedelta data corruption and reduces allocations.</li>
 <li><strong><code>CellEncoder</code> trait</strong> — new unified trait in <code>oxyde-driver</code> for columnar row encoding. Each backend (Postgres, SQLite, MySQL) implements <code>CellEncoder</code> with type-specific decoding; generic functions handle the columnar structure.</li>
@@ -1807,7 +1922,7 @@
 <h4 id="migrationstypes-module-removed"><code>migrations.types</code> module removed<a class="headerlink" href="#migrationstypes-module-removed" title="Permanent link">&para;</a></h4>
 <p>The <code>oxyde.migrations.types</code> module (<code>validate_sql_type</code>, <code>normalize_sql_type</code>, <code>translate_db_specific_type</code>) has been removed. Type handling is now internal to the Rust core.</p>
 <hr />
-<h3 id="bug-fixes_1">Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
+<h3 id="bug-fixes_2">Bug Fixes<a class="headerlink" href="#bug-fixes_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>union()</code> / <code>union_all()</code> were silently ignored</strong> — union queries now correctly generate SQL and execute as expected.</li>
 <li><strong>FK relation fields included in INSERT/UPDATE</strong> — fields like <code>author: Author</code> were incorrectly serialized into INSERT/UPDATE statements alongside the actual <code>author_id</code> column. Now properly excluded.</li>
@@ -1821,7 +1936,7 @@
 <li><strong><code>migrate</code> wrong exit code</strong> — <code>migrate</code> could exit with code 0 when migration was not found.</li>
 </ul>
 <hr />
-<h3 id="improvements_1">Improvements<a class="headerlink" href="#improvements_1" title="Permanent link">&para;</a></h3>
+<h3 id="improvements_2">Improvements<a class="headerlink" href="#improvements_2" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Eager model finalization</strong> — model metadata (field metadata, column types, PK info) is now computed at class definition time instead of lazily on first query. Eliminates an entire class of "metadata not ready" bugs.</li>
 <li><strong>Unified type registry</strong> — <code>TYPE_REGISTRY</code> in <code>oxyde.core.types</code> consolidates all Python-to-IR type mappings. Fixes <code>bool</code> being misclassified as <code>int</code> in lookups.</li>
