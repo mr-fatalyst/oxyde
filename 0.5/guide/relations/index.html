@@ -1185,6 +1185,67 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#type-annotations-and-forward-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Type Annotations and Forward References
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Type Annotations and Forward References">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#target-model-is-defined-above-use-the-type-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Target model is defined above — use the type directly
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#target-model-is-not-yet-defined-forward-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Target model is not yet defined — forward reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#string-annotations-inside-generics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        String annotations inside generics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-version-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python version notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1863,6 +1924,67 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#type-annotations-and-forward-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Type Annotations and Forward References
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Type Annotations and Forward References">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#target-model-is-defined-above-use-the-type-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Target model is defined above — use the type directly
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#target-model-is-not-yet-defined-forward-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Target model is not yet defined — forward reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#string-annotations-inside-generics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        String annotations inside generics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-version-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python version notes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1929,11 +2051,12 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Post</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">author</span><span class="p">:</span> <span class="s2">&quot;Author&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">is_table</span> <span class="o">=</span> <span class="kc">True</span>
 </code></pre></div>
+<p>The FK target class must be defined <strong>before</strong> the model that references it. See <a href="#type-annotations-and-forward-references">Type annotations and forward references</a> for details.</p>
 <p>This creates:
 - A column <code>author_id</code> in the database
 - A foreign key constraint to <code>Author.id</code></p>
@@ -1951,7 +2074,7 @@
 <p>Reference a different field:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Resource</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">tenant</span><span class="p">:</span> <span class="s2">&quot;Tenant&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">tenant</span><span class="p">:</span> <span class="n">Tenant</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="n">db_fk</span><span class="o">=</span><span class="s2">&quot;uuid&quot;</span><span class="p">,</span>  <span class="c1"># Target Tenant.uuid instead of Tenant.id</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span>
@@ -1989,13 +2112,13 @@
 </tbody>
 </table>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># CASCADE - delete posts when author deleted</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">author</span><span class="p">:</span> <span class="s2">&quot;Author&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># SET NULL - keep post, set author to NULL</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">author</span><span class="p">:</span> <span class="s2">&quot;Author&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;SET NULL&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;SET NULL&quot;</span><span class="p">)</span>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># RESTRICT - prevent deletion if posts exist</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">author</span><span class="p">:</span> <span class="s2">&quot;Author&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;RESTRICT&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;RESTRICT&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="eager-loading">Eager Loading<a class="headerlink" href="#eager-loading" title="Permanent link">&para;</a></h2>
 <h3 id="join">join()<a class="headerlink" href="#join" title="Permanent link">&para;</a></h3>
@@ -2032,7 +2155,7 @@
 <a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Post</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
 <a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
-<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="n">author</span><span class="p">:</span> <span class="s2">&quot;Author&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
 <a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
 <a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
 <a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>        <span class="n">is_table</span> <span class="o">=</span> <span class="kc">True</span>
@@ -2070,8 +2193,8 @@
 <a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a>
 <a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="k">class</span><span class="w"> </span><span class="nc">PostTag</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
 <a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>    <span class="n">post</span><span class="p">:</span> <span class="s2">&quot;Post&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
-<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>    <span class="n">tag</span><span class="p">:</span> <span class="s2">&quot;Tag&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
+<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a>    <span class="n">post</span><span class="p">:</span> <span class="n">Post</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
+<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a>    <span class="n">tag</span><span class="p">:</span> <span class="n">Tag</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
 <a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>
 <a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
 <a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a>        <span class="n">is_table</span> <span class="o">=</span> <span class="kc">True</span>
@@ -2120,14 +2243,17 @@
 </table>
 <h2 id="common-patterns">Common Patterns<a class="headerlink" href="#common-patterns" title="Permanent link">&para;</a></h2>
 <h3 id="self-referential-fk">Self-Referential FK<a class="headerlink" href="#self-referential-fk" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Category</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">parent</span><span class="p">:</span> <span class="s2">&quot;Category&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;SET NULL&quot;</span><span class="p">)</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>        <span class="n">is_table</span> <span class="o">=</span> <span class="kc">True</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">Category</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">parent</span><span class="p">:</span> <span class="n">Category</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;SET NULL&quot;</span><span class="p">)</span>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+<a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>        <span class="n">is_table</span> <span class="o">=</span> <span class="kc">True</span>
 </code></pre></div>
+<p><code>from __future__ import annotations</code> is required here because <code>Category</code> references itself.</p>
 <h3 id="polymorphic-relations-manual">Polymorphic Relations (Manual)<a class="headerlink" href="#polymorphic-relations-manual" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
 <a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -2149,7 +2275,7 @@
 <a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
 <a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="n">deleted_at</span><span class="p">:</span> <span class="n">datetime</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="n">author</span><span class="p">:</span> <span class="s2">&quot;Author&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;SET NULL&quot;</span><span class="p">)</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;SET NULL&quot;</span><span class="p">)</span>
 <a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
 <a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
 <a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>        <span class="n">is_table</span> <span class="o">=</span> <span class="kc">True</span>
@@ -2177,7 +2303,7 @@
 <a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_pk</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
 <a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a>    <span class="n">content</span><span class="p">:</span> <span class="nb">str</span>
-<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a>    <span class="n">author</span><span class="p">:</span> <span class="s2">&quot;Author&quot;</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
+<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a>    <span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>
 <a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a>    <span class="n">created_at</span><span class="p">:</span> <span class="n">datetime</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">db_default</span><span class="o">=</span><span class="s2">&quot;CURRENT_TIMESTAMP&quot;</span><span class="p">)</span>
 <a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a>
 <a id="__codelineno-15-21" name="__codelineno-15-21" href="#__codelineno-15-21"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
@@ -2212,6 +2338,63 @@
 <a id="__codelineno-15-50" name="__codelineno-15-50" href="#__codelineno-15-50"></a>        <span class="k">for</span> <span class="n">author</span> <span class="ow">in</span> <span class="n">authors</span><span class="p">:</span>
 <a id="__codelineno-15-51" name="__codelineno-15-51" href="#__codelineno-15-51"></a>            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">author</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">author</span><span class="o">.</span><span class="n">posts</span><span class="p">)</span><span class="si">}</span><span class="s2"> posts&quot;</span><span class="p">)</span>
 </code></pre></div>
+<h2 id="type-annotations-and-forward-references">Type Annotations and Forward References<a class="headerlink" href="#type-annotations-and-forward-references" title="Permanent link">&para;</a></h2>
+<p>Oxyde uses Python type annotations to define foreign keys. The annotation syntax
+depends on whether the target model is already defined at the point of reference.</p>
+<h3 id="target-model-is-defined-above-use-the-type-directly">Target model is defined above — use the type directly<a class="headerlink" href="#target-model-is-defined-above-use-the-type-directly" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Author</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>    <span class="o">...</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Post</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>    <span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>  <span class="c1"># ✓ Author is defined above</span>
+</code></pre></div>
+<h3 id="target-model-is-not-yet-defined-forward-reference">Target model is not yet defined — forward reference<a class="headerlink" href="#target-model-is-not-yet-defined-forward-reference" title="Permanent link">&para;</a></h3>
+<p>If a model references another model defined <strong>later</strong> in the same file (or itself),
+Python will raise a <code>NameError</code> or <code>TypeError</code> because the name doesn't exist yet.</p>
+<p><strong>Solution:</strong> add <code>from __future__ import annotations</code> at the top of the module.
+This makes all annotations lazy (stored as strings, evaluated later), so any name
+can be used regardless of definition order:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">Post</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>    <span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">db_on_delete</span><span class="o">=</span><span class="s2">&quot;CASCADE&quot;</span><span class="p">)</span>  <span class="c1"># ✓ Works even though Author is below</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">Author</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>    <span class="o">...</span>
+</code></pre></div>
+<p>Without <code>from __future__ import annotations</code>, you would get:</p>
+<ul>
+<li><code>author: Author | None</code> → <code>NameError: name 'Author' is not defined</code></li>
+<li><code>author: "Author" | None</code> → <code>TypeError: unsupported operand type(s) for |: 'str' and 'NoneType'</code></li>
+</ul>
+<h3 id="string-annotations-inside-generics">String annotations inside generics<a class="headerlink" href="#string-annotations-inside-generics" title="Permanent link">&para;</a></h3>
+<p>For reverse FK and M2M fields, string annotations inside <code>list[]</code> always work
+because they are resolved by Pydantic, not by Python's <code>|</code> operator:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Author</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>    <span class="n">posts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Post&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">db_reverse_fk</span><span class="o">=</span><span class="s2">&quot;author&quot;</span><span class="p">)</span>  <span class="c1"># ✓ Always works</span>
+</code></pre></div>
+<h3 id="python-version-notes">Python version notes<a class="headerlink" href="#python-version-notes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Python</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3.10–3.13</td>
+<td>Annotations are evaluated eagerly. Use <code>from __future__ import annotations</code> for forward references.</td>
+</tr>
+<tr>
+<td>3.14+</td>
+<td>Annotations are lazy by default (<a href="https://peps.python.org/pep-0749/">PEP 749</a>). Forward references work without any import.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Recommendation:</strong> define models in dependency order (referenced models first) and you won't need
+any special imports. Use <code>from __future__ import annotations</code> only when the order can't be arranged
+(e.g., self-referential FK, circular references).</p>
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <h3 id="no-m2m-in-join">No M2M in join()<a class="headerlink" href="#no-m2m-in-join" title="Permanent link">&para;</a></h3>
 <p>M2M relations are supported by <code>prefetch()</code> but not by <code>join()</code>. Use <code>prefetch()</code> for M2M.</p>
