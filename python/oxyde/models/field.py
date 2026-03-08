@@ -157,6 +157,11 @@ class OxydeFieldInfo(FieldInfo):
         self.db_m2m = db_m2m
         self.db_through = db_through
 
+    @property
+    def is_virtual(self) -> bool:
+        """True for relation fields not stored in DB (reverse FK, M2M)."""
+        return bool(self.db_reverse_fk or self.db_m2m)
+
 
 def Field(
     default: Any = PydanticUndefined,

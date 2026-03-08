@@ -130,19 +130,12 @@ class OxydeModelMeta(ModelMetaclass):
 
     def __new__(mcs, name: str, bases: tuple, namespace: dict, **kwargs: Any):
         """Create new Model class with auto-configured relation fields."""
-        # Auto-add default_factory=list for relation fields BEFORE Pydantic
+        # Auto-add default_factory=list for virtual relation fields BEFORE Pydantic
         # This ensures fields with db_reverse_fk or db_m2m are not required
-        # Uses Field params only — no annotation reading needed here
         for value in namespace.values():
-            if isinstance(value, OxydeFieldInfo):
-                has_reverse_fk = getattr(value, "db_reverse_fk", None)
-                has_m2m = getattr(value, "db_m2m", False)
-                if has_reverse_fk or has_m2m:
-                    if (
-                        value.default is PydanticUndefined
-                        and value.default_factory is None
-                    ):
-                        value.default_factory = list
+            if isinstance(value, OxydeFieldInfo) and value.is_virtual:
+                if value.default is PydanticUndefined and value.default_factory is None:
+                    value.default_factory = list
 
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
 
@@ -151,13 +144,7 @@ class OxydeModelMeta(ModelMetaclass):
         # has already resolved annotations regardless of lazy/eager evaluation
         pending_fk_fields: list[tuple[str, Any, FieldInfo | None]] = []
         for field_name, field_info in cls.model_fields.items():
-            is_reverse_fk = isinstance(field_info, OxydeFieldInfo) and getattr(
-                field_info, "db_reverse_fk", None
-            )
-            is_m2m = isinstance(field_info, OxydeFieldInfo) and getattr(
-                field_info, "db_m2m", False
-            )
-            if is_reverse_fk or is_m2m:
+            if isinstance(field_info, OxydeFieldInfo) and field_info.is_virtual:
                 continue
 
             annotation = field_info.annotation
@@ -178,6 +165,31 @@ class OxydeModelMeta(ModelMetaclass):
 
     def __getattr__(cls, item: str) -> Any:  # type: ignore[override]
         return super().__getattr__(item)  # type: ignore[misc]
+
+
+def _build_globalns(cls: type) -> dict[str, Any]:
+    """Build globalns dict for get_type_hints() with common ORM types."""
+    from oxyde.queries.manager import QueryManager
+    from oxyde.queries.select import Query
+
+    module = sys.modules.get(cls.__module__)
+    globalns = vars(module) if module is not None else {}
+    combined = {**typing_module.__dict__, **globalns}
+    combined.setdefault("Model", Model)
+    combined.setdefault("OxydeModel", Model)
+    combined.setdefault("ModelMeta", ModelMeta)
+    combined.setdefault("ColumnMeta", ColumnMeta)
+    combined.setdefault("ForeignKeyInfo", ForeignKeyInfo)
+    combined.setdefault("Query", Query)
+    combined.setdefault("QueryManager", QueryManager)
+    return combined
+
+
+def _get_db_attr(field: FieldInfo, attr_name: str, default: Any = None) -> Any:
+    """Extract db_* attribute from OxydeFieldInfo or return default."""
+    if isinstance(field, OxydeFieldInfo):
+        return getattr(field, attr_name, default)
+    return default
 
 
 class Model(BaseModel, metaclass=OxydeModelMeta):
@@ -310,26 +322,12 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         if not pending_fk:
             return
 
-        from oxyde.queries.manager import QueryManager
-        from oxyde.queries.select import Query
-
         # Get type hints to resolve forward references
-        module = sys.modules.get(cls.__module__)
-        globalns = vars(module) if module is not None else {}
-        combined_globalns = {**typing_module.__dict__, **globalns}
-        combined_globalns.setdefault("Model", Model)
-        combined_globalns.setdefault("OxydeModel", Model)
-        combined_globalns.setdefault("ModelMeta", ModelMeta)
-        combined_globalns.setdefault("ColumnMeta", ColumnMeta)
-        combined_globalns.setdefault("ForeignKeyInfo", ForeignKeyInfo)
-        combined_globalns.setdefault("Query", Query)
-        combined_globalns.setdefault("QueryManager", QueryManager)
-
         try:
             hints = get_type_hints(
                 cls,
                 include_extras=True,
-                globalns=combined_globalns,
+                globalns=_build_globalns(cls),
                 localns=dict(cls.__dict__),
             )
         except NameError:
@@ -428,24 +426,10 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         if not cls._is_table:
             return
 
-        module = sys.modules.get(cls.__module__)
-        globalns = vars(module) if module is not None else {}
-        combined_globalns = {**typing_module.__dict__, **globalns}
-        combined_globalns.setdefault("ModelMeta", ModelMeta)
-        combined_globalns.setdefault("ColumnMeta", ColumnMeta)
-        combined_globalns.setdefault("ForeignKeyInfo", ForeignKeyInfo)
-        combined_globalns.setdefault("Model", Model)
-        combined_globalns.setdefault("OxydeModel", Model)
-        # Local imports to avoid circular dependency (Model ↔ Query)
-        from oxyde.queries.manager import QueryManager
-        from oxyde.queries.select import Query
-
-        combined_globalns.setdefault("Query", Query)
-        combined_globalns.setdefault("QueryManager", QueryManager)
         hints = get_type_hints(
             cls,
             include_extras=True,
-            globalns=combined_globalns,
+            globalns=_build_globalns(cls),
             localns=dict(cls.__dict__),
         )
 
@@ -455,32 +439,23 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             base_hint, _ = _unpack_annotated(hint)  # annotations not used anymore
             python_type, optional_flag = _unwrap_optional(base_hint)
 
-            # Extract db_* attributes from OxydeFieldInfo (or use defaults)
-            def get_db_attr(
-                field: FieldInfo, attr_name: str, default: Any = None
-            ) -> Any:
-                """Extract db_* attribute from OxydeFieldInfo or return default."""
-                if isinstance(field, OxydeFieldInfo):
-                    return getattr(field, attr_name, default)
-                return default
-
-            # Read db_* attributes (type-safe access)
-            db_pk = get_db_attr(model_field, "db_pk", False)
-            db_index = get_db_attr(model_field, "db_index", False)
-            db_index_name = get_db_attr(model_field, "db_index_name", None)
-            db_index_method = get_db_attr(model_field, "db_index_method", None)
-            db_unique = get_db_attr(model_field, "db_unique", False)
-            db_column = get_db_attr(model_field, "db_column", None)
-            db_type = get_db_attr(model_field, "db_type", None)
-            db_default = get_db_attr(model_field, "db_default", None)
-            db_comment = get_db_attr(model_field, "db_comment", None)
-            db_fk = get_db_attr(model_field, "db_fk", None)
-            db_on_delete = get_db_attr(model_field, "db_on_delete", "RESTRICT")
-            db_on_update = get_db_attr(model_field, "db_on_update", "CASCADE")
-            db_nullable = get_db_attr(model_field, "db_nullable", None)
-            db_reverse_fk = get_db_attr(model_field, "db_reverse_fk", None)
-            db_m2m = get_db_attr(model_field, "db_m2m", False)
-            db_through = get_db_attr(model_field, "db_through", None)
+            # Read db_* attributes (type-safe access via OxydeFieldInfo)
+            db_pk = _get_db_attr(model_field, "db_pk", False)
+            db_index = _get_db_attr(model_field, "db_index", False)
+            db_index_name = _get_db_attr(model_field, "db_index_name", None)
+            db_index_method = _get_db_attr(model_field, "db_index_method", None)
+            db_unique = _get_db_attr(model_field, "db_unique", False)
+            db_column = _get_db_attr(model_field, "db_column", None)
+            db_type = _get_db_attr(model_field, "db_type", None)
+            db_default = _get_db_attr(model_field, "db_default", None)
+            db_comment = _get_db_attr(model_field, "db_comment", None)
+            db_fk = _get_db_attr(model_field, "db_fk", None)
+            db_on_delete = _get_db_attr(model_field, "db_on_delete", "RESTRICT")
+            db_on_update = _get_db_attr(model_field, "db_on_update", "CASCADE")
+            db_nullable = _get_db_attr(model_field, "db_nullable", None)
+            db_reverse_fk = _get_db_attr(model_field, "db_reverse_fk", None)
+            db_m2m = _get_db_attr(model_field, "db_m2m", False)
+            db_through = _get_db_attr(model_field, "db_through", None)
 
             # Foreign Key detection
             # FK is defined by type annotation: field type must be Model
