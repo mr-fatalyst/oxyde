@@ -1,6 +1,6 @@
 [project]
 name = "oxyde"
-version = "0.5.0"
+version = "0.5.1"
 description = "High-performance async Python ORM with Rust core"
 readme = "README.md"
 license = {text = "MIT"}

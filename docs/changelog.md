@@ -4,6 +4,23 @@ All notable changes to Oxyde are documented here.
 
 ---
 
+## 0.5.1 - 2026-03-08
+
+### Bug Fixes
+
+- **`Optional["Model"]` not detected as FK** — `Optional["Author"]` (with a string forward reference) was not recognized as a foreign key because `ForwardRef` was not handled in the metaclass FK detection. Now works correctly alongside `Author | None` and `from __future__ import annotations`.
+- **Python 3.14 compatibility** — FK detection relied on reading `namespace["__annotations__"]` in the metaclass `__new__`, which is empty on Python 3.14 (PEP 749: lazy annotations). Moved FK detection after class creation, using Pydantic's `model_fields` which works on all Python versions.
+
+### Improvements
+
+- **Metaclass cleanup** — extracted `_build_globalns()` and `_get_db_attr()` helpers, reducing duplication in `_resolve_fk_fields()` and `_parse_field_tags()`. Relation field detection uses `OxydeFieldInfo.is_virtual` property.
+
+### Documentation
+
+- **Fixed FK annotation examples** — replaced `"Author" | None` (TypeError on Python 3.10-3.13) with `Author | None` across all docs. Added a detailed note on type annotations, forward references, and `from __future__ import annotations`.
+
+---
+
 ## 0.5.0 - 2026-03-07
 
 ### Breaking Changes
