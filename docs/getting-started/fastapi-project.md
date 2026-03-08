@@ -39,7 +39,7 @@ class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     content: str
-    author: "User" | None = Field(default=None)
+    author: User | None = Field(default=None)
 
     class Meta:
         is_table = True

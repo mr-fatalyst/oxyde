@@ -12,11 +12,13 @@ Foreign keys are defined using type annotations:
 class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
-    author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+    author: Author | None = Field(default=None, db_on_delete="CASCADE")
 
     class Meta:
         is_table = True
 ```
+
+The FK target class must be defined **before** the model that references it. See [Type annotations and forward references](#type-annotations-and-forward-references) for details.
 
 This creates:
 - A column `author_id` in the database
@@ -42,7 +44,7 @@ Reference a different field:
 ```python
 class Resource(Model):
     id: int | None = Field(default=None, db_pk=True)
-    tenant: "Tenant" | None = Field(
+    tenant: Tenant | None = Field(
         default=None,
         db_fk="uuid",  # Target Tenant.uuid instead of Tenant.id
         db_on_delete="CASCADE"
@@ -65,13 +67,13 @@ This creates column `tenant_uuid` referencing `Tenant.uuid`.
 
 ```python
 # CASCADE - delete posts when author deleted
-author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+author: Author | None = Field(default=None, db_on_delete="CASCADE")
 
 # SET NULL - keep post, set author to NULL
-author: "Author" | None = Field(default=None, db_on_delete="SET NULL")
+author: Author | None = Field(default=None, db_on_delete="SET NULL")
 
 # RESTRICT - prevent deletion if posts exist
-author: "Author" | None = Field(default=None, db_on_delete="RESTRICT")
+author: Author | None = Field(default=None, db_on_delete="RESTRICT")
 ```
 
 ## Eager Loading
@@ -126,7 +128,7 @@ class Author(Model):
 class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
-    author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+    author: Author | None = Field(default=None, db_on_delete="CASCADE")
 
     class Meta:
         is_table = True
@@ -174,8 +176,8 @@ class Tag(Model):
 
 class PostTag(Model):
     id: int | None = Field(default=None, db_pk=True)
-    post: "Post" | None = Field(default=None, db_on_delete="CASCADE")
-    tag: "Tag" | None = Field(default=None, db_on_delete="CASCADE")
+    post: Post | None = Field(default=None, db_on_delete="CASCADE")
+    tag: Tag | None = Field(default=None, db_on_delete="CASCADE")
 
     class Meta:
         is_table = True
@@ -221,14 +223,18 @@ Oxyde automatically creates FK columns:
 ### Self-Referential FK
 
 ```python
+from __future__ import annotations
+
 class Category(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
-    parent: "Category" | None = Field(default=None, db_on_delete="SET NULL")
+    parent: Category | None = Field(default=None, db_on_delete="SET NULL")
 
     class Meta:
         is_table = True
 ```
+
+`from __future__ import annotations` is required here because `Category` references itself.
 
 ### Polymorphic Relations (Manual)
 
@@ -256,7 +262,7 @@ class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     deleted_at: datetime | None = Field(default=None)
-    author: "Author" | None = Field(default=None, db_on_delete="SET NULL")
+    author: Author | None = Field(default=None, db_on_delete="SET NULL")
 
     class Meta:
         is_table = True
@@ -287,7 +293,7 @@ class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
     content: str
-    author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+    author: Author | None = Field(default=None, db_on_delete="CASCADE")
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
 
     class Meta:
@@ -322,6 +328,66 @@ async def main():
         for author in authors:
             print(f"{author.name}: {len(author.posts)} posts")
 ```
+
+## Type Annotations and Forward References
+
+Oxyde uses Python type annotations to define foreign keys. The annotation syntax
+depends on whether the target model is already defined at the point of reference.
+
+### Target model is defined above — use the type directly
+
+```python
+class Author(Model):
+    ...
+
+class Post(Model):
+    author: Author | None = Field(default=None, db_on_delete="CASCADE")  # ✓ Author is defined above
+```
+
+### Target model is not yet defined — forward reference
+
+If a model references another model defined **later** in the same file (or itself),
+Python will raise a `NameError` or `TypeError` because the name doesn't exist yet.
+
+**Solution:** add `from __future__ import annotations` at the top of the module.
+This makes all annotations lazy (stored as strings, evaluated later), so any name
+can be used regardless of definition order:
+
+```python
+from __future__ import annotations
+
+class Post(Model):
+    author: Author | None = Field(default=None, db_on_delete="CASCADE")  # ✓ Works even though Author is below
+
+class Author(Model):
+    ...
+```
+
+Without `from __future__ import annotations`, you would get:
+
+- `author: Author | None` → `NameError: name 'Author' is not defined`
+- `author: "Author" | None` → `TypeError: unsupported operand type(s) for |: 'str' and 'NoneType'`
+
+### String annotations inside generics
+
+For reverse FK and M2M fields, string annotations inside `list[]` always work
+because they are resolved by Pydantic, not by Python's `|` operator:
+
+```python
+class Author(Model):
+    posts: list["Post"] = Field(db_reverse_fk="author")  # ✓ Always works
+```
+
+### Python version notes
+
+| Python | Behavior |
+|--------|----------|
+| 3.10–3.13 | Annotations are evaluated eagerly. Use `from __future__ import annotations` for forward references. |
+| 3.14+ | Annotations are lazy by default ([PEP 749](https://peps.python.org/pep-0749/)). Forward references work without any import. |
+
+**Recommendation:** define models in dependency order (referenced models first) and you won't need
+any special imports. Use `from __future__ import annotations` only when the order can't be arranged
+(e.g., self-referential FK, circular references).
 
 ## Limitations
 

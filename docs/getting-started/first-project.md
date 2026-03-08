@@ -56,7 +56,7 @@ class Post(Model):
     content: str
     published: bool = Field(default=False)
     views: int = Field(default=0)
-    author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+    author: Author | None = Field(default=None, db_on_delete="CASCADE")
     created_at: datetime = Field(db_default="CURRENT_TIMESTAMP")
 
     class Meta:
@@ -77,8 +77,35 @@ Key concepts:
 
 - `table_name` overrides the default table name
 - `db_default="CURRENT_TIMESTAMP"` sets a SQL default
-- `author: "Author"` creates a foreign key relationship
+- `author: Author | None` creates an optional foreign key to `Author`
 - `db_on_delete="CASCADE"` deletes posts when author is deleted
+
+!!! note "Type annotations and model definition order"
+
+    Oxyde uses Python type annotations to define foreign keys. The FK target class
+    must be **already defined** above the model that references it. In the example above,
+    `Author` is defined before `Post`, so `author: Author | None` works directly.
+
+    If you need to reference a model that is defined **later** in the file (a forward reference),
+    add `from __future__ import annotations` at the top of your module:
+
+    ```python
+    from __future__ import annotations  # all annotations become lazy strings
+
+    class Post(Model):
+        author: Author | None = Field(default=None, db_on_delete="CASCADE")
+        # Works even though Author is defined below
+
+    class Author(Model):
+        ...
+    ```
+
+    Without this import, a forward reference like `author: Author | None` will raise
+    a `NameError` (Python 3.10–3.13). Starting with Python 3.14, annotations are lazy
+    by default and this import is no longer needed.
+
+    Alternatively, you can use a string literal inside generic types for reverse relations:
+    `comments: list["Comment"]` — this is handled by Pydantic and works on all Python versions.
 
 ## Step 3: Create and Apply Migrations
 

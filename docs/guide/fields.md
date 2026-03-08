@@ -148,7 +148,7 @@ Foreign keys are defined by type annotation:
 class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str
-    author: "Author" | None = Field(default=None, db_on_delete="CASCADE")  # FK to Author
+    author: Author | None = Field(default=None, db_on_delete="CASCADE")  # FK to Author
 
     class Meta:
         is_table = True
@@ -158,7 +158,7 @@ class Post(Model):
 
 ```python
 # FK to Author.uuid instead of Author.id
-author: "Author" | None = Field(
+author: Author | None = Field(
     default=None,
     db_fk="uuid",  # Target the uuid field
     db_on_delete="CASCADE"
@@ -177,13 +177,13 @@ author: "Author" | None = Field(
 
 ```python
 # CASCADE - delete posts when author is deleted
-author: "Author" | None = Field(default=None, db_on_delete="CASCADE")
+author: Author | None = Field(default=None, db_on_delete="CASCADE")
 
 # SET NULL - set author_id to NULL when author is deleted
-author: "Author" | None = Field(default=None, db_on_delete="SET NULL")
+author: Author | None = Field(default=None, db_on_delete="SET NULL")
 
 # RESTRICT - prevent author deletion if posts exist
-author: "Author" | None = Field(default=None, db_on_delete="RESTRICT")
+author: Author | None = Field(default=None, db_on_delete="RESTRICT")
 ```
 
 ## Relations
@@ -232,8 +232,8 @@ class Tag(Model):
 
 class PostTag(Model):
     id: int | None = Field(default=None, db_pk=True)
-    post: "Post" | None = Field(default=None, db_on_delete="CASCADE")
-    tag: "Tag" | None = Field(default=None, db_on_delete="CASCADE")
+    post: Post | None = Field(default=None, db_on_delete="CASCADE")
+    tag: Tag | None = Field(default=None, db_on_delete="CASCADE")
 
     class Meta:
         is_table = True
@@ -312,7 +312,7 @@ class Product(Model):
     updated_at: datetime | None = Field(default=None)
 
     # Foreign key
-    category: "Category" | None = Field(default=None, db_on_delete="SET NULL")
+    category: Category | None = Field(default=None, db_on_delete="SET NULL")
 
     class Meta:
         is_table = True
