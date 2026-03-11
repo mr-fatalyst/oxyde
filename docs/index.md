@@ -79,9 +79,9 @@ Oxyde's Rust core handles SQL generation and query execution, releasing Python's
 
 | Database   | Oxyde | Tortoise | Piccolo | Django | SQLAlchemy | SQLModel | Peewee |
 |------------|-------|----------|---------|--------|------------|----------|--------|
-| PostgreSQL | 1,433 | 896      | 956     | 733    | 455        | 433      | 79     |
-| MySQL      | 1,284 | 783      | —       | 816    | 523        | 503      | 467    |
-| SQLite     | 2,575 | 1,884    | 468     | 1,283  | 592        | 560      | 553    |
+| PostgreSQL | 1,475 | 888      | 932     | 736    | 445        | 431      | 80     |
+| MySQL      | 1,239 | 794      | —       | 714    | 536        | 505      | 461    |
+| SQLite     | 2,525 | 1,882    | 469     | 1,294  | 588        | 567      | 548    |
 
 [:octicons-arrow-right-24: Full benchmark report](advanced/benchmarks.md)
 
