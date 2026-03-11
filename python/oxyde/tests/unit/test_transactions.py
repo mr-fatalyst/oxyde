@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import msgpack
@@ -338,6 +339,51 @@ class TestTransactionIsolation:
                 assert ctx1.transaction is not ctx2.transaction
                 assert get_active_transaction("db1") is ctx1.transaction
                 assert get_active_transaction("db2") is ctx2.transaction
+
+    @pytest.mark.asyncio
+    async def test_child_task_does_not_inherit_transaction(
+        self, mock_tx, mock_get_connection
+    ):
+        """Test that child task created via create_task() does not see parent tx."""
+        child_saw_tx = None
+
+        async def child_work():
+            nonlocal child_saw_tx
+            child_saw_tx = get_active_transaction("default")
+
+        async with atomic():
+            # Parent has active transaction
+            assert get_active_transaction("default") is not None
+            # Child task should NOT see it
+            task = asyncio.create_task(child_work())
+            await task
+
+        assert child_saw_tx is None
+
+    @pytest.mark.asyncio
+    async def test_child_task_gets_own_transaction(
+        self, mock_tx, mock_get_connection
+    ):
+        """Test that child task opens its own independent transaction."""
+        child_tx_id = None
+
+        async def child_work():
+            nonlocal child_tx_id
+            async with atomic() as child_ctx:
+                child_tx_id = child_ctx.transaction.id
+
+        async with atomic() as parent_ctx:
+            parent_tx_id = parent_ctx.transaction.id
+            task = asyncio.create_task(child_work())
+            await task
+
+        # Child should have gotten a separate transaction
+        assert child_tx_id is not None
+        assert child_tx_id != parent_tx_id
+
+        # Both should have been committed independently
+        commit_calls = [c for c in mock_tx.calls if c[0] == "commit"]
+        assert len(commit_calls) == 2
 
 
 class TestTransactionExecute:

@@ -49,9 +49,10 @@ Functions:
         Used by QueryManager to route queries through active tx.
 
 ContextVar Storage:
-    _ACTIVE_TRANSACTIONS stores {alias: {transaction, depth, force_rollback}}
+    _ACTIVE_TRANSACTIONS stores {alias: {transaction, depth, force_rollback, task}}
     per async context. This allows concurrent requests to have separate
-    transaction state.
+    transaction state. The 'task' field tracks ownership via asyncio.current_task()
+    to prevent child tasks from inheriting parent transactions through ContextVar.
 
 Savepoint Handling:
     Nested atomic() calls create savepoints (sp_1, sp_2, ...).
@@ -122,6 +123,14 @@ _ACTIVE_TRANSACTIONS: ContextVar[dict[str, dict[str, Any]]] = ContextVar(
     "oxyde_active_transactions",
     default={},
 )
+
+
+def _get_owned_entry(using: str) -> dict[str, Any] | None:
+    """Return the transaction entry only if it belongs to the current task."""
+    entry = _ACTIVE_TRANSACTIONS.get().get(using)
+    if entry and entry.get("task") is asyncio.current_task():
+        return entry
+    return None
 
 
 class TransactionTimeoutError(TimeoutError):
@@ -218,7 +227,7 @@ class AtomicTransactionContext:
 
     async def __aenter__(self) -> AtomicTransactionContext:
         state = dict(_ACTIVE_TRANSACTIONS.get())
-        entry = state.get(self.using)
+        entry = _get_owned_entry(self.using)
         if entry:
             # Nested transaction - create savepoint
             depth = entry["depth"]
@@ -247,6 +256,7 @@ class AtomicTransactionContext:
             "transaction": tx,
             "depth": 1,
             "force_rollback": False,
+            "task": asyncio.current_task(),
         }
         _ACTIVE_TRANSACTIONS.set(state)
         self._transaction = tx
@@ -254,7 +264,7 @@ class AtomicTransactionContext:
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         state = dict(_ACTIVE_TRANSACTIONS.get())
-        entry = state.get(self.using)
+        entry = _get_owned_entry(self.using)
         if entry is None:
             raise RuntimeError("transaction.atomic context mismatch")
 
@@ -294,10 +304,10 @@ class AtomicTransactionContext:
             _ACTIVE_TRANSACTIONS.set(state)
 
     def set_rollback(self, rollback: bool = True) -> None:
-        state = dict(_ACTIVE_TRANSACTIONS.get())
-        entry = state.get(self.using)
+        entry = _get_owned_entry(self.using)
         if entry is None:
             raise RuntimeError("No active transaction to mark for rollback")
+        state = dict(_ACTIVE_TRANSACTIONS.get())
         entry["force_rollback"] = bool(rollback)
         state[self.using] = entry
         _ACTIVE_TRANSACTIONS.set(state)
@@ -327,7 +337,7 @@ def atomic(
 
 def get_active_transaction(using: str = "default") -> AsyncTransaction | None:
     """Get the currently active transaction for a connection alias."""
-    entry = _ACTIVE_TRANSACTIONS.get().get(using)
+    entry = _get_owned_entry(using)
     if entry:
         return entry["transaction"]
     return None

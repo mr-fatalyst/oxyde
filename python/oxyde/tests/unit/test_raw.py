@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import msgpack
@@ -198,6 +199,7 @@ class TestExecuteRawTransaction:
                 "transaction": tx_stub,
                 "depth": 1,
                 "force_rollback": False,
+                "task": asyncio.current_task(),
             }
         })
 
@@ -238,11 +240,13 @@ class TestExecuteRawTransaction:
                 "transaction": tx_default,
                 "depth": 1,
                 "force_rollback": False,
+                "task": asyncio.current_task(),
             },
             "analytics": {
                 "transaction": tx_analytics,
                 "depth": 1,
                 "force_rollback": False,
+                "task": asyncio.current_task(),
             },
         })
 
