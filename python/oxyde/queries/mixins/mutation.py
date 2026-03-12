@@ -366,15 +366,15 @@ class MutationMixin:
             if pk_value is None:
                 continue
 
-            # Use model_dump to serialize fields (respects @field_serializer)
-            # mode='json' gives JSON values (datetime -> ISO string, etc.)
-            all_values = obj.model_dump(mode="json", exclude_none=False)
+            # Use model_dump(mode="python") + _serialize_value_for_ir()
+            # to match the same serialization path as update()
+            all_values = obj.model_dump(mode="python", exclude_none=False)
 
-            # Extract only requested fields
+            # Extract only requested fields and serialize for IR
             values = {}
             for field_name in fields_list:
                 if field_name in all_values:
-                    values[field_name] = all_values[field_name]
+                    values[field_name] = _serialize_value_for_ir(all_values[field_name])
 
             if values:
                 bulk_entries.append(
