@@ -13,6 +13,12 @@ from pathlib import Path
 
 import pytest
 
+from oxyde.migrations.context import MigrationContext
+from oxyde.migrations.executor import _check_migration_dependency, _check_rollback_dependency
+from oxyde.migrations.generator import generate_migration_file
+from oxyde.migrations.replay import SchemaState, _topological_sort_migrations, replay_migrations
+from oxyde.migrations.tracker import get_migration_files, get_pending_migrations
+
 # =============================================================================
 # Generator Tests
 # =============================================================================
@@ -23,8 +29,6 @@ class TestMigrationGenerator:
 
     def test_generate_create_table_migration(self, tmp_path: Path):
         """Test generating migration for create_table operation."""
-        from oxyde.migrations.generator import generate_migration_file
-
         operations = [
             {
                 "type": "create_table",
@@ -73,7 +77,6 @@ class TestMigrationGenerator:
 
     def test_generate_add_column_migration(self, tmp_path: Path):
         """Test generating migration for add_column operation."""
-        from oxyde.migrations.generator import generate_migration_file
 
         operations = [
             {
@@ -93,7 +96,6 @@ class TestMigrationGenerator:
 
     def test_generate_drop_table_migration_with_definition(self, tmp_path: Path):
         """Test generating migration for drop_table with full table definition."""
-        from oxyde.migrations.generator import generate_migration_file
 
         operations = [
             {
@@ -128,7 +130,6 @@ class TestMigrationGenerator:
 
     def test_generate_sequential_migrations_with_dependencies(self, tmp_path: Path):
         """Test that sequential migrations reference previous migration."""
-        from oxyde.migrations.generator import generate_migration_file
 
         # First migration
         ops1 = [
@@ -162,7 +163,6 @@ class TestMigrationGenerator:
 
     def test_generate_create_index_migration(self, tmp_path: Path):
         """Test generating migration for create_index operation."""
-        from oxyde.migrations.generator import generate_migration_file
 
         operations = [
             {
@@ -186,7 +186,6 @@ class TestMigrationGenerator:
 
     def test_generate_foreign_key_migration(self, tmp_path: Path):
         """Test generating migration for add_foreign_key operation."""
-        from oxyde.migrations.generator import generate_migration_file
 
         operations = [
             {
@@ -224,7 +223,6 @@ class TestMigrationReplay:
 
     def test_replay_create_table(self, tmp_path: Path):
         """Test replaying create_table operation."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.apply_operation(
@@ -246,7 +244,6 @@ class TestMigrationReplay:
 
     def test_replay_drop_table(self):
         """Test replaying drop_table operation."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.tables["old_table"] = {"name": "old_table", "fields": [], "indexes": []}
@@ -257,7 +254,6 @@ class TestMigrationReplay:
 
     def test_replay_add_column(self):
         """Test replaying add_column operation."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.tables["users"] = {
@@ -279,7 +275,6 @@ class TestMigrationReplay:
 
     def test_replay_drop_column(self):
         """Test replaying drop_column operation."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.tables["users"] = {
@@ -305,7 +300,6 @@ class TestMigrationReplay:
 
     def test_replay_rename_table(self):
         """Test replaying rename_table operation."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.tables["old_name"] = {"name": "old_name", "fields": [], "indexes": []}
@@ -324,7 +318,6 @@ class TestMigrationReplay:
 
     def test_replay_rename_column(self):
         """Test replaying rename_column operation."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.tables["users"] = {
@@ -348,7 +341,6 @@ class TestMigrationReplay:
 
     def test_replay_create_index(self):
         """Test replaying create_index operation."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.tables["users"] = {"name": "users", "fields": [], "indexes": []}
@@ -366,7 +358,6 @@ class TestMigrationReplay:
 
     def test_replay_drop_index(self):
         """Test replaying drop_index operation."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.tables["users"] = {
@@ -387,7 +378,6 @@ class TestMigrationReplay:
 
     def test_to_snapshot(self):
         """Test converting state to snapshot format."""
-        from oxyde.migrations.replay import SchemaState
 
         state = SchemaState()
         state.tables["users"] = {
@@ -412,7 +402,6 @@ class TestDependencyResolution:
 
     def test_topological_sort_linear(self, tmp_path: Path):
         """Test topological sort for linear dependencies."""
-        from oxyde.migrations.replay import _topological_sort_migrations
 
         # Create migration files
         mig1 = tmp_path / "0001_first.py"
@@ -438,7 +427,6 @@ class TestDependencyResolution:
 
     def test_topological_sort_no_dependencies(self, tmp_path: Path):
         """Test topological sort when no dependencies (fall back to alphabetical)."""
-        from oxyde.migrations.replay import _topological_sort_migrations
 
         mig1 = tmp_path / "0001_a.py"
         mig1.write_text(
@@ -460,7 +448,6 @@ class TestDependencyResolution:
 
     def test_topological_sort_circular_dependency(self, tmp_path: Path):
         """Test that circular dependencies raise error."""
-        from oxyde.migrations.replay import _topological_sort_migrations
 
         mig1 = tmp_path / "0001_a.py"
         mig1.write_text(
@@ -477,9 +464,8 @@ class TestDependencyResolution:
         with pytest.raises(ValueError, match="Circular dependency"):
             _topological_sort_migrations(files)
 
-    def test_get_migration_order(self, tmp_path: Path):
-        """Test get_migration_order function."""
-        from oxyde.migrations.replay import get_migration_order
+    def test_topological_sort_returns_correct_order(self, tmp_path: Path):
+        """Test _topological_sort_migrations returns dependency order."""
 
         mig1 = tmp_path / "0001_init.py"
         mig1.write_text(
@@ -491,13 +477,12 @@ class TestDependencyResolution:
             'depends_on = "0001_init"\ndef upgrade(ctx): pass\ndef downgrade(ctx): pass'
         )
 
-        order = get_migration_order(str(tmp_path))
+        order = _topological_sort_migrations(sorted(tmp_path.glob("[0-9]*.py")))
 
-        assert order == ["0001_init", "0002_users"]
+        assert [f.stem for f in order] == ["0001_init", "0002_users"]
 
     def test_replay_migrations_with_dependencies(self, tmp_path: Path):
         """Test replay_migrations respects dependency order."""
-        from oxyde.migrations.replay import replay_migrations
 
         # Migration 1: create users table
         mig1 = tmp_path / "0001_users.py"
@@ -548,7 +533,6 @@ class TestMigrationContext:
 
     def test_collect_mode_create_table(self):
         """Test collecting create_table operation."""
-        from oxyde.migrations.context import MigrationContext
 
         ctx = MigrationContext(mode="collect")
         ctx.create_table(
@@ -565,7 +549,6 @@ class TestMigrationContext:
 
     def test_collect_mode_add_column(self):
         """Test collecting add_column operation."""
-        from oxyde.migrations.context import MigrationContext
 
         ctx = MigrationContext(mode="collect")
         ctx.add_column("users", {"name": "email", "field_type": "TEXT"})
@@ -577,7 +560,6 @@ class TestMigrationContext:
 
     def test_collect_mode_drop_table(self):
         """Test collecting drop_table operation."""
-        from oxyde.migrations.context import MigrationContext
 
         ctx = MigrationContext(mode="collect")
         ctx.drop_table("old_table")
@@ -589,7 +571,6 @@ class TestMigrationContext:
 
     def test_collect_mode_multiple_operations(self):
         """Test collecting multiple operations."""
-        from oxyde.migrations.context import MigrationContext
 
         ctx = MigrationContext(mode="collect")
         ctx.create_table("users", fields=[])
@@ -604,7 +585,6 @@ class TestMigrationContext:
 
     def test_collect_mode_foreign_key(self):
         """Test collecting foreign key operations."""
-        from oxyde.migrations.context import MigrationContext
 
         ctx = MigrationContext(mode="collect")
         ctx.add_foreign_key(
@@ -623,7 +603,6 @@ class TestMigrationContext:
 
     def test_collect_mode_check_constraint(self):
         """Test collecting check constraint operations."""
-        from oxyde.migrations.context import MigrationContext
 
         ctx = MigrationContext(mode="collect")
         ctx.add_check("users", "chk_age", "age >= 0")
@@ -635,7 +614,6 @@ class TestMigrationContext:
 
     def test_dialect_property(self):
         """Test dialect property."""
-        from oxyde.migrations.context import MigrationContext
 
         ctx_sqlite = MigrationContext(mode="collect", dialect="sqlite")
         ctx_postgres = MigrationContext(mode="collect", dialect="postgres")
@@ -654,14 +632,12 @@ class TestMigrationTracker:
 
     def test_get_migration_files_empty(self, tmp_path: Path):
         """Test getting migration files from empty directory."""
-        from oxyde.migrations.tracker import get_migration_files
 
         files = get_migration_files(str(tmp_path))
         assert files == []
 
     def test_get_migration_files_sorted(self, tmp_path: Path):
         """Test that migration files are sorted by number."""
-        from oxyde.migrations.tracker import get_migration_files
 
         (tmp_path / "0003_third.py").write_text("")
         (tmp_path / "0001_first.py").write_text("")
@@ -674,7 +650,6 @@ class TestMigrationTracker:
 
     def test_get_migration_files_ignores_non_migrations(self, tmp_path: Path):
         """Test that non-migration files are ignored."""
-        from oxyde.migrations.tracker import get_migration_files
 
         (tmp_path / "0001_migration.py").write_text("")
         (tmp_path / "__init__.py").write_text("")
@@ -688,7 +663,6 @@ class TestMigrationTracker:
 
     def test_get_pending_migrations(self, tmp_path: Path):
         """Test getting pending migrations."""
-        from oxyde.migrations.tracker import get_pending_migrations
 
         (tmp_path / "0001_first.py").write_text("")
         (tmp_path / "0002_second.py").write_text("")
@@ -704,7 +678,6 @@ class TestMigrationTracker:
 
     def test_get_pending_migrations_all_applied(self, tmp_path: Path):
         """Test when all migrations are applied."""
-        from oxyde.migrations.tracker import get_pending_migrations
 
         (tmp_path / "0001_first.py").write_text("")
         (tmp_path / "0002_second.py").write_text("")
@@ -725,7 +698,6 @@ class TestExecutorDependencyChecks:
 
     def test_check_migration_dependency_satisfied(self, tmp_path: Path):
         """Test dependency check passes when dependency is satisfied."""
-        from oxyde.migrations.executor import _check_migration_dependency
 
         mig = tmp_path / "0002_second.py"
         mig.write_text('depends_on = "0001_first"\ndef upgrade(ctx): pass')
@@ -737,7 +709,6 @@ class TestExecutorDependencyChecks:
 
     def test_check_migration_dependency_not_satisfied(self, tmp_path: Path):
         """Test dependency check fails when dependency not satisfied."""
-        from oxyde.migrations.executor import _check_migration_dependency
 
         mig = tmp_path / "0002_second.py"
         mig.write_text('depends_on = "0001_first"\ndef upgrade(ctx): pass')
@@ -749,7 +720,6 @@ class TestExecutorDependencyChecks:
 
     def test_check_migration_dependency_none(self, tmp_path: Path):
         """Test dependency check passes when no dependency."""
-        from oxyde.migrations.executor import _check_migration_dependency
 
         mig = tmp_path / "0001_first.py"
         mig.write_text("depends_on = None\ndef upgrade(ctx): pass")
@@ -761,7 +731,6 @@ class TestExecutorDependencyChecks:
 
     def test_check_rollback_dependency_safe(self, tmp_path: Path):
         """Test rollback check passes when no migration depends on target."""
-        from oxyde.migrations.executor import _check_rollback_dependency
 
         mig1 = tmp_path / "0001_first.py"
         mig1.write_text("depends_on = None\ndef upgrade(ctx): pass")
@@ -775,7 +744,6 @@ class TestExecutorDependencyChecks:
 
     def test_check_rollback_dependency_blocked(self, tmp_path: Path):
         """Test rollback check fails when another migration depends on target."""
-        from oxyde.migrations.executor import _check_rollback_dependency
 
         mig1 = tmp_path / "0001_first.py"
         mig1.write_text("depends_on = None\ndef upgrade(ctx): pass")
@@ -800,7 +768,6 @@ class TestDropOperationReversibility:
 
     def test_drop_column_with_definition_generates_add_column(self, tmp_path: Path):
         """Test drop_column with field_def generates add_column in downgrade."""
-        from oxyde.migrations.generator import generate_migration_file
 
         operations = [
             {
@@ -829,7 +796,6 @@ class TestDropOperationReversibility:
 
     def test_drop_index_with_definition_generates_create_index(self, tmp_path: Path):
         """Test drop_index with index_def generates create_index in downgrade."""
-        from oxyde.migrations.generator import generate_migration_file
 
         operations = [
             {
@@ -854,7 +820,6 @@ class TestDropOperationReversibility:
 
     def test_drop_foreign_key_with_definition_generates_add_fk(self, tmp_path: Path):
         """Test drop_foreign_key with fk_def generates add_foreign_key in downgrade."""
-        from oxyde.migrations.generator import generate_migration_file
 
         operations = [
             {
@@ -883,7 +848,6 @@ class TestDropOperationReversibility:
 
     def test_drop_check_with_definition_generates_add_check(self, tmp_path: Path):
         """Test drop_check with check_def generates add_check in downgrade."""
-        from oxyde.migrations.generator import generate_migration_file
 
         operations = [
             {

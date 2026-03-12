@@ -20,6 +20,7 @@ from oxyde.migrations.context import MigrationContext
 from oxyde.migrations.replay import (
     SchemaState,
     _get_migration_dependency,
+    _topological_sort_migrations,
 )
 from oxyde.migrations.tracker import (
     ensure_migrations_table,
@@ -196,7 +197,9 @@ def replay_migrations_up_to(
         SchemaState after replaying migrations
     """
     state = SchemaState()
-    migration_files = sorted(Path(migrations_dir).glob("[0-9]*.py"))
+    migration_files = _topological_sort_migrations(
+        sorted(Path(migrations_dir).glob("[0-9]*.py"))
+    )
 
     for filepath in migration_files:
         # Stop before target (or at target if include_target is False)

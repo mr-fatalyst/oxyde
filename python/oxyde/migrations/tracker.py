@@ -6,6 +6,7 @@ from pathlib import Path
 
 from oxyde.core.ir import build_raw_sql_ir
 from oxyde.db.registry import get_connection as _get_connection_async
+from oxyde.migrations.replay import _topological_sort_migrations
 from oxyde.migrations.utils import detect_dialect, parse_query_result
 
 MIGRATIONS_TABLE = "oxyde_migrations"
@@ -161,7 +162,7 @@ def get_migration_files(migrations_dir: str = "migrations") -> list[Path]:
 
     # Find all migration files (0001_*.py, 0002_*.py, etc.)
     migration_files = sorted(migrations_path.glob("[0-9]*.py"))
-    return migration_files
+    return _topological_sort_migrations(migration_files)
 
 
 def get_pending_migrations(

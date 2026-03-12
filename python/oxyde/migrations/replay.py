@@ -264,18 +264,4 @@ def replay_migrations(migrations_dir: str = "migrations") -> dict[str, Any]:
     return state.to_snapshot()
 
 
-def get_migration_order(migrations_dir: str = "migrations") -> list[str]:
-    """Get migrations in topological order.
-
-    Args:
-        migrations_dir: Directory containing migration files
-
-    Returns:
-        List of migration names in dependency order
-    """
-    migration_files = sorted(Path(migrations_dir).glob("[0-9]*.py"))
-    sorted_files = _topological_sort_migrations(migration_files)
-    return [f.stem for f in sorted_files]
-
-
-__all__ = ["SchemaState", "replay_migrations", "get_migration_order"]
+__all__ = ["SchemaState", "replay_migrations", "_topological_sort_migrations"]
