@@ -717,14 +717,16 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                     raise NotFoundError(
                         f"{cls_name} with {pk_field}={pk_value} not found"
                     )
-                # Update instance from RETURNING * result
+                # Update instance from RETURNING * result (with Pydantic validation)
                 col_to_field = {
                     meta.db_column: field_name
                     for field_name, meta in self.__class__._db_meta.field_metadata.items()
                 }
-                for col, value in rows[0].items():
-                    field_name = col_to_field.get(col, col)
-                    setattr(self, field_name, value)
+                row_dict = {
+                    col_to_field.get(col, col): value for col, value in rows[0].items()
+                }
+                validated = self.__class__.model_validate(row_dict)
+                self.__dict__.update(validated.__dict__)
             else:
                 affected = await manager.filter(**{pk_field: pk_value}).update(
                     returning=False, client=client, using=using, **values
@@ -735,9 +737,10 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                         f"{cls_name} with {pk_field}={pk_value} not found"
                     )
         else:
-            await manager.create(
+            created = await manager.create(
                 instance=self, client=client, using=using, _skip_hooks=True
             )
+            self.__dict__.update(created.__dict__)
 
         # Call post_save hook
         await self.post_save(is_create=is_create, update_fields=update_fields_set)

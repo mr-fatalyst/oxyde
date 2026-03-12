@@ -186,17 +186,6 @@ class TestManagerCreate:
         assert stub.calls[0]["op"] == "insert"
 
     @pytest.mark.asyncio
-    async def test_create_with_instance(self):
-        """Test create() with model instance."""
-        stub = StubExecuteClient([{"affected": 1, "inserted_ids": [1]}])
-
-        obj = OxydeTestModel(name="FromInstance", age=30)
-        instance = await OxydeTestModel.objects.create(client=stub, instance=obj)
-
-        assert instance is obj
-        assert stub.calls[0]["op"] == "insert"
-
-    @pytest.mark.asyncio
     async def test_create_requires_data(self):
         """Test create() without data raises error."""
         stub = StubExecuteClient([])

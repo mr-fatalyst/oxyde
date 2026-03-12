@@ -97,7 +97,7 @@ pub(crate) fn execute<'py>(
                 // Single insert with RETURNING * (ir.returning=true) returns full rows
                 // Bulk insert returns only PKs for efficiency
                 if ir.returning.unwrap_or(false) {
-                    execute_mutation_returning(&pool_name, &sql, &params, None)
+                    execute_mutation_returning(&pool_name, &sql, &params, ir.col_types.as_ref())
                         .await
                         .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
@@ -120,9 +120,14 @@ pub(crate) fn execute<'py>(
                 // If RETURNING clause is requested, use mutation returning format
                 if ir.returning.unwrap_or(false) {
                     let exec_start = Instant::now();
-                    let result = execute_mutation_returning(&pool_name, &sql, &params, None)
-                        .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                    let result = execute_mutation_returning(
+                        &pool_name,
+                        &sql,
+                        &params,
+                        ir.col_types.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
                     let exec_us = exec_start.elapsed().as_micros();
 
                     if profile {
@@ -219,9 +224,14 @@ pub(crate) fn execute_in_transaction<'py>(
             }
             oxyde_codec::Operation::Insert => {
                 if ir.returning.unwrap_or(false) {
-                    execute_mutation_returning_in_transaction(tx_id, &sql, &params, None)
-                        .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    execute_mutation_returning_in_transaction(
+                        tx_id,
+                        &sql,
+                        &params,
+                        ir.col_types.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
                     let pk_column = ir.pk_column.as_deref();
                     let ids =
@@ -234,9 +244,14 @@ pub(crate) fn execute_in_transaction<'py>(
             }
             oxyde_codec::Operation::Update | oxyde_codec::Operation::Delete => {
                 if ir.returning.unwrap_or(false) {
-                    execute_mutation_returning_in_transaction(tx_id, &sql, &params, None)
-                        .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    execute_mutation_returning_in_transaction(
+                        tx_id,
+                        &sql,
+                        &params,
+                        ir.col_types.as_ref(),
+                    )
+                    .await
+                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
                     let affected = execute_statement_in_transaction(tx_id, &sql, &params)
                         .await

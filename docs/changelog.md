@@ -4,7 +4,7 @@ All notable changes to Oxyde are documented here.
 
 ---
 
-## 0.5.2 - 2026-03-12
+## 0.5.2 - Unreleased
 
 ### Bug Fixes
 
