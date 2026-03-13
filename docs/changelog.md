@@ -4,10 +4,11 @@ All notable changes to Oxyde are documented here.
 
 ---
 
-## 0.5.2 - Unreleased
+## 0.5.2 - 2026-03-13
 
 ### Bug Fixes
 
+- **`create()` / `save()` now validates returned data via Pydantic** — `RETURNING *` results were applied via raw `setattr`, bypassing Pydantic validation and type coercion. Additionally, `save()` on new instances did not update the object with auto-generated fields (PK, defaults) after insertion. Both paths now use `model_validate()`.
 - **`save()` on MySQL no longer raises `NotFoundError`** — `save()` for existing records always requested `RETURNING`, which MySQL doesn't support. Now detects the backend and falls back to affected row count for MySQL.
 - **`bulk_create()` no longer loses fields across rows** — `_dump_insert_data()` used `exclude_none=True`, which couldn't distinguish "user didn't set the field" from "user explicitly set None". Changed to `exclude_unset=True` so explicitly passed `None` is preserved while unset fields are omitted (letting DB defaults work).
 - **`bulk_update()` no longer corrupts `bytes` fields** — `model_dump(mode="json")` converted bytes to base64 strings, which Rust wrote as `VARCHAR` instead of binary. Now uses `mode="python"` with `_serialize_value_for_ir()`, matching the same serialization path as `update()`.
