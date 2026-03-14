@@ -15,13 +15,22 @@ def get_ir_type(python_type: Any) -> str | None:
     """Convert Python type to IR type hint string.
 
     Returns None for unsupported types (fallback to dynamic decode in Rust).
-    Handles Optional[T], dict[K, V], and other generic types.
+    Handles Optional[T], list[T], dict[K, V], and other generic types.
     """
     origin = get_origin(python_type)
 
     # dict[K, V] -> "json"
     if origin is dict:
         return "json"
+
+    # list[T] -> "ir_type[]" (e.g. list[str] -> "str[]", list[UUID] -> "uuid[]")
+    if origin is list:
+        args = get_args(python_type)
+        if args:
+            elem_type = get_ir_type(args[0])
+            if elem_type:
+                return f"{elem_type}[]"
+        return None
 
     # Union types (including Optional[T]) -> recurse into args
     if origin is not None:

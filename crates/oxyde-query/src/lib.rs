@@ -522,6 +522,141 @@ mod tests {
     }
 
     #[test]
+    fn test_insert_with_text_array_column() {
+        let mut col_types = HashMap::new();
+        col_types.insert("tags".to_string(), "str[]".to_string());
+        col_types.insert("name".to_string(), "str".to_string());
+
+        let ir = QueryIR {
+            op: Operation::Insert,
+            table: "documents".into(),
+            values: Some(HashMap::from([
+                ("name".into(), rmpv_str("doc1")),
+                (
+                    "tags".into(),
+                    rmpv_arr(vec![rmpv_str("rust"), rmpv_str("async")]),
+                ),
+            ])),
+            col_types: Some(col_types),
+            returning: Some(true),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("INSERT INTO"), "SQL: {sql}");
+        assert!(sql.contains("RETURNING"), "SQL: {sql}");
+        // Should have 2 params: name (string) and tags (array)
+        assert_eq!(params.len(), 2, "params: {params:?}");
+        // Verify the array param is Value::Array, not Value::String
+        let array_param = params
+            .iter()
+            .find(|p| matches!(p, Value::Array(_, _)))
+            .expect("should have an array parameter");
+        match array_param {
+            Value::Array(sea_query::ArrayType::String, Some(elems)) => {
+                assert_eq!(elems.len(), 2);
+            }
+            other => panic!("expected Array(String, ...), got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_insert_with_uuid_array_column() {
+        let mut col_types = HashMap::new();
+        col_types.insert("tag_ids".to_string(), "uuid[]".to_string());
+
+        let ir = QueryIR {
+            op: Operation::Insert,
+            table: "documents".into(),
+            values: Some(HashMap::from([(
+                "tag_ids".into(),
+                rmpv_arr(vec![
+                    rmpv_str("550e8400-e29b-41d4-a716-446655440000"),
+                    rmpv_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8"),
+                ]),
+            )])),
+            col_types: Some(col_types),
+            ..Default::default()
+        };
+        let (_, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            Value::Array(sea_query::ArrayType::Uuid, Some(elems)) => {
+                assert_eq!(elems.len(), 2);
+                assert!(matches!(&elems[0], Value::Uuid(Some(_))));
+            }
+            other => panic!("expected Array(Uuid, ...), got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_update_with_array_column() {
+        let mut col_types = HashMap::new();
+        col_types.insert("tags".to_string(), "str[]".to_string());
+
+        let ir = QueryIR {
+            op: Operation::Update,
+            table: "documents".into(),
+            values: Some(HashMap::from([(
+                "tags".into(),
+                rmpv_arr(vec![rmpv_str("updated")]),
+            )])),
+            col_types: Some(col_types),
+            filter_tree: Some(filter_cond("id", "=", rmpv_int(1))),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("UPDATE"), "SQL: {sql}");
+        assert_eq!(params.len(), 2); // array param + filter param
+        let has_array = params.iter().any(|p| matches!(p, Value::Array(_, _)));
+        assert!(has_array, "should have array param: {params:?}");
+    }
+
+    #[test]
+    fn test_insert_with_empty_array() {
+        let mut col_types = HashMap::new();
+        col_types.insert("tags".to_string(), "str[]".to_string());
+
+        let ir = QueryIR {
+            op: Operation::Insert,
+            table: "documents".into(),
+            values: Some(HashMap::from([("tags".into(), rmpv_arr(vec![]))])),
+            col_types: Some(col_types),
+            ..Default::default()
+        };
+        let (_, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            Value::Array(sea_query::ArrayType::String, Some(elems)) => {
+                assert!(elems.is_empty());
+            }
+            other => panic!("expected empty Array, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_insert_array_without_col_type_falls_back() {
+        // Without col_types, arrays should fall back to string (existing behavior)
+        let ir = QueryIR {
+            op: Operation::Insert,
+            table: "documents".into(),
+            values: Some(HashMap::from([(
+                "tags".into(),
+                rmpv_arr(vec![rmpv_str("a"), rmpv_str("b")]),
+            )])),
+            // No col_types
+            ..Default::default()
+        };
+        let (_, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert_eq!(params.len(), 1);
+        // Should be a plain string, not an array
+        assert!(
+            matches!(&params[0], Value::String(Some(_))),
+            "without col_types, array should serialize as string: {:?}",
+            params[0]
+        );
+    }
+
+    #[test]
     fn test_count_without_distinct() {
         let ir = QueryIR {
             table: "users".into(),

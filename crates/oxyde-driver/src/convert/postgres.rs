@@ -113,12 +113,17 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "json" => {
+            "json" | "jsonb" => {
                 match row.try_get::<Option<serde_json::Value>, _>(idx) {
                     Ok(Some(v)) => write_json_value(buf, &v),
                     Ok(None) => write_nil(buf),
                     Err(_) => fallback_str(buf, row, idx),
                 }
+                true
+            }
+            ir if ir.ends_with("[]") => {
+                let base = &ir[..ir.len() - 2];
+                encode_pg_array(buf, row, idx, base);
                 true
             }
             _ => false,
@@ -200,12 +205,148 @@ impl CellEncoder for PgEncoder {
                 Ok(None) => write_nil(buf),
                 Err(_) => fallback_str(buf, row, idx),
             },
+            // PostgreSQL array types (e.g. _TEXT, _UUID, _INT4, TEXT[], UUID[])
+            name if name.ends_with("[]") || name.starts_with('_') => {
+                let base = db_type_to_ir_base(name);
+                encode_pg_array(buf, row, idx, base);
+            }
             _ => match row.try_get::<Option<String>, _>(idx) {
                 Ok(Some(v)) => write_str(buf, &v),
                 Ok(None) => write_nil(buf),
                 Err(_) => fallback_str(buf, row, idx),
             },
         }
+    }
+}
+
+/// Map a PostgreSQL array DB type name to an IR base type.
+/// Handles both `_TEXT` (internal PG name) and `TEXT[]` formats.
+fn db_type_to_ir_base(name: &str) -> &str {
+    // Strip [] suffix or _ prefix to get the base type
+    let base = if let Some(b) = name.strip_suffix("[]") {
+        b
+    } else if let Some(b) = name.strip_prefix('_') {
+        b
+    } else {
+        name
+    };
+    match base.to_uppercase().as_str() {
+        "TEXT" | "VARCHAR" | "CHAR" | "BPCHAR" | "NAME" => "str",
+        "INT2" | "SMALLINT" | "INT4" | "INTEGER" | "INT" | "INT8" | "BIGINT" => "int",
+        "FLOAT4" | "REAL" | "FLOAT8" | "DOUBLE PRECISION" => "float",
+        "BOOL" | "BOOLEAN" => "bool",
+        "UUID" => "uuid",
+        "JSON" | "JSONB" => "json",
+        "TIMESTAMPTZ" => "datetime",
+        "TIMESTAMP" => "datetime",
+        "DATE" => "date",
+        "TIME" | "TIMETZ" => "time",
+        _ => "str", // fallback
+    }
+}
+
+/// Encode a PostgreSQL array column to msgpack array based on the base IR type.
+fn encode_pg_array(buf: &mut Vec<u8>, row: &PgRow, idx: usize, base_type: &str) {
+    match base_type {
+        "str" => match row.try_get::<Option<Vec<String>>, _>(idx) {
+            Ok(Some(arr)) => {
+                rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                for v in &arr {
+                    write_str(buf, v);
+                }
+            }
+            Ok(None) => write_nil(buf),
+            Err(_) => fallback_str(buf, row, idx),
+        },
+        "int" => match row.try_get::<Option<Vec<i64>>, _>(idx) {
+            Ok(Some(arr)) => {
+                rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                for v in &arr {
+                    write_i64(buf, *v);
+                }
+            }
+            Ok(None) => write_nil(buf),
+            Err(_) => match row.try_get::<Option<Vec<i32>>, _>(idx) {
+                Ok(Some(arr)) => {
+                    rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                    for v in &arr {
+                        write_i32_as_i64(buf, *v);
+                    }
+                }
+                Ok(None) => write_nil(buf),
+                Err(_) => fallback_str(buf, row, idx),
+            },
+        },
+        "float" => match row.try_get::<Option<Vec<f64>>, _>(idx) {
+            Ok(Some(arr)) => {
+                rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                for v in &arr {
+                    write_f64(buf, *v);
+                }
+            }
+            Ok(None) => write_nil(buf),
+            Err(_) => fallback_str(buf, row, idx),
+        },
+        "bool" => match row.try_get::<Option<Vec<bool>>, _>(idx) {
+            Ok(Some(arr)) => {
+                rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                for v in &arr {
+                    write_bool(buf, *v);
+                }
+            }
+            Ok(None) => write_nil(buf),
+            Err(_) => fallback_str(buf, row, idx),
+        },
+        "uuid" => match row.try_get::<Option<Vec<Uuid>>, _>(idx) {
+            Ok(Some(arr)) => {
+                rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                for v in &arr {
+                    write_str(buf, &v.to_string());
+                }
+            }
+            Ok(None) => write_nil(buf),
+            Err(_) => fallback_str(buf, row, idx),
+        },
+        "json" | "jsonb" => match row.try_get::<Option<Vec<serde_json::Value>>, _>(idx) {
+            Ok(Some(arr)) => {
+                rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                for v in &arr {
+                    write_json_value(buf, v);
+                }
+            }
+            Ok(None) => write_nil(buf),
+            Err(_) => fallback_str(buf, row, idx),
+        },
+        "datetime" => match row.try_get::<Option<Vec<DateTime<Utc>>>, _>(idx) {
+            Ok(Some(arr)) => {
+                rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                for v in &arr {
+                    write_str(buf, &v.to_rfc3339());
+                }
+            }
+            Ok(None) => write_nil(buf),
+            Err(_) => match row.try_get::<Option<Vec<NaiveDateTime>>, _>(idx) {
+                Ok(Some(arr)) => {
+                    rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                    for v in &arr {
+                        write_str(buf, &v.format("%Y-%m-%dT%H:%M:%S%.f").to_string());
+                    }
+                }
+                Ok(None) => write_nil(buf),
+                Err(_) => fallback_str(buf, row, idx),
+            },
+        },
+        // Fallback: try as string array
+        _ => match row.try_get::<Option<Vec<String>>, _>(idx) {
+            Ok(Some(arr)) => {
+                rmp::encode::write_array_len(buf, arr.len() as u32).ok();
+                for v in &arr {
+                    write_str(buf, v);
+                }
+            }
+            Ok(None) => write_nil(buf),
+            Err(_) => fallback_str(buf, row, idx),
+        },
     }
 }
 
