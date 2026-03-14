@@ -1,10 +1,12 @@
 //! Filter expression building for WHERE clauses
 
+use std::collections::HashMap;
+
 use oxyde_codec::{Filter, FilterNode};
 use sea_query::{BinOper, Expr, Func, SimpleExpr, Value};
 
 use crate::error::{QueryError, Result};
-use crate::utils::{rmpv_to_value, ColumnIdent, TableIdent};
+use crate::utils::{rmpv_to_value_typed, ColumnIdent, TableIdent};
 
 /// Create column expression, handling "table.column" format for joins
 /// If default_table is provided and column is not already qualified, prepend it
@@ -27,21 +29,35 @@ fn make_col_expr(col_name: &str, default_table: Option<&str>) -> Expr {
     }
 }
 
+/// Look up the col_type for a filter's column name.
+fn get_filter_col_type<'a>(
+    filter: &Filter,
+    col_types: Option<&'a HashMap<String, String>>,
+) -> Option<&'a str> {
+    let col_name = filter.column.as_ref().unwrap_or(&filter.field);
+    col_types.and_then(|ct| ct.get(col_name).map(|s| s.as_str()))
+}
+
 /// Build WHERE clause from FilterNode tree
 /// default_table: if provided, unqualified columns will be prefixed with this table name
-pub fn build_filter_node(node: &FilterNode, default_table: Option<&str>) -> Result<SimpleExpr> {
+/// col_types: column type hints for proper parameter binding (uuid, jsonb, etc.)
+pub fn build_filter_node(
+    node: &FilterNode,
+    default_table: Option<&str>,
+    col_types: Option<&HashMap<String, String>>,
+) -> Result<SimpleExpr> {
     match node {
-        FilterNode::Condition(filter) => apply_filter(filter, default_table),
+        FilterNode::Condition(filter) => apply_filter(filter, default_table, col_types),
         FilterNode::And { conditions } => {
             if conditions.is_empty() {
                 return Err(QueryError::InvalidQuery(
                     "AND node must have at least one condition".into(),
                 ));
             }
-            let first = build_filter_node(&conditions[0], default_table)?;
+            let first = build_filter_node(&conditions[0], default_table, col_types)?;
             let mut result = first;
             for cond in &conditions[1..] {
-                let next = build_filter_node(cond, default_table)?;
+                let next = build_filter_node(cond, default_table, col_types)?;
                 result = result.and(next);
             }
             Ok(result)
@@ -52,26 +68,31 @@ pub fn build_filter_node(node: &FilterNode, default_table: Option<&str>) -> Resu
                     "OR node must have at least one condition".into(),
                 ));
             }
-            let first = build_filter_node(&conditions[0], default_table)?;
+            let first = build_filter_node(&conditions[0], default_table, col_types)?;
             let mut result = first;
             for cond in &conditions[1..] {
-                let next = build_filter_node(cond, default_table)?;
+                let next = build_filter_node(cond, default_table, col_types)?;
                 result = result.or(next);
             }
             Ok(result)
         }
         FilterNode::Not { condition } => {
-            let inner = build_filter_node(condition, default_table)?;
+            let inner = build_filter_node(condition, default_table, col_types)?;
             Ok(inner.not())
         }
     }
 }
 
 /// Apply filter to expression
-pub fn apply_filter(filter: &Filter, default_table: Option<&str>) -> Result<SimpleExpr> {
+pub fn apply_filter(
+    filter: &Filter,
+    default_table: Option<&str>,
+    col_types: Option<&HashMap<String, String>>,
+) -> Result<SimpleExpr> {
     let col_name = filter.column.as_ref().unwrap_or(&filter.field);
     let col = make_col_expr(col_name, default_table);
-    let val = rmpv_to_value(&filter.value);
+    let col_type = get_filter_col_type(filter, col_types);
+    let val = rmpv_to_value_typed(&filter.value, col_type);
 
     let expr = match filter.operator.as_str() {
         "=" => col.eq(val),
@@ -96,7 +117,8 @@ pub fn apply_filter(filter: &Filter, default_table: Option<&str>) -> Result<Simp
         }
         "IN" => {
             if let rmpv::Value::Array(arr) = &filter.value {
-                let values: Vec<Value> = arr.iter().map(rmpv_to_value).collect();
+                let values: Vec<Value> =
+                    arr.iter().map(|v| rmpv_to_value_typed(v, col_type)).collect();
                 col.is_in(values)
             } else {
                 return Err(QueryError::InvalidQuery(
@@ -111,8 +133,8 @@ pub fn apply_filter(filter: &Filter, default_table: Option<&str>) -> Result<Simp
                         "BETWEEN operator requires exactly two values".to_string(),
                     ));
                 }
-                let start = Expr::val(rmpv_to_value(&arr[0]));
-                let end = Expr::val(rmpv_to_value(&arr[1]));
+                let start = Expr::val(rmpv_to_value_typed(&arr[0], col_type));
+                let end = Expr::val(rmpv_to_value_typed(&arr[1], col_type));
                 col.between(start, end)
             } else {
                 return Err(QueryError::InvalidQuery(

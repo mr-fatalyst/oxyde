@@ -612,6 +612,40 @@ mod tests {
     }
 
     #[test]
+    fn test_update_with_jsonb_map_value() {
+        let mut col_types = HashMap::new();
+        col_types.insert("id".to_string(), "uuid".to_string());
+        col_types.insert("xattrs".to_string(), "JSONB".to_string());
+
+        let map_val = rmpv::Value::Map(vec![(
+            rmpv::Value::String("key".into()),
+            rmpv::Value::String("value".into()),
+        )]);
+
+        let ir = QueryIR {
+            op: Operation::Update,
+            table: "documents".into(),
+            values: Some(HashMap::from([("xattrs".into(), map_val)])),
+            col_types: Some(col_types),
+            filter_tree: Some(filter_cond(
+                "id",
+                "=",
+                rmpv_str("550e8400-e29b-41d4-a716-446655440000"),
+            )),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("UPDATE"), "SQL: {sql}");
+        assert_eq!(params.len(), 2, "params: {params:?}");
+        // SET value should be Json, not String
+        let has_json = params.iter().any(|p| matches!(p, Value::Json(_)));
+        assert!(has_json, "should have Json param for xattrs: {params:?}");
+        // WHERE value should be Uuid, not String
+        let has_uuid = params.iter().any(|p| matches!(p, Value::Uuid(_)));
+        assert!(has_uuid, "should have Uuid param for id filter: {params:?}");
+    }
+
+    #[test]
     fn test_insert_with_empty_array() {
         let mut col_types = HashMap::new();
         col_types.insert("tags".to_string(), "str[]".to_string());

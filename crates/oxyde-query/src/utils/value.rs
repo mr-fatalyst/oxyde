@@ -17,11 +17,50 @@ pub fn rmpv_to_value(value: &rmpv::Value) -> Value {
 /// - "datetime" -> Value::ChronoDateTime (parses ISO format string)
 /// - "date" -> Value::ChronoDate
 /// - "time" -> Value::ChronoTime
-/// - "uuid" -> Value::String (UUID stored as string, DB handles it)
+/// - "uuid" -> Value::Uuid (parsed from string, binds with correct PG OID 2950)
+/// - "json"/"jsonb" -> Value::Json (binds with correct PG OID 3802)
 /// - "decimal" -> Value::String (Decimal stored as string, DB handles it)
 pub fn rmpv_to_value_typed(value: &rmpv::Value, col_type: Option<&str>) -> Value {
     match value {
-        rmpv::Value::Nil => Value::String(None),
+        rmpv::Value::Nil => {
+            // For typed columns, use the correct NULL variant so PostgreSQL
+            // receives the right type OID (e.g., jsonb NULL, uuid NULL).
+            if let Some(typ) = col_type {
+                match typ.to_uppercase().as_str() {
+                    "JSON" | "JSONB" => return Value::Json(None),
+                    "UUID" => return Value::Uuid(None),
+                    "BOOL" | "BOOLEAN" => return Value::Bool(None),
+                    "INT" | "INT2" | "INT4" | "INT8" | "BIGINT" | "INTEGER" | "SMALLINT" => {
+                        return Value::BigInt(None)
+                    }
+                    "FLOAT" | "FLOAT4" | "FLOAT8" | "REAL" | "DOUBLE PRECISION" => {
+                        return Value::Double(None)
+                    }
+                    "DATETIME" | "TIMESTAMP" | "TIMESTAMPTZ" => {
+                        return Value::ChronoDateTimeUtc(None)
+                    }
+                    "DATE" => return Value::ChronoDate(None),
+                    "TIME" | "TIMETZ" => return Value::ChronoTime(None),
+                    "BYTES" | "BYTEA" => return Value::Bytes(None),
+                    s if s.ends_with("[]") => {
+                        // NULL array: determine the array element type
+                        let base = &s[..s.len() - 2];
+                        let array_type = match base {
+                            "UUID" => ArrayType::Uuid,
+                            "INT" | "INT2" | "INT4" | "INT8" | "BIGINT" | "INTEGER"
+                            | "SMALLINT" => ArrayType::BigInt,
+                            "FLOAT" | "FLOAT4" | "FLOAT8" | "REAL" => ArrayType::Double,
+                            "BOOL" | "BOOLEAN" => ArrayType::Bool,
+                            "JSON" | "JSONB" => ArrayType::Json,
+                            _ => ArrayType::String,
+                        };
+                        return Value::Array(array_type, None);
+                    }
+                    _ => {}
+                }
+            }
+            Value::String(None)
+        }
         rmpv::Value::Boolean(b) => Value::Bool(Some(*b)),
         rmpv::Value::Integer(n) => {
             if let Some(i) = n.as_i64() {
@@ -55,6 +94,21 @@ pub fn rmpv_to_value_typed(value: &rmpv::Value, col_type: Option<&str>) -> Value
                             return Value::ChronoTime(Some(Box::new(t)));
                         }
                     }
+                    "UUID" => {
+                        if let Ok(u) = uuid::Uuid::parse_str(s) {
+                            return Value::Uuid(Some(Box::new(u)));
+                        }
+                    }
+                    "JSON" | "JSONB" => {
+                        // String value for a JSON column — parse it as JSON
+                        if let Ok(j) = serde_json::from_str::<serde_json::Value>(s) {
+                            return Value::Json(Some(Box::new(j)));
+                        }
+                        // If it doesn't parse as JSON, wrap as JSON string
+                        return Value::Json(Some(Box::new(serde_json::Value::String(
+                            s.to_string(),
+                        ))));
+                    }
                     _ => {}
                 }
             }
@@ -74,7 +128,10 @@ pub fn rmpv_to_value_typed(value: &rmpv::Value, col_type: Option<&str>) -> Value
             if let Some(base_type) = col_type.and_then(|ct| ct.strip_suffix("[]")) {
                 let (array_type, elements) = convert_array_elements(arr, base_type);
                 Value::Array(array_type, Some(Box::new(elements)))
-            } else if col_type == Some("json") || col_type == Some("jsonb") {
+            } else if col_type
+                .map(|ct| ct.eq_ignore_ascii_case("json") || ct.eq_ignore_ascii_case("jsonb"))
+                .unwrap_or(false)
+            {
                 // JSON/JSONB arrays: serialize as JSON value
                 let json = rmpv_array_to_json(arr);
                 Value::Json(Some(Box::new(json)))
@@ -83,8 +140,13 @@ pub fn rmpv_to_value_typed(value: &rmpv::Value, col_type: Option<&str>) -> Value
                 Value::String(Some(Box::new(format!("{value}"))))
             }
         }
-        rmpv::Value::Map(_) | rmpv::Value::Ext(_, _) => {
-            // Fallback: serialize to JSON string
+        rmpv::Value::Map(_) => {
+            // Maps are always best represented as JSON (for JSONB columns or any map data)
+            let json = rmpv_to_json(value);
+            Value::Json(Some(Box::new(json)))
+        }
+        rmpv::Value::Ext(_, _) => {
+            // Fallback: serialize to string
             Value::String(Some(Box::new(format!("{value}"))))
         }
     }
@@ -113,7 +175,16 @@ fn parse_time(s: &str) -> std::result::Result<NaiveTime, chrono::ParseError> {
 
 /// Convert an array of rmpv values to sea_query Values based on the base IR type.
 fn convert_array_elements(arr: &[rmpv::Value], base_type: &str) -> (ArrayType, Vec<Value>) {
-    match base_type {
+    // Normalize uppercase DB type names (e.g., "UUID" from "UUID[]") to lowercase IR names
+    let normalized = match base_type.to_uppercase().as_str() {
+        "TEXT" | "VARCHAR" | "CHAR" => "str",
+        "INT2" | "INT4" | "INT8" | "BIGINT" | "INTEGER" | "SMALLINT" => "int",
+        "FLOAT4" | "FLOAT8" | "REAL" | "DOUBLE PRECISION" => "float",
+        "BOOL" | "BOOLEAN" => "bool",
+        "TIMESTAMPTZ" | "TIMESTAMP" => "datetime",
+        _ => base_type,
+    };
+    match normalized.to_lowercase().as_str() {
         "str" => (
             ArrayType::String,
             arr.iter()
@@ -530,6 +601,77 @@ mod tests {
     }
 
     // ── Scalar conversion tests (ensure no regressions) ──
+
+    #[test]
+    fn test_scalar_uuid_with_col_type() {
+        let v = rmpv::Value::String("550e8400-e29b-41d4-a716-446655440000".into());
+        let val = rmpv_to_value_typed(&v, Some("uuid"));
+        assert!(matches!(val, Value::Uuid(Some(_))));
+    }
+
+    #[test]
+    fn test_scalar_uuid_invalid_falls_back() {
+        let v = rmpv::Value::String("not-a-uuid".into());
+        let val = rmpv_to_value_typed(&v, Some("uuid"));
+        // Invalid UUID stays as string
+        assert!(matches!(val, Value::String(Some(_))));
+    }
+
+    #[test]
+    fn test_scalar_jsonb_string_with_col_type() {
+        let v = rmpv::Value::String(r#"{"key": "value"}"#.into());
+        let val = rmpv_to_value_typed(&v, Some("jsonb"));
+        match val {
+            Value::Json(Some(j)) => {
+                assert_eq!(j.as_ref()["key"], "value");
+            }
+            other => panic!("expected Json, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_scalar_json_string_with_col_type() {
+        let v = rmpv::Value::String(r#"[1, 2, 3]"#.into());
+        let val = rmpv_to_value_typed(&v, Some("json"));
+        assert!(matches!(val, Value::Json(Some(_))));
+    }
+
+    #[test]
+    fn test_scalar_jsonb_plain_string_wraps_as_json_string() {
+        let v = rmpv::Value::String("hello".into());
+        let val = rmpv_to_value_typed(&v, Some("jsonb"));
+        match val {
+            Value::Json(Some(j)) => {
+                assert_eq!(*j, serde_json::Value::String("hello".into()));
+            }
+            other => panic!("expected Json string, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_map_becomes_json_with_jsonb_col_type() {
+        let v = rmpv::Value::Map(vec![(
+            rmpv::Value::String("key".into()),
+            rmpv::Value::String("val".into()),
+        )]);
+        let val = rmpv_to_value_typed(&v, Some("jsonb"));
+        match val {
+            Value::Json(Some(j)) => {
+                assert_eq!(j.as_ref()["key"], "val");
+            }
+            other => panic!("expected Json, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_map_becomes_json_without_col_type() {
+        let v = rmpv::Value::Map(vec![(
+            rmpv::Value::String("a".into()),
+            rmpv::Value::Integer(1.into()),
+        )]);
+        let val = rmpv_to_value_typed(&v, None);
+        assert!(matches!(val, Value::Json(Some(_))));
+    }
 
     #[test]
     fn test_scalar_string_unchanged() {

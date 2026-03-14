@@ -2,4 +2,4 @@
 
 pub mod expression;
 
-pub use expression::{apply_filter, build_filter_node};
+pub use expression::build_filter_node;

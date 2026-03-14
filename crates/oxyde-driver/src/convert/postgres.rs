@@ -14,7 +14,24 @@ impl CellEncoder for PgEncoder {
     type Row = PgRow;
 
     fn try_encode_by_ir_type(buf: &mut Vec<u8>, row: &PgRow, idx: usize, ir_type: &str) -> bool {
-        match ir_type {
+        // Normalize: Python may send uppercase DB type names (e.g., "TIMESTAMPTZ", "UUID")
+        // when the field has an explicit db_type, instead of lowercase IR names.
+        let ir_upper = ir_type.to_uppercase();
+        let normalized = match ir_upper.as_str() {
+            "TIMESTAMPTZ" | "TIMESTAMP" => "datetime",
+            "UUID" => "uuid",
+            "JSON" | "JSONB" => "json",
+            "TEXT" | "VARCHAR" | "CHAR" => "str",
+            "BOOLEAN" => "bool",
+            "BIGINT" | "INTEGER" | "SMALLINT" | "INT2" | "INT4" | "INT8" => "int",
+            "FLOAT4" | "FLOAT8" | "DOUBLE PRECISION" | "REAL" => "float",
+            "BYTEA" => "bytes",
+            "DATE" => "date",
+            "TIME" | "TIMETZ" => "time",
+            "NUMERIC" | "DECIMAL" => "decimal",
+            _ => ir_type,
+        };
+        match normalized {
             "int" => {
                 match row.try_get::<Option<i64>, _>(idx) {
                     Ok(Some(v)) => write_i64(buf, v),
@@ -247,7 +264,21 @@ fn db_type_to_ir_base(name: &str) -> &str {
 
 /// Encode a PostgreSQL array column to msgpack array based on the base IR type.
 fn encode_pg_array(buf: &mut Vec<u8>, row: &PgRow, idx: usize, base_type: &str) {
-    match base_type {
+    // Normalize uppercase DB type names to lowercase IR names
+    let base_upper = base_type.to_uppercase();
+    let normalized_base = match base_upper.as_str() {
+        "TEXT" | "VARCHAR" | "CHAR" | "BPCHAR" | "NAME" => "str",
+        "INT2" | "SMALLINT" | "INT4" | "INTEGER" | "INT" | "INT8" | "BIGINT" => "int",
+        "FLOAT4" | "REAL" | "FLOAT8" | "DOUBLE PRECISION" => "float",
+        "BOOL" | "BOOLEAN" => "bool",
+        "UUID" => "uuid",
+        "JSON" | "JSONB" => "json",
+        "TIMESTAMPTZ" | "TIMESTAMP" => "datetime",
+        "DATE" => "date",
+        "TIME" | "TIMETZ" => "time",
+        _ => base_type,
+    };
+    match normalized_base {
         "str" => match row.try_get::<Option<Vec<String>>, _>(idx) {
             Ok(Some(arr)) => {
                 rmp::encode::write_array_len(buf, arr.len() as u32).ok();

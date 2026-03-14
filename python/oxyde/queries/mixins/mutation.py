@@ -146,9 +146,11 @@ class MutationMixin:
             await User.objects.filter(is_active=False).delete()
         """
         exec_client = await _resolve_execution_client(using, client)
+        col_types = _build_col_types(self.model_class)
         delete_ir = ir.build_delete_ir(
             table=self.model_class.get_table_name(),
             filter_tree=self._build_filter_tree(),
+            col_types=col_types,
             model=_model_key(self.model_class),
         )
         result_bytes = await exec_client.execute(delete_ir)
@@ -211,7 +213,13 @@ class MutationMixin:
         if instance is None:
             if not data:
                 raise ManagerError("create() requires an instance or field values")
-            instance = self.model_class(**data)
+            # Fields with db_default (e.g., created_at with NOW()) may not be
+            # provided by the user. Use model_construct to skip Pydantic
+            # validation — the DB will supply actual values via RETURNING *.
+            try:
+                instance = self.model_class(**data)
+            except Exception:
+                instance = self.model_class.model_construct(**data)
 
         # Call pre_save hook
         if not _skip_hooks:

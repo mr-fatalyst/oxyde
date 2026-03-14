@@ -310,10 +310,19 @@ def build_delete_ir(
     *,
     table: str,
     filter_tree: FilterNode | None = None,
+    col_types: dict[str, str] | None = None,
     model: str | None = None,
     returning: bool | None = None,
 ) -> dict[str, Any]:
-    """Build a DELETE query IR payload."""
+    """Build a DELETE query IR payload.
+
+    Args:
+        table: Table name
+        filter_tree: Filter conditions
+        col_types: Column type hints for proper parameter binding.
+        model: Model name
+        returning: Whether to return deleted rows
+    """
     payload: dict[str, Any] = {
         "proto": IR_PROTO_VERSION,
         "op": "delete",
@@ -321,6 +330,8 @@ def build_delete_ir(
     }
     if filter_tree:
         payload["filter_tree"] = filter_tree
+    if col_types:
+        payload["col_types"] = dict(col_types)
     if model:
         payload["model"] = model
     if returning is not None:
