@@ -646,6 +646,92 @@ mod tests {
     }
 
     #[test]
+    fn test_delete_with_uuid_where() {
+        let mut col_types = HashMap::new();
+        col_types.insert("id".to_string(), "uuid".to_string());
+
+        let ir = QueryIR {
+            op: Operation::Delete,
+            table: "documents".into(),
+            col_types: Some(col_types),
+            filter_tree: Some(filter_cond(
+                "id",
+                "=",
+                rmpv_str("550e8400-e29b-41d4-a716-446655440000"),
+            )),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("DELETE"), "SQL: {sql}");
+        assert_eq!(params.len(), 1);
+        assert!(
+            matches!(&params[0], Value::Uuid(Some(_))),
+            "WHERE param should be Uuid: {params:?}"
+        );
+    }
+
+    #[test]
+    fn test_select_with_uuid_where() {
+        let mut col_types = HashMap::new();
+        col_types.insert("id".to_string(), "uuid".to_string());
+
+        let ir = QueryIR {
+            op: Operation::Select,
+            table: "documents".into(),
+            cols: Some(vec!["id".into(), "name".into()]),
+            col_types: Some(col_types),
+            filter_tree: Some(filter_cond(
+                "id",
+                "=",
+                rmpv_str("550e8400-e29b-41d4-a716-446655440000"),
+            )),
+            ..Default::default()
+        };
+        let (_, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert_eq!(params.len(), 1);
+        assert!(
+            matches!(&params[0], Value::Uuid(Some(_))),
+            "WHERE param should be Uuid: {params:?}"
+        );
+    }
+
+    #[test]
+    fn test_update_null_jsonb_uses_typed_null() {
+        let mut col_types = HashMap::new();
+        col_types.insert("id".to_string(), "uuid".to_string());
+        col_types.insert("metadata".to_string(), "JSONB".to_string());
+        col_types.insert("tag_ids".to_string(), "UUID[]".to_string());
+
+        let ir = QueryIR {
+            op: Operation::Update,
+            table: "documents".into(),
+            values: Some(HashMap::from([
+                ("metadata".into(), rmpv::Value::Nil),
+                ("tag_ids".into(), rmpv::Value::Nil),
+            ])),
+            col_types: Some(col_types),
+            filter_tree: Some(filter_cond(
+                "id",
+                "=",
+                rmpv_str("550e8400-e29b-41d4-a716-446655440000"),
+            )),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("UPDATE"), "SQL: {sql}");
+        // Should have: Json(None), Array(Uuid, None), Uuid(Some(...))
+        let has_json_null = params.iter().any(|p| matches!(p, Value::Json(None)));
+        assert!(has_json_null, "should have Json(None) for metadata: {params:?}");
+        let has_array_null = params.iter().any(|p| matches!(p, Value::Array(_, None)));
+        assert!(
+            has_array_null,
+            "should have Array(Uuid, None) for tag_ids: {params:?}"
+        );
+        let has_uuid = params.iter().any(|p| matches!(p, Value::Uuid(Some(_))));
+        assert!(has_uuid, "should have Uuid for WHERE: {params:?}");
+    }
+
+    #[test]
     fn test_insert_with_empty_array() {
         let mut col_types = HashMap::new();
         col_types.insert("tags".to_string(), "str[]".to_string());

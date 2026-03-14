@@ -693,4 +693,79 @@ mod tests {
         let val = rmpv_to_value_typed(&v, None);
         assert!(matches!(val, Value::String(None)));
     }
+
+    // ── Typed NULL tests ──
+
+    #[test]
+    fn test_nil_with_jsonb_col_type() {
+        let v = rmpv::Value::Nil;
+        let val = rmpv_to_value_typed(&v, Some("JSONB"));
+        assert!(matches!(val, Value::Json(None)));
+    }
+
+    #[test]
+    fn test_nil_with_uuid_col_type() {
+        let v = rmpv::Value::Nil;
+        let val = rmpv_to_value_typed(&v, Some("uuid"));
+        assert!(matches!(val, Value::Uuid(None)));
+    }
+
+    #[test]
+    fn test_nil_with_bool_col_type() {
+        let v = rmpv::Value::Nil;
+        let val = rmpv_to_value_typed(&v, Some("bool"));
+        assert!(matches!(val, Value::Bool(None)));
+    }
+
+    #[test]
+    fn test_nil_with_int_col_type() {
+        let v = rmpv::Value::Nil;
+        let val = rmpv_to_value_typed(&v, Some("BIGINT"));
+        assert!(matches!(val, Value::BigInt(None)));
+    }
+
+    #[test]
+    fn test_nil_with_timestamptz_col_type() {
+        let v = rmpv::Value::Nil;
+        let val = rmpv_to_value_typed(&v, Some("TIMESTAMPTZ"));
+        assert!(matches!(val, Value::ChronoDateTimeUtc(None)));
+    }
+
+    #[test]
+    fn test_nil_with_uuid_array_col_type() {
+        let v = rmpv::Value::Nil;
+        let val = rmpv_to_value_typed(&v, Some("UUID[]"));
+        assert!(matches!(val, Value::Array(ArrayType::Uuid, None)));
+    }
+
+    #[test]
+    fn test_nil_with_str_array_col_type() {
+        let v = rmpv::Value::Nil;
+        let val = rmpv_to_value_typed(&v, Some("TEXT[]"));
+        assert!(matches!(val, Value::Array(ArrayType::String, None)));
+    }
+
+    // ── Case-insensitive col_type tests ──
+
+    #[test]
+    fn test_array_with_uppercase_jsonb_col_type() {
+        let arr = rmpv::Value::Array(vec![rmpv::Value::Integer(1.into())]);
+        let val = rmpv_to_value_typed(&arr, Some("JSONB"));
+        assert!(matches!(val, Value::Json(Some(_))));
+    }
+
+    #[test]
+    fn test_uuid_array_with_uppercase_col_type() {
+        let arr = rmpv::Value::Array(vec![rmpv::Value::String(
+            "550e8400-e29b-41d4-a716-446655440000".into(),
+        )]);
+        let val = rmpv_to_value_typed(&arr, Some("UUID[]"));
+        match val {
+            Value::Array(ArrayType::Uuid, Some(elems)) => {
+                assert_eq!(elems.len(), 1);
+                assert!(matches!(&elems[0], Value::Uuid(Some(_))));
+            }
+            other => panic!("expected Array(Uuid, ...), got: {other:?}"),
+        }
+    }
 }
