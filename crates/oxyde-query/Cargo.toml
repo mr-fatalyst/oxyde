@@ -6,10 +6,12 @@ rust-version.workspace = true
 
 [dependencies]
 serde.workspace = true
+serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
-sea-query = { version = "0.31", features = ["with-chrono"] }
+sea-query = { version = "0.31", features = ["with-chrono", "with-uuid", "with-json", "with-rust_decimal"] }
 chrono = "0.4"
 uuid = "1"
+rust_decimal = { version = "1", features = ["serde"] }
 oxyde-codec = { path = "../oxyde-codec" }
 rmpv = { version = "1", features = ["with-serde"] }
