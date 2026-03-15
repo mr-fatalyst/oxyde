@@ -23,6 +23,15 @@ def get_ir_type(python_type: Any) -> str | None:
     if origin is dict:
         return "json"
 
+    # list[T] -> "ir_type[]" (e.g., list[int] -> "int[]")
+    if origin is list:
+        args = get_args(python_type)
+        if args:
+            inner = get_ir_type(args[0])
+            if inner:
+                return f"{inner}[]"
+        return None
+
     # Union types (including Optional[T]) -> recurse into args
     if origin is not None:
         for arg in get_args(python_type):

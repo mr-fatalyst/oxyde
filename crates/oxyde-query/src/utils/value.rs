@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rust_decimal::Decimal;
+use sea_query::value::ArrayType;
 use sea_query::{Expr, SimpleExpr, Value};
 use uuid::Uuid;
 
@@ -65,10 +66,23 @@ pub fn rmpv_to_value_typed(value: &rmpv::Value, col_type: Option<&str>) -> Value
             }
             Value::String(Some(Box::new(format!("{value}"))))
         }
-        rmpv::Value::Array(_) => {
+        rmpv::Value::Array(arr) => {
             if matches!(typ_str, Some("JSON" | "JSONB")) {
                 if let Some(j) = rmpv_to_json(value) {
                     return Value::Json(Some(Box::new(j)));
+                }
+            }
+            // Array type hint like "INT[]", "STR[]", "UUID[]"
+            if let Some(t) = typ_str {
+                if let Some(inner_upper) = t.strip_suffix("[]") {
+                    if let Some(arr_type) = classify_type(inner_upper) {
+                        let inner_col = col_type.and_then(|c| c.strip_suffix("[]"));
+                        let values: Vec<Value> = arr
+                            .iter()
+                            .map(|v| rmpv_to_value_typed(v, inner_col))
+                            .collect();
+                        return Value::Array(arr_type, Some(Box::new(values)));
+                    }
                 }
             }
             Value::String(Some(Box::new(format!("{value}"))))
@@ -79,66 +93,98 @@ pub fn rmpv_to_value_typed(value: &rmpv::Value, col_type: Option<&str>) -> Value
 
 /// Parse a string value into a typed sea_query Value based on col_type hint.
 /// Returns `None` if parsing fails — caller falls through to default behavior.
+/// Delegates type classification to `classify_type`.
 fn parse_string_by_type(s: &str, typ: &str) -> Option<Value> {
-    match typ {
-        "TIMESTAMPTZ" => parse_datetime_utc(s)
+    match classify_type(typ)? {
+        ArrayType::ChronoDateTimeUtc => parse_datetime_utc(s)
             .map(|dt| Value::ChronoDateTimeUtc(Some(Box::new(dt))))
             .or_else(|| {
                 parse_datetime(s)
                     .ok()
                     .map(|dt| Value::ChronoDateTime(Some(Box::new(dt))))
             }),
-        "DATETIME" | "TIMESTAMP" => parse_datetime(s)
+        ArrayType::ChronoDateTime => parse_datetime(s)
             .ok()
             .map(|dt| Value::ChronoDateTime(Some(Box::new(dt)))),
-        "DATE" => NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        ArrayType::ChronoDate => NaiveDate::parse_from_str(s, "%Y-%m-%d")
             .ok()
             .map(|d| Value::ChronoDate(Some(Box::new(d)))),
-        "TIME" | "TIMETZ" => parse_time(s)
+        ArrayType::ChronoTime => parse_time(s)
             .ok()
             .map(|t| Value::ChronoTime(Some(Box::new(t)))),
-        "UUID" => Uuid::parse_str(s)
+        ArrayType::Uuid => Uuid::parse_str(s)
             .ok()
             .map(|u| Value::Uuid(Some(Box::new(u)))),
-        "JSON" | "JSONB" => serde_json::from_str(s)
+        ArrayType::Json => serde_json::from_str(s)
             .ok()
             .map(|j| Value::Json(Some(Box::new(j)))),
-        t if is_decimal_type(t) => s
+        ArrayType::Decimal => s
             .parse::<Decimal>()
             .ok()
             .map(|d| Value::Decimal(Some(Box::new(d)))),
+        // Int, Float, Bool, String, Bytes — no string parsing needed
         _ => None,
     }
 }
 
 /// Produce a typed NULL value based on the column type hint.
 /// Without a type hint, defaults to `Value::String(None)`.
+/// Delegates type classification to `classify_type`.
 fn typed_null(typ: Option<&str>) -> Value {
-    match typ {
-        Some(
-            "INT" | "INTEGER" | "BIGINT" | "SMALLINT" | "TINYINT" | "SERIAL" | "BIGSERIAL"
-            | "SMALLSERIAL" | "INT2" | "INT4" | "INT8" | "TIMEDELTA" | "INTERVAL",
-        ) => Value::BigInt(None),
-        Some("FLOAT" | "DOUBLE" | "REAL" | "FLOAT4" | "FLOAT8" | "DOUBLE PRECISION") => {
-            Value::Double(None)
-        }
-        Some("BOOL" | "BOOLEAN") => Value::Bool(None),
-        Some("UUID") => Value::Uuid(None),
-        Some("JSON" | "JSONB") => Value::Json(None),
-        Some("TIMESTAMPTZ") => Value::ChronoDateTimeUtc(None),
-        Some("DATETIME" | "TIMESTAMP") => Value::ChronoDateTime(None),
-        Some("DATE") => Value::ChronoDate(None),
-        Some("TIME" | "TIMETZ") => Value::ChronoTime(None),
-        Some("BYTEA" | "BLOB" | "BYTES") => Value::Bytes(None),
-        Some(t) if is_decimal_type(t) => Value::Decimal(None),
+    let Some(t) = typ else {
+        return Value::String(None);
+    };
+
+    // Array types: "INT[]", "UUID[]", etc.
+    if let Some(inner) = t.strip_suffix("[]") {
+        return classify_type(inner)
+            .map_or(Value::String(None), |arr_type| Value::Array(arr_type, None));
+    }
+
+    match classify_type(t) {
+        Some(ArrayType::BigInt) => Value::BigInt(None),
+        Some(ArrayType::Double) => Value::Double(None),
+        Some(ArrayType::Bool) => Value::Bool(None),
+        Some(ArrayType::String) => Value::String(None),
+        Some(ArrayType::Uuid) => Value::Uuid(None),
+        Some(ArrayType::Json) => Value::Json(None),
+        Some(ArrayType::ChronoDateTime) => Value::ChronoDateTime(None),
+        Some(ArrayType::ChronoDateTimeUtc) => Value::ChronoDateTimeUtc(None),
+        Some(ArrayType::ChronoDate) => Value::ChronoDate(None),
+        Some(ArrayType::ChronoTime) => Value::ChronoTime(None),
+        Some(ArrayType::Bytes) => Value::Bytes(None),
+        Some(ArrayType::Decimal) => Value::Decimal(None),
         _ => Value::String(None),
     }
 }
 
-/// Check if SQL type name represents a decimal/numeric type.
-/// Handles "DECIMAL", "NUMERIC", "DECIMAL(10,2)", "NUMERIC(5,3)", etc.
-fn is_decimal_type(t: &str) -> bool {
-    t.starts_with("DECIMAL") || t.starts_with("NUMERIC")
+/// Canonical type classification: maps IR type names ("int", "uuid") and
+/// SQL type names ("BIGINT", "BIGSERIAL", "NUMERIC(10,2)") to a semantic
+/// type category represented as `ArrayType`.
+///
+/// This is the **single source of truth** for type name → type category mapping.
+/// Used by `typed_null`, `parse_string_by_type`, and array element type resolution.
+fn classify_type(typ: &str) -> Option<ArrayType> {
+    match typ {
+        "INT" | "INTEGER" | "BIGINT" | "SMALLINT" | "TINYINT" | "SERIAL" | "BIGSERIAL"
+        | "SMALLSERIAL" | "INT2" | "INT4" | "INT8" | "TIMEDELTA" | "INTERVAL" => {
+            Some(ArrayType::BigInt)
+        }
+        "FLOAT" | "DOUBLE" | "REAL" | "FLOAT4" | "FLOAT8" | "DOUBLE PRECISION" => {
+            Some(ArrayType::Double)
+        }
+        "BOOL" | "BOOLEAN" => Some(ArrayType::Bool),
+        "STR" | "TEXT" | "VARCHAR" | "CHAR" => Some(ArrayType::String),
+        "UUID" => Some(ArrayType::Uuid),
+        "JSON" | "JSONB" => Some(ArrayType::Json),
+        "DATETIME" | "TIMESTAMP" => Some(ArrayType::ChronoDateTime),
+        "TIMESTAMPTZ" => Some(ArrayType::ChronoDateTimeUtc),
+        "DATE" => Some(ArrayType::ChronoDate),
+        "TIME" | "TIMETZ" => Some(ArrayType::ChronoTime),
+        "BYTES" | "BYTEA" | "BLOB" => Some(ArrayType::Bytes),
+        t if t.starts_with("DECIMAL") || t.starts_with("NUMERIC") => Some(ArrayType::Decimal),
+        _ => None,
+    }
 }
 
 /// Convert rmpv::Value to serde_json::Value for JSON column storage.
@@ -565,5 +611,93 @@ mod tests {
         // Bool → Bool
         let val = rmpv::Value::Boolean(true);
         assert!(matches!(rmpv_to_value(&val), Value::Bool(Some(true))));
+    }
+
+    // ── Array tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_array_int() {
+        let val = rmpv::Value::Array(vec![
+            rmpv::Value::Integer(1.into()),
+            rmpv::Value::Integer(2.into()),
+            rmpv::Value::Integer(3.into()),
+        ]);
+        let result = rmpv_to_value_typed(&val, Some("int[]"));
+        match result {
+            Value::Array(ArrayType::BigInt, Some(vals)) => {
+                assert_eq!(vals.len(), 3);
+                assert!(matches!(vals[0], Value::BigInt(Some(1))));
+                assert!(matches!(vals[2], Value::BigInt(Some(3))));
+            }
+            other => panic!("expected Value::Array(BigInt), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_array_str() {
+        let val = rmpv::Value::Array(vec![
+            rmpv::Value::String("a".into()),
+            rmpv::Value::String("b".into()),
+        ]);
+        let result = rmpv_to_value_typed(&val, Some("str[]"));
+        match result {
+            Value::Array(ArrayType::String, Some(vals)) => {
+                assert_eq!(vals.len(), 2);
+            }
+            other => panic!("expected Value::Array(String), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_array_uuid() {
+        let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
+        let val = rmpv::Value::Array(vec![rmpv::Value::String(uuid_str.into())]);
+        let result = rmpv_to_value_typed(&val, Some("uuid[]"));
+        match result {
+            Value::Array(ArrayType::Uuid, Some(vals)) => {
+                assert_eq!(vals.len(), 1);
+                assert!(matches!(vals[0], Value::Uuid(Some(_))));
+            }
+            other => panic!("expected Value::Array(Uuid), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_array_null() {
+        let result = rmpv_to_value_typed(&rmpv::Value::Nil, Some("int[]"));
+        assert!(matches!(result, Value::Array(ArrayType::BigInt, None)));
+    }
+
+    #[test]
+    fn test_array_with_null_element() {
+        let val = rmpv::Value::Array(vec![
+            rmpv::Value::Integer(1.into()),
+            rmpv::Value::Nil,
+            rmpv::Value::Integer(3.into()),
+        ]);
+        let result = rmpv_to_value_typed(&val, Some("int[]"));
+        match result {
+            Value::Array(ArrayType::BigInt, Some(vals)) => {
+                assert_eq!(vals.len(), 3);
+                assert!(matches!(vals[0], Value::BigInt(Some(1))));
+                assert!(matches!(vals[1], Value::BigInt(None)));
+                assert!(matches!(vals[2], Value::BigInt(Some(3))));
+            }
+            other => panic!("expected Value::Array(BigInt), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_array_without_hint_stays_string() {
+        let val = rmpv::Value::Array(vec![rmpv::Value::Integer(1.into())]);
+        let result = rmpv_to_value_typed(&val, None);
+        assert!(matches!(result, Value::String(Some(_))));
+    }
+
+    #[test]
+    fn test_array_json_hint_stays_json() {
+        let val = rmpv::Value::Array(vec![rmpv::Value::Integer(1.into())]);
+        let result = rmpv_to_value_typed(&val, Some("json"));
+        assert!(matches!(result, Value::Json(Some(_))));
     }
 }

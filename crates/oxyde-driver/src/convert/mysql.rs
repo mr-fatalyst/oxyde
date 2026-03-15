@@ -104,6 +104,15 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
+            // Arrays stored as JSON in MySQL
+            ir_type if ir_type.ends_with("[]") => {
+                match row.try_get::<Option<serde_json::Value>, _>(idx) {
+                    Ok(Some(v)) => write_json_value(buf, &v),
+                    Ok(None) => write_nil(buf),
+                    Err(_) => fallback_str(buf, row, idx),
+                }
+                true
+            }
             _ => false,
         }
     }

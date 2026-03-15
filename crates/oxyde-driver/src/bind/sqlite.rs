@@ -5,7 +5,7 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use crate::error::Result;
 use sea_query::Value;
 
-use super::common::{cast_u64_to_i64, unsupported_param};
+use super::common::{array_values_to_json, cast_u64_to_i64, unsupported_param};
 
 // Note: SQLite stores UUID, JSON, Decimal as TEXT
 // rust_decimal and uuid crates are not needed here since we serialize to string
@@ -67,6 +67,9 @@ pub fn bind_sqlite_value<'q>(query: SqliteQuery<'q>, value: &'q Value) -> Result
         // Decimal (stored as TEXT in SQLite for precision)
         Value::Decimal(Some(d)) => query.bind(d.to_string()),
         Value::Decimal(None) => query.bind(Option::<String>::None),
+        // Arrays (stored as JSON TEXT in SQLite)
+        Value::Array(_, Some(vals)) => query.bind(array_values_to_json(vals).to_string()),
+        Value::Array(_, None) => query.bind(Option::<String>::None),
         #[allow(unreachable_patterns)]
         other => return Err(unsupported_param("SQLite", other)),
     };

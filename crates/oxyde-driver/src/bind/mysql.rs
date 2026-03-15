@@ -6,7 +6,7 @@ use rust_decimal::Decimal;
 use crate::error::Result;
 use sea_query::Value;
 
-use super::common::unsupported_param;
+use super::common::{array_values_to_json, unsupported_param};
 
 pub type MySqlQuery<'q> = sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>;
 
@@ -65,6 +65,9 @@ pub fn bind_mysql_value<'q>(query: MySqlQuery<'q>, value: &'q Value) -> Result<M
         // Decimal
         Value::Decimal(Some(d)) => query.bind(**d),
         Value::Decimal(None) => query.bind(Option::<Decimal>::None),
+        // Arrays (stored as JSON in MySQL)
+        Value::Array(_, Some(vals)) => query.bind(array_values_to_json(vals)),
+        Value::Array(_, None) => query.bind(Option::<serde_json::Value>::None),
         #[allow(unreachable_patterns)]
         other => return Err(unsupported_param("MySQL", other)),
     };

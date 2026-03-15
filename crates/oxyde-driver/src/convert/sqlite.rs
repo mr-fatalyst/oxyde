@@ -90,6 +90,21 @@ impl CellEncoder for SqliteEncoder {
                 }
                 true
             }
+            // Arrays stored as JSON TEXT in SQLite
+            ir_type if ir_type.ends_with("[]") => {
+                match row.try_get::<Option<String>, _>(idx) {
+                    Ok(Some(v)) => {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&v) {
+                            write_json_value(buf, &parsed);
+                        } else {
+                            write_str(buf, &v);
+                        }
+                    }
+                    Ok(None) => write_nil(buf),
+                    Err(_) => write_nil(buf),
+                }
+                true
+            }
             _ => false,
         }
     }
