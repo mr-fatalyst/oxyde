@@ -90,7 +90,7 @@ impl CellEncoder for MySqlEncoder {
             }
             "timedelta" => {
                 match row.try_get::<Option<i64>, _>(idx) {
-                    Ok(Some(v)) => write_i64(buf, v),
+                    Ok(Some(v)) => write_f64(buf, v as f64 / 1_000_000.0),
                     Ok(None) => write_nil(buf),
                     Err(_) => write_nil(buf),
                 }

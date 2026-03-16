@@ -7,7 +7,6 @@ Model.model_config - no sanitization needed.
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import msgpack
@@ -29,23 +28,6 @@ from oxyde.queries.joins import _JoinDescriptor
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
-
-
-def _convert_timedelta_columns(
-    rows: list[dict[str, Any]],
-    col_types: dict[str, str] | None,
-) -> None:
-    """Convert timedelta columns from int microseconds to timedelta objects in-place."""
-    if not col_types:
-        return
-    td_cols = [col for col, typ in col_types.items() if typ == "timedelta"]
-    if not td_cols:
-        return
-    for row in rows:
-        for col in td_cols:
-            val = row.get(col)
-            if isinstance(val, int):
-                row[col] = timedelta(microseconds=val)
 
 
 class ExecutionMixin:
@@ -171,8 +153,6 @@ class ExecutionMixin:
         data = msgpack.unpackb(result_bytes, raw=False, strict_map_key=False)
         del result_bytes
 
-        col_types = model_class._db_meta.col_types
-
         if (
             isinstance(data, (list, tuple))
             and len(data) == 3
@@ -183,7 +163,7 @@ class ExecutionMixin:
             main_columns, main_rows, relations_map = data
             rows = [dict(zip(main_columns, row)) for row in main_rows]
             del main_rows, data
-            _convert_timedelta_columns(rows, col_types)
+
             models = adapter.validate_python(rows)
             del rows
             self._hydrate_from_dedup(models, relations_map)
@@ -197,12 +177,12 @@ class ExecutionMixin:
             columns, row_values = data
             rows = [dict(zip(columns, row)) for row in row_values]
             del row_values, data
-            _convert_timedelta_columns(rows, col_types)
+
             models = adapter.validate_python(rows)
             del rows
         else:
             rows = data if isinstance(data, list) else []
-            _convert_timedelta_columns(rows, col_types)
+
             models = adapter.validate_python(rows)
             del rows
 
