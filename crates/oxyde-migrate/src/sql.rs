@@ -31,6 +31,17 @@ macro_rules! build_sql {
 ///
 /// Used when `db_type` is not explicitly specified by the user.
 pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: bool) -> String {
+    // Handle array types: "int[]", "str[]", "uuid[]", etc.
+    if let Some(inner) = python_type.strip_suffix("[]") {
+        let inner_sql = python_type_to_sql(inner, dialect, false);
+        return match dialect {
+            Dialect::Postgres => format!("{}[]", inner_sql),
+            // MySQL/SQLite: no native arrays, use JSON
+            Dialect::Mysql => "JSON".to_string(),
+            Dialect::Sqlite => "TEXT".to_string(),
+        };
+    }
+
     match dialect {
         Dialect::Sqlite => match python_type {
             "int" => "INTEGER".to_string(),
@@ -44,6 +55,7 @@ pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: boo
             "timedelta" => "BIGINT".to_string(),
             "uuid" => "TEXT".to_string(),
             "decimal" => "NUMERIC".to_string(),
+            "json" => "TEXT".to_string(),
             _ => "TEXT".to_string(),
         },
         Dialect::Postgres => match python_type {
@@ -59,6 +71,7 @@ pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: boo
             "timedelta" => "BIGINT".to_string(),
             "uuid" => "UUID".to_string(),
             "decimal" => "NUMERIC".to_string(),
+            "json" => "JSONB".to_string(),
             _ => "TEXT".to_string(),
         },
         Dialect::Mysql => match python_type {
@@ -73,6 +86,7 @@ pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: boo
             "timedelta" => "BIGINT".to_string(),
             "uuid" => "CHAR(36)".to_string(),
             "decimal" => "DECIMAL".to_string(),
+            "json" => "JSON".to_string(),
             _ => "TEXT".to_string(),
         },
     }

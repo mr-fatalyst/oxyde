@@ -58,6 +58,30 @@ fn test_python_type_to_sql_all_dialects() {
         "BYTEA"
     );
     assert_eq!(python_type_to_sql("bytes", Dialect::Mysql, false), "BLOB");
+
+    // Test json type
+    assert_eq!(python_type_to_sql("json", Dialect::Sqlite, false), "TEXT");
+    assert_eq!(
+        python_type_to_sql("json", Dialect::Postgres, false),
+        "JSONB"
+    );
+    assert_eq!(python_type_to_sql("json", Dialect::Mysql, false), "JSON");
+
+    // Test array types
+    assert_eq!(
+        python_type_to_sql("int[]", Dialect::Postgres, false),
+        "BIGINT[]"
+    );
+    assert_eq!(
+        python_type_to_sql("str[]", Dialect::Postgres, false),
+        "TEXT[]"
+    );
+    assert_eq!(
+        python_type_to_sql("uuid[]", Dialect::Postgres, false),
+        "UUID[]"
+    );
+    assert_eq!(python_type_to_sql("int[]", Dialect::Mysql, false), "JSON");
+    assert_eq!(python_type_to_sql("int[]", Dialect::Sqlite, false), "TEXT");
 }
 
 #[test]

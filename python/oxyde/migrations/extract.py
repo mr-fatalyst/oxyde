@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -126,34 +126,21 @@ def _serialize_default(value: Any, dialect: str) -> str | None:
 def _get_python_type_name(python_type: type) -> str:
     """Get canonical name for Python type.
 
-    Used for cross-dialect type generation in migrations.
+    Delegates to get_ir_type (single source of truth for type name mapping).
+    Handles simple types, generics (dict, list[T]), and Optional.
 
     Args:
-        python_type: Python type (int, str, bytes, etc.)
+        python_type: Python type (int, str, dict, list[int], etc.)
 
     Returns:
         Canonical type name string
     """
-    # Map types to canonical names
-    type_names = {
-        int: "int",
-        str: "str",
-        float: "float",
-        bool: "bool",
-        bytes: "bytes",
-        datetime: "datetime",
-        date: "date",
-        time: "time",
-        timedelta: "timedelta",
-        UUID: "uuid",
-        Decimal: "decimal",
-    }
+    from oxyde.core.ir_types import get_ir_type
 
-    if python_type in type_names:
-        return type_names[python_type]
-
-    # For dict, list, etc. - use the type name
-    return python_type.__name__.lower()
+    ir_type = get_ir_type(python_type)
+    if ir_type:
+        return ir_type
+    return getattr(python_type, "__name__", "text").lower()
 
 
 def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
