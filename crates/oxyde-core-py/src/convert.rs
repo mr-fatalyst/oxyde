@@ -198,9 +198,47 @@ fn value_to_py_tagged<'py>(py: Python<'py>, value: &QueryValue) -> PyResult<Boun
             PyString::new(py, &t.to_string()).unbind().into_any(),
         ),
         QueryValue::ChronoTime(None) => ("ChronoTime", py.None()),
+        QueryValue::Array(arr_type, Some(vals)) => {
+            let inner = PyList::empty(py);
+            for v in vals.iter() {
+                let (_, py_val) = value_to_py_tagged(py, v)
+                    .map(|t| {
+                        let tag: String = t.get_item(0).unwrap().extract().unwrap();
+                        let val: Py<PyAny> = t.get_item(1).unwrap().unbind();
+                        (tag, val)
+                    })
+                    .unwrap_or_else(|_| ("Unknown".to_string(), py.None()));
+                inner.append(py_val).ok();
+            }
+            (
+                "Array",
+                PyTuple::new(
+                    py,
+                    &[
+                        PyString::new(py, &format!("{:?}", arr_type)).into_any(),
+                        inner.into_any(),
+                    ],
+                )
+                .unwrap()
+                .unbind()
+                .into_any(),
+            )
+        }
+        QueryValue::Array(arr_type, None) => (
+            "Array",
+            PyTuple::new(
+                py,
+                &[
+                    PyString::new(py, &format!("{:?}", arr_type)).into_any(),
+                    py.None().into_bound(py).into_any(),
+                ],
+            )
+            .unwrap()
+            .unbind()
+            .into_any(),
+        ),
         other => {
             let repr = format!("{:?}", other);
-            // Extract variant name from debug repr: "VariantName(...)" -> "VariantName"
             let tag = repr.split('(').next().unwrap_or("Unknown");
             (
                 "Unknown",
