@@ -47,7 +47,7 @@ pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: boo
             _ => "TEXT".to_string(),
         },
         Dialect::Postgres => match python_type {
-            "int" if is_pk => "SERIAL".to_string(),
+            "int" if is_pk => "BIGSERIAL".to_string(),
             "int" => "BIGINT".to_string(),
             "str" => "TEXT".to_string(),
             "float" => "DOUBLE PRECISION".to_string(),
