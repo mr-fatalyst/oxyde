@@ -279,12 +279,13 @@ SQLite doesn't benefit from large connection pools. Use `max_connections=1` or r
 
 ## Pull Request Guidelines
 
-1. **Create a branch** from `main`
-2. **Write tests** for new functionality
-3. **Run all tests** before submitting
-4. **Format code** with `cargo fmt` and `ruff`
-5. **Update documentation** if needed
-6. **Keep commits atomic** — one logical change per commit
+1. **Build the Rust core from source** before submitting a fix. The `oxyde-core` package on PyPI may be behind `main` — your issue might already be fixed. Always run `cd crates/oxyde-core-py && maturin develop --release` first.
+2. **Create a branch** from `main`
+3. **Write tests** for new functionality
+4. **Run all tests** before submitting
+5. **Format code** with `cargo fmt` and `ruff`
+6. **Update documentation** if needed
+7. **Keep commits atomic** — one logical change per commit
 
 ## Questions?
 
