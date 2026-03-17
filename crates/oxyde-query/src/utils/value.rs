@@ -252,18 +252,66 @@ fn parse_datetime_utc(s: &str) -> Option<DateTime<Utc>> {
         .ok()
 }
 
-/// Parse datetime string in various ISO-like formats
+/// Parse datetime string in various ISO-like formats.
+/// Supports Python datetime.isoformat() output which may include variable precision microseconds.
 fn parse_datetime(s: &str) -> std::result::Result<NaiveDateTime, chrono::ParseError> {
-    NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
-        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S"))
-        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f"))
-        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.f"))
+    // Try T-separated formats first (ISO 8601 / Python isoformat())
+    if s.contains('T') {
+        // Split at the decimal point to handle variable precision microseconds
+        let (before_us, after_us) = s.split_once('.').unwrap_or((s, ""));
+
+        if after_us.is_empty() {
+            // No microseconds: "2024-01-15T10:30:00"
+            NaiveDateTime::parse_from_str(before_us, "%Y-%m-%dT%H:%M:%S")
+        } else {
+            // Has microseconds - truncate to max 6 digits for chrono
+            // Python's isoformat() can produce up to 6 digits
+            let us_digits = after_us.chars().take(6).collect::<String>();
+            let formatted = format!("{}.{}", before_us, us_digits);
+
+            // Try parsing with exactly the truncated digits
+            NaiveDateTime::parse_from_str(&formatted, "%Y-%m-%dT%H:%M:%S%.f")
+                .or_else(|_| {
+                    // Fallback: try parsing with 3, 6, or 9 digit formats
+                    NaiveDateTime::parse_from_str(before_us, "%Y-%m-%dT%H:%M:%S")
+                        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.3f"))
+                        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.6f"))
+                })
+        }
+    } else {
+        // Space-separated formats
+        NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+            .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f"))
+    }
 }
 
-/// Parse time string in various formats
+/// Parse time string in various formats.
+/// Supports Python time.isoformat() output which may include variable precision microseconds.
 fn parse_time(s: &str) -> std::result::Result<NaiveTime, chrono::ParseError> {
-    NaiveTime::parse_from_str(s, "%H:%M:%S")
-        .or_else(|_| NaiveTime::parse_from_str(s, "%H:%M:%S%.f"))
+    // Split at the decimal point to handle variable precision microseconds
+    let (before_us, after_us) = s.split_once('.').unwrap_or((s, ""));
+
+    if after_us.is_empty() {
+        // No microseconds: "10:30:00"
+        NaiveTime::parse_from_str(before_us, "%H:%M:%S")
+    } else {
+        // Has microseconds - truncate to max 9 digits for chrono nanosecond support
+        // Python's isoformat() produces up to 6 digits (microseconds)
+        let ns_digits: String = after_us
+            .chars()
+            .take(9)  // chrono supports up to 9 digits (nanoseconds)
+            .collect();
+        let formatted = format!("{}.{}", before_us, ns_digits);
+
+        // Try with exactly the truncated digits
+        NaiveTime::parse_from_str(&formatted, "%H:%M:%S%.f")
+            .or_else(|_| {
+                // Fallback: try original string with common precisions
+                NaiveTime::parse_from_str(s, "%H:%M:%S%.3f")
+                    .or_else(|_| NaiveTime::parse_from_str(s, "%H:%M:%S%.6f"))
+                    .or_else(|_| NaiveTime::parse_from_str(s, "%H:%M:%S%.9f"))
+            })
+    }
 }
 
 /// Convert rmpv value to SimpleExpr if it contains an expression
@@ -785,6 +833,78 @@ mod tests {
         assert!(
             matches!(result, Value::ChronoDateTimeUtc(Some(_))),
             "datetime hint with tz string should fall back to UTC parsing, got {result:?}"
+        );
+    }
+
+    // ── Tests for Python isoformat() compatibility ───────────────────────
+
+    #[test]
+    fn test_python_datetime_isoformat_no_microseconds() {
+        // Python: datetime(2024, 1, 15, 10, 30, 0).isoformat() -> "2024-01-15T10:30:00"
+        let val = rmpv::Value::String("2024-01-15T10:30:00".into());
+        let result = rmpv_to_value_typed(&val, Some("datetime"));
+        assert!(
+            matches!(result, Value::ChronoDateTime(Some(_))),
+            "Python isoformat without microseconds should parse, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_python_datetime_isoformat_with_microseconds() {
+        // Python: datetime(2024, 1, 15, 10, 30, 0, 123456).isoformat() -> "2024-01-15T10:30:00.123456"
+        let val = rmpv::Value::String("2024-01-15T10:30:00.123456".into());
+        let result = rmpv_to_value_typed(&val, Some("datetime"));
+        assert!(
+            matches!(result, Value::ChronoDateTime(Some(_))),
+            "Python isoformat with 6-digit microseconds should parse, got {result:?}"
+        );
+        // Verify the microseconds are preserved
+        if let Value::ChronoDateTime(Some(dt)) = result {
+            assert_eq!(dt.timestamp_micros() % 1_000_000, 123456);
+        }
+    }
+
+    #[test]
+    fn test_python_datetime_isoformat_with_milliseconds() {
+        // Python: datetime(2024, 1, 15, 10, 30, 0, 123000).isoformat() -> "2024-01-15T10:30:00.123000"
+        let val = rmpv::Value::String("2024-01-15T10:30:00.123000".into());
+        let result = rmpv_to_value_typed(&val, Some("datetime"));
+        assert!(
+            matches!(result, Value::ChronoDateTime(Some(_))),
+            "Python isoformat with millisecond precision should parse, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_python_time_isoformat_no_microseconds() {
+        // Python: time(10, 30, 0).isoformat() -> "10:30:00"
+        let val = rmpv::Value::String("10:30:00".into());
+        let result = rmpv_to_value_typed(&val, Some("time"));
+        assert!(
+            matches!(result, Value::ChronoTime(Some(_))),
+            "Python time isoformat without microseconds should parse, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_python_time_isoformat_with_microseconds() {
+        // Python: time(10, 30, 0, 123456).isoformat() -> "10:30:00.123456"
+        let val = rmpv::Value::String("10:30:00.123456".into());
+        let result = rmpv_to_value_typed(&val, Some("time"));
+        assert!(
+            matches!(result, Value::ChronoTime(Some(_))),
+            "Python time isoformat with 6-digit microseconds should parse, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_python_time_isoformat_with_milliseconds() {
+        // Python: time(10, 30, 0, 123000).isoformat() -> "10:30:00.123"
+        let val = rmpv::Value::String("10:30:00.123".into());
+        let result = rmpv_to_value_typed(&val, Some("time"));
+        assert!(
+            matches!(result, Value::ChronoTime(Some(_))),
+            "Python time isoformat with millisecond precision should parse, got {result:?}"
         );
     }
 }
