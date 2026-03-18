@@ -355,6 +355,8 @@ class MutationMixin:
         if not pk_field:
             raise ManagerError("bulk_update() requires a primary key")
 
+        pk_column = self.model_class._db_meta.field_metadata[pk_field].db_column
+
         exec_client = await _resolve_execution_client(using, client)
 
         # Build bulk_update payload
@@ -364,21 +366,21 @@ class MutationMixin:
             if pk_value is None:
                 continue
 
-            # Use model_dump(mode="python") + _serialize_value_for_ir()
-            # to match the same serialization path as update()
             all_values = obj.model_dump(mode="python", exclude_none=False)
 
-            # Extract only requested fields and serialize for IR
-            values = {}
-            for field_name in fields_list:
-                if field_name in all_values:
-                    values[field_name] = _serialize_value_for_ir(all_values[field_name])
+            # Extract requested fields and map to db_column names
+            values = {
+                field_name: _serialize_value_for_ir(all_values[field_name])
+                for field_name in fields_list
+                if field_name in all_values
+            }
+            mapped_values = _map_values_to_columns(self.model_class, values)
 
-            if values:
+            if mapped_values:
                 bulk_entries.append(
                     {
-                        "filters": {pk_field: pk_value},
-                        "values": values,
+                        "filters": {pk_column: pk_value},
+                        "values": mapped_values,
                     }
                 )
 

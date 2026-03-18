@@ -229,3 +229,93 @@ class TestDbColumnAliasing:
         )
         assert event.title == "New Event"
         assert event.created == datetime(2026, 4, 1, 12, 0, 0)
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_with_aliased_columns(self, aliased_db):
+        """bulk_update must map field names to db_column."""
+        events = await AliasedEvent.objects.all(client=aliased_db)
+        assert len(events) == 2
+
+        events[0].title = "Updated Morning"
+        events[1].title = "Updated Midnight"
+
+        affected = await AliasedEvent.objects.bulk_update(
+            events, ["title"], client=aliased_db
+        )
+        assert affected == 2
+
+        refreshed = await AliasedEvent.objects.order_by("id").all(client=aliased_db)
+        assert refreshed[0].title == "Updated Morning"
+        assert refreshed[1].title == "Updated Midnight"
+
+    @pytest.mark.asyncio
+    async def test_update_with_aliased_columns(self, aliased_db):
+        """queryset update() must map field names to db_column."""
+        affected = await AliasedEvent.objects.filter(title="Morning A").update(
+            title="Morning B", client=aliased_db
+        )
+        assert affected == 1
+        event = await AliasedEvent.objects.get(title="Morning B", client=aliased_db)
+        assert event.title == "Morning B"
+
+    @pytest.mark.asyncio
+    async def test_delete_with_aliased_columns(self, aliased_db):
+        """delete() with filter on aliased field must use db_column."""
+        affected = await AliasedEvent.objects.filter(title="Morning A").delete(
+            client=aliased_db
+        )
+        assert affected == 1
+        remaining = await AliasedEvent.objects.all(client=aliased_db)
+        assert len(remaining) == 1
+
+    @pytest.mark.asyncio
+    async def test_save_update_with_aliased_columns(self, aliased_db):
+        """instance.save() on existing record must use db_column."""
+        event = await AliasedEvent.objects.get(title="Morning A", client=aliased_db)
+        event.title = "Morning Saved"
+        await event.save(client=aliased_db)
+
+        refreshed = await AliasedEvent.objects.get(id=event.id, client=aliased_db)
+        assert refreshed.title == "Morning Saved"
+
+    @pytest.mark.asyncio
+    async def test_bulk_create_with_aliased_columns(self, aliased_db):
+        """bulk_create must map field names to db_column."""
+        new_events = [
+            AliasedEvent(title="Bulk A", created=datetime(2026, 5, 1)),
+            AliasedEvent(title="Bulk B", created=datetime(2026, 5, 2)),
+        ]
+        created = await AliasedEvent.objects.bulk_create(
+            new_events, client=aliased_db
+        )
+        assert len(created) == 2
+
+        all_events = await AliasedEvent.objects.all(client=aliased_db)
+        assert len(all_events) == 4
+
+    @pytest.mark.asyncio
+    async def test_order_by_with_aliased_columns(self, aliased_db):
+        """order_by on aliased field must use db_column."""
+        events = await AliasedEvent.objects.order_by("-created").all(
+            client=aliased_db
+        )
+        assert events[0].title == "Midnight"
+        assert events[1].title == "Morning A"
+
+    @pytest.mark.asyncio
+    async def test_values_with_aliased_columns(self, aliased_db):
+        """values() must return field names, not db_columns."""
+        rows = await AliasedEvent.objects.order_by("id").values(
+            "id", "title"
+        ).all(client=aliased_db)
+        assert len(rows) == 2
+        assert rows[0]["title"] == "Morning A"
+        assert "event_title" not in rows[0]
+
+    @pytest.mark.asyncio
+    async def test_values_list_with_aliased_columns(self, aliased_db):
+        """values_list() must work with field names."""
+        rows = await AliasedEvent.objects.order_by("id").values_list(
+            "title", flat=True
+        ).all(client=aliased_db)
+        assert rows == ["Morning A", "Midnight"]
