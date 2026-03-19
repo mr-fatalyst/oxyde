@@ -4,6 +4,43 @@ All notable changes to Oxyde are documented here.
 
 ---
 
+## 0.6.0 - Unreleased
+
+### Bug Fixes
+
+- **`bulk_update()` used field names instead of `db_column` as filter keys** — when a model had a custom `db_column`, the generated SQL referenced the Python field name, which doesn't exist in the database. Now correctly maps field names to `db_column` via model metadata.
+- **Result columns not remapped to field names** — Rust returns `db_column` names (e.g. `author_id`), but Python expects field names (`author`). Added `reverse_column_map` to `ModelMeta` and `_remap_columns()` in the execution layer. Affects all result formats: dedup, columnar, and row dicts.
+- **`Decimal` bound as string on PostgreSQL** — `Decimal` values were serialized as strings, causing type mismatches in comparisons. Now bound natively via `rust_decimal::Decimal`.
+- **`TIMESTAMPTZ` not decoded correctly** — timezone-aware datetime columns lost timezone info during encoding. Now preserves timezone in RFC3339 format.
+- **`datetime` strings falsely parsed as datetime** — ISO 8601 strings stored in `VARCHAR`/`TEXT` columns (e.g. `"2024-01-15T12:30:00Z"`) were auto-parsed into datetime values. Type hints now prevent this: if `col_type` is `"str"` or `"TEXT"`, the value stays as a string.
+- **`timedelta` encoded as integer microseconds** — timedelta values were exposed as raw `i64` microseconds. Now correctly converted to `f64` seconds at the driver layer, matching Python's `timedelta` representation.
+- **Type-unsafe filter binding** — filter values were converted without consulting column type hints, leading to implicit string coercion (e.g. `age = '18'` instead of `age = 18`). Filter builder now receives `col_types` and binds values with correct SQL types.
+- **`DELETE` path ignored type hints** — value conversion for DELETE queries did not pass `col_types`, causing the same coercion issues as filters. Fixed.
+
+### New Features
+
+- **PostgreSQL array support** — native support for `int[]`, `str[]`, `uuid[]`, `bool[]`, `float[]`, `decimal[]`, `datetime[]` columns. Arrays are correctly bound as parameters, decoded from results (including NULL elements), and mapped in migrations (`BIGINT[]` on Postgres, `JSON` on MySQL, `TEXT` on SQLite).
+- **JSON column support** — `dict` fields are now mapped to `JSONB` (Postgres), `JSON` (MySQL), `TEXT` (SQLite) in migrations. Values are bound as `Value::Json` in queries.
+- **`.sql(with_types=True)`** — new optional parameter shows exact SQL type tags for each bound parameter: `[("BigInt", 18), ("Uuid", "550e...")]`. Useful for debugging type binding issues.
+
+### Improvements
+
+- **Centralized type classification in Rust** — new `classify_type()` function as single source of truth for mapping IR type names and SQL type names to semantic categories. Replaces scattered match arms across the codebase.
+- **Typed NULL values** — `NULL` parameters now carry their column type (e.g. `Value::Uuid(None)` instead of generic `Value::String(None)`), preventing type mismatch errors on strict databases.
+- **`BIGSERIAL` for integer PKs on PostgreSQL** — integer primary keys now map to `BIGSERIAL` instead of `SERIAL`, supporting larger sequences out of the box.
+- **`reverse_column_map` cached on `ModelMeta`** — `db_column → field_name` mapping is computed once at model finalization, not on every query.
+
+### Internal
+
+- **Rust core bumped to 0.5.0** (core-v0.5.0).
+- Removed `_convert_timedelta_columns()` from Python execution layer (moved to Rust driver).
+- Removed field_name aliasing from Rust SELECT; column remapping now happens in Python via `reverse_column_map`.
+- Unified `_get_python_type_name` to delegate to `get_ir_type`. Added `json` and `T[]` patterns to Rust `python_type_to_sql`.
+- Added `test_type_binding` test suite covering type classification, array handling, typed nulls, and edge cases.
+- Added datetime filtering integration tests.
+
+---
+
 ## 0.5.2 - 2026-03-13
 
 ### Bug Fixes
