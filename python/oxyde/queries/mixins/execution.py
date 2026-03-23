@@ -52,6 +52,7 @@ class ExecutionMixin:
     _offset_value: int | None
     _order_by_fields: list[tuple[str, str]]
     _group_by_fields: list[str]
+    _exists: bool
 
     def _clone(self) -> Self:
         """Must be implemented by the main Query class."""

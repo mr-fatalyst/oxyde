@@ -37,6 +37,7 @@ class AggregationMixin:
     _limit_value: int | None
     _offset_value: int | None
     _order_by_fields: list[tuple[str, str]]
+    _count: bool
 
     def _clone(self) -> Self:
         """Must be implemented by the main Query class."""
