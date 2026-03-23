@@ -88,6 +88,55 @@ class TestModelSave:
             await instance.save(client=stub, update_fields=["nonexistent"])
 
     @pytest.mark.asyncio
+    async def test_save_update_fields_resolves_fk_name(self):
+        """save(update_fields=["author"]) resolves to synthetic column "author_id"."""
+
+        class _Author(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+
+            class Meta:
+                is_table = True
+
+        class _Post(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            title: str = ""
+            author: _Author | None = None
+
+            class Meta:
+                is_table = True
+
+        stub = StubExecuteClient([{
+            "columns": ["id", "title", "author_id"],
+            "rows": [[1, "Hello", 5]],
+        }])
+        post = _Post(id=1, title="Hello", author_id=5)
+        await post.save(client=stub, update_fields=["author"])
+
+        call = stub.calls[0]
+        assert call["op"] == "update"
+        assert "author_id" in call["values"]
+        assert call["values"]["author_id"] == 5
+
+    @pytest.mark.asyncio
+    async def test_save_update_fields_rejects_reverse_fk(self):
+        """save(update_fields=["posts"]) raises FieldError for reverse FK."""
+
+        class _Author2(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str = ""
+            posts: list = Field(db_reverse_fk="author_id")
+
+            class Meta:
+                is_table = True
+
+        stub = StubExecuteClient([{"affected": 1}])
+        author = _Author2(id=1, name="Alice")
+
+        with pytest.raises(FieldError, match="virtual relation field"):
+            await author.save(client=stub, update_fields=["posts"])
+
+    @pytest.mark.asyncio
     async def test_save_update_not_found_raises(self):
         """Test save() raises NotFoundError when record not found."""
         stub = StubExecuteClient([{"affected": 0}])

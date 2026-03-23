@@ -691,14 +691,31 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         if not is_create:
             # Update specified fields or all fields (except PK)
             if update_fields_set is not None:
-                fields = update_fields_set
                 # Validate that all specified fields exist
                 model_field_names = set(self.__class__.model_fields.keys())
-                invalid_fields = fields - model_field_names
+                invalid_fields = update_fields_set - model_field_names
                 if invalid_fields:
                     inv = ", ".join(sorted(invalid_fields))
                     msg = f"Invalid update_fields for {self.__class__.__name__}: {inv}"
                     raise FieldError(msg)
+
+                # Resolve virtual FK fields to their synthetic columns
+                # e.g. "author" → "author_id" (Django-compatible)
+                metadata = self.__class__._db_meta.field_metadata
+                fields: set[str] = set()
+                for f in update_fields_set:
+                    meta = metadata.get(f)
+                    if meta is None:
+                        fields.add(f)
+                    elif meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
+                        raise FieldError(
+                            f"'{f}' is a virtual relation field and cannot "
+                            f"be used in update_fields"
+                        )
+                    elif meta.foreign_key is not None:
+                        fields.add(meta.foreign_key.column_name)
+                    else:
+                        fields.add(f)
             else:
                 fields = set(self.__class__.model_fields.keys())
             if pk_field:
