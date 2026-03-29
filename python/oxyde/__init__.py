@@ -57,7 +57,9 @@ from oxyde.db import (
     PoolSettings,
     TransactionTimeoutError,
     atomic,
+    create_tables,
     disconnect_all,
+    drop_tables,
     get_connection,
     register_connection,
 )
@@ -111,6 +113,8 @@ __all__ = [
     "register_connection",
     "get_connection",
     "disconnect_all",
+    "create_tables",
+    "drop_tables",
     "Field",
     "Index",
     "Check",

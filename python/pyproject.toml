@@ -38,6 +38,7 @@ dev = [
     "pytest-cov>=7.0",
     "ruff>=0.14.7",
     "pre-commit>=4.5.0",
+    "testcontainers[postgres,mysql]>=4.0",
 ]
 docs = [
     "mkdocs>=1.6,<2",

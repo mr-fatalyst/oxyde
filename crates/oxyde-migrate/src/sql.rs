@@ -54,7 +54,7 @@ pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: boo
             "time" => "TEXT".to_string(),
             "timedelta" => "BIGINT".to_string(),
             "uuid" => "TEXT".to_string(),
-            "decimal" => "NUMERIC".to_string(),
+            "decimal" => "TEXT".to_string(),
             "json" => "TEXT".to_string(),
             _ => "TEXT".to_string(),
         },

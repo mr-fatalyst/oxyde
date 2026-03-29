@@ -63,6 +63,7 @@ from .registry import (
     register_connection,
     unregister_connection,
 )
+from .schema import create_tables, drop_tables
 from .transaction import (
     AsyncTransaction,
     TransactionTimeoutError,
@@ -218,6 +219,9 @@ __all__ = [
     "transaction",
     "atomic",
     "get_active_transaction",
+    # Schema management
+    "create_tables",
+    "drop_tables",
     # Low-level (for advanced use)
     "register_connection",
     "disconnect_all",

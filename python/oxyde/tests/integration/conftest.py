@@ -1,18 +1,36 @@
-"""Integration test fixtures — real SQLite, real Rust core, full pipeline."""
+"""Integration test fixtures — multi-dialect via testcontainers."""
 from __future__ import annotations
 
-import sqlite3
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
 
 from oxyde import AsyncDatabase, Field, Model, disconnect_all
-from oxyde.models.registry import register_table
+from oxyde.db.schema import create_tables, drop_tables
+from oxyde.migrations.utils import detect_dialect
+from oxyde.models.registry import clear_registry, register_table
+from oxyde.queries.raw import execute_raw
+
+# ── Testcontainers availability ────────────────────────────────────────
+
+try:
+    from testcontainers.postgres import PostgresContainer
+    from testcontainers.mysql import MySqlContainer
+
+    HAS_CONTAINERS = True
+except ImportError:
+    HAS_CONTAINERS = False
+
+_DIALECTS = ["sqlite"]
+if HAS_CONTAINERS:
+    _DIALECTS.extend(["postgres", "mysql"])
 
 
-# ── Models ──────────────────────────────────────────────────────────────
+# ── Models ─────────────────────────────────────────────────────────────
 
 
 class Event(Model):
@@ -103,122 +121,229 @@ class PostTag(Model):
         table_name = "post_tags"
 
 
-ALL_MODELS = [Event, AliasedEvent, Author, Category, Post, Comment, Tag, PostTag]
+class AllTypes(Model):
+    id: int | None = Field(default=None, db_pk=True)
+    int_val: int = Field(default=0)
+    str_val: str = Field(default="")
+    float_val: float = Field(default=0.0)
+    bool_val: bool = Field(default=False)
+    datetime_val: datetime | None = Field(default=None, db_nullable=True)
+    date_val: date | None = Field(default=None, db_nullable=True)
+    time_val: time | None = Field(default=None, db_nullable=True)
+    uuid_val: UUID | None = Field(default=None, db_nullable=True)
+    decimal_val: Decimal | None = Field(default=None, db_nullable=True)
+    json_val: dict | None = Field(default=None, db_nullable=True)
+
+    class Meta:
+        is_table = True
+        table_name = "all_types"
 
 
-# ── Schema & Seed SQL ───────────────────────────────────────────────────
+class NullableTypes(Model):
+    id: int | None = Field(default=None, db_pk=True)
+    int_val: int | None = Field(default=None, db_nullable=True)
+    str_val: str | None = Field(default=None, db_nullable=True)
+    float_val: float | None = Field(default=None, db_nullable=True)
+    bool_val: bool | None = Field(default=None, db_nullable=True)
+    datetime_val: datetime | None = Field(default=None, db_nullable=True)
+    date_val: date | None = Field(default=None, db_nullable=True)
+    time_val: time | None = Field(default=None, db_nullable=True)
+    uuid_val: UUID | None = Field(default=None, db_nullable=True)
+    decimal_val: Decimal | None = Field(default=None, db_nullable=True)
+    json_val: dict | None = Field(default=None, db_nullable=True)
 
-EVENT_SCHEMA = """\
-CREATE TABLE events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-"""
-
-EVENT_SEED = """\
-INSERT INTO events (title, created_at) VALUES
-    ('Morning A', '2026-03-14 09:34:18'),
-    ('Morning B', '2026-03-14 09:34:18'),
-    ('Morning C', '2026-03-14 09:34:18'),
-    ('Midnight',  '2026-03-15 00:00:00'),
-    ('Next Day',  '2026-03-16 00:00:00');
-"""
-
-ALIASED_EVENT_SCHEMA = """\
-CREATE TABLE aliased_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_title TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-"""
-
-ALIASED_EVENT_SEED = """\
-INSERT INTO aliased_events (event_title, created_at) VALUES
-    ('Morning A', '2026-03-14 09:34:18'),
-    ('Midnight',  '2026-03-15 00:00:00');
-"""
-
-SCHEMA_SQL = """\
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE authors (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    active INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
-);
-
-CREATE TABLE posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    body TEXT NOT NULL DEFAULT '',
-    author_id INTEGER NOT NULL REFERENCES authors(id),
-    category_id INTEGER REFERENCES categories(id),
-    views INTEGER NOT NULL DEFAULT 0,
-    published INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id INTEGER NOT NULL REFERENCES posts(id),
-    body TEXT NOT NULL DEFAULT ''
-);
-
-CREATE TABLE tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
-);
-
-CREATE TABLE post_tags (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id INTEGER NOT NULL REFERENCES posts(id),
-    tag_id INTEGER NOT NULL REFERENCES tags(id)
-);
-"""
-
-SEED_SQL = """\
-INSERT INTO authors (id, name, email, active) VALUES
-    (1, 'Alice', 'alice@test.com', 1),
-    (2, 'Bob', 'bob@test.com', 1),
-    (3, 'Charlie', 'charlie@test.com', 0);
-
-INSERT INTO categories (id, name) VALUES
-    (1, 'Tech'),
-    (2, 'Science');
-
-INSERT INTO posts (id, title, body, author_id, category_id, views, published) VALUES
-    (1, 'Rust Patterns',     '', 1, 1,   120, 1),
-    (2, 'Async Python',      '', 1, 1,    35, 1),
-    (3, 'Quantum Computing', '', 2, 2,    80, 1),
-    (4, 'Draft Post',        '', 2, NULL,   0, 0),
-    (5, 'ML Basics',         '', 3, 2,   200, 1),
-    (6, 'Unpublished',       '', 3, NULL,   0, 0);
-
-INSERT INTO comments (id, post_id, body) VALUES
-    (1, 1, 'Great read!'),
-    (2, 1, 'Thanks for sharing'),
-    (3, 3, 'Interesting topic');
-
-INSERT INTO tags (id, name) VALUES
-    (1, 'Python'),
-    (2, 'Rust'),
-    (3, 'SQL');
-
-INSERT INTO post_tags (post_id, tag_id) VALUES
-    (1, 2),
-    (1, 1),
-    (2, 1),
-    (3, 3);
-"""
+    class Meta:
+        is_table = True
+        table_name = "nullable_types"
 
 
-# ── Fixtures ────────────────────────────────────────────────────────────
+class BytesModel(Model):
+    id: int | None = Field(default=None, db_pk=True)
+    data: bytes | None = Field(default=None, db_nullable=True)
+
+    class Meta:
+        is_table = True
+        table_name = "bytes_model"
+
+
+class TdModel(Model):
+    id: int | None = Field(default=None, db_pk=True)
+    duration: timedelta | None = Field(default=None, db_nullable=True)
+
+    class Meta:
+        is_table = True
+        table_name = "td_model"
+
+
+ALL_MODELS = [
+    Event, AliasedEvent, Author, Category, Post, Comment, Tag, PostTag,
+    AllTypes, NullableTypes, BytesModel, TdModel,
+]
+
+
+# ── Container fixtures (session-scoped) ────────────────────────────────
+
+
+@pytest.fixture(scope="session")
+def _pg_container():
+    if not HAS_CONTAINERS:
+        yield None
+        return
+    try:
+        container = PostgresContainer("postgres:16")
+        container.start()
+        yield container
+        container.stop()
+    except Exception:
+        yield None
+
+
+@pytest.fixture(scope="session")
+def _mysql_container():
+    if not HAS_CONTAINERS:
+        yield None
+        return
+    try:
+        container = MySqlContainer("mysql:8")
+        container.start()
+        yield container
+        container.stop()
+    except Exception:
+        yield None
+
+
+# ── URL builders ───────────────────────────────────────────────────────
+
+
+def _pg_url(container) -> str:
+    host = container.get_container_host_ip()
+    port = container.get_exposed_port(5432)
+    return f"postgres://test:test@{host}:{port}/test"
+
+
+def _mysql_url(container) -> str:
+    host = container.get_container_host_ip()
+    port = container.get_exposed_port(3306)
+    return f"mysql://root:test@{host}:{port}/test"
+
+
+def _get_url(dialect: str, tmp_path, pg_container, mysql_container) -> str:
+    if dialect == "sqlite":
+        return f"sqlite://{tmp_path / 'test.db'}"
+    if dialect == "postgres":
+        if pg_container is None:
+            pytest.skip("PostgreSQL container not available")
+        return _pg_url(pg_container)
+    if dialect == "mysql":
+        if mysql_container is None:
+            pytest.skip("MySQL container not available")
+        return _mysql_url(mysql_container)
+    pytest.fail(f"Unknown dialect: {dialect}")
+
+
+# ── Table management ───────────────────────────────────────────────────
+
+# Track per-dialect to avoid re-creating tables on every test
+_tables_created: set[str] = set()
+
+
+async def _ensure_tables(database: AsyncDatabase) -> None:
+    """Create tables on first use per dialect, truncate + reset on reuse.
+
+    SQLite always creates (each test gets a fresh file).
+    PG/MySQL create once, then truncate for subsequent tests.
+
+    Clears registry and re-registers ALL_MODELS right before schema extraction.
+    Other test suites (smoke) may register models with same table_name but
+    different schema. Registry is keyed by class path, not table_name, so both
+    survive and last-write-wins in extract_current_schema. Clear first to avoid.
+    """
+    clear_registry()
+    for model in ALL_MODELS:
+        register_table(model, overwrite=True)
+
+    dialect = detect_dialect(database.url)
+    if dialect == "sqlite" or dialect not in _tables_created:
+        await create_tables(database)
+        if dialect != "sqlite":
+            _tables_created.add(dialect)
+    else:
+        await _truncate_all(database, dialect)
+
+
+async def _truncate_all(database: AsyncDatabase, dialect: str) -> None:
+    """Truncate all tables, respecting FK constraints."""
+    tables = [m.Meta.table_name for m in ALL_MODELS]
+    if dialect == "postgres":
+        names = ", ".join(tables)
+        await execute_raw(
+            f"TRUNCATE {names} RESTART IDENTITY CASCADE", client=database
+        )
+    elif dialect == "mysql":
+        await execute_raw("SET FOREIGN_KEY_CHECKS = 0", client=database)
+        for t in tables:
+            await execute_raw(f"TRUNCATE TABLE {t}", client=database)
+        await execute_raw("SET FOREIGN_KEY_CHECKS = 1", client=database)
+
+
+async def _fix_pg_sequences(database: AsyncDatabase) -> None:
+    """Reset PG sequences after explicit-ID inserts."""
+    for model in ALL_MODELS:
+        table = model.Meta.table_name
+        await execute_raw(
+            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+            f"COALESCE((SELECT MAX(id) FROM {table}), 0))",
+            client=database,
+        )
+
+
+# ── Seed data ──────────────────────────────────────────────────────────
+
+MAIN_SEED = [
+    "INSERT INTO authors (id, name, email, active) VALUES "
+    "(1, 'Alice', 'alice@test.com', 1), "
+    "(2, 'Bob', 'bob@test.com', 1), "
+    "(3, 'Charlie', 'charlie@test.com', 0)",
+    "INSERT INTO categories (id, name) VALUES (1, 'Tech'), (2, 'Science')",
+    "INSERT INTO posts (id, title, body, author_id, category_id, views, published) VALUES "
+    "(1, 'Rust Patterns', '', 1, 1, 120, 1), "
+    "(2, 'Async Python', '', 1, 1, 35, 1), "
+    "(3, 'Quantum Computing', '', 2, 2, 80, 1), "
+    "(4, 'Draft Post', '', 2, NULL, 0, 0), "
+    "(5, 'ML Basics', '', 3, 2, 200, 1), "
+    "(6, 'Unpublished', '', 3, NULL, 0, 0)",
+    "INSERT INTO comments (id, post_id, body) VALUES "
+    "(1, 1, 'Great read!'), "
+    "(2, 1, 'Thanks for sharing'), "
+    "(3, 3, 'Interesting topic')",
+    "INSERT INTO tags (id, name) VALUES (1, 'Python'), (2, 'Rust'), (3, 'SQL')",
+    "INSERT INTO post_tags (post_id, tag_id) VALUES (1, 2), (1, 1), (2, 1), (3, 3)",
+]
+
+EVENT_SEED = [
+    "INSERT INTO events (title, created_at) VALUES "
+    "('Morning A', '2026-03-14 09:34:18'), "
+    "('Morning B', '2026-03-14 09:34:18'), "
+    "('Morning C', '2026-03-14 09:34:18'), "
+    "('Midnight', '2026-03-15 00:00:00'), "
+    "('Next Day', '2026-03-16 00:00:00')",
+]
+
+ALIASED_EVENT_SEED = [
+    "INSERT INTO aliased_events (event_title, created_at) VALUES "
+    "('Morning A', '2026-03-14 09:34:18'), "
+    "('Midnight', '2026-03-15 00:00:00')",
+]
+
+
+async def _seed(database: AsyncDatabase, statements: list[str]) -> None:
+    for sql in statements:
+        await execute_raw(sql, client=database)
+    if detect_dialect(database.url) == "postgres":
+        await _fix_pg_sequences(database)
+
+
+# ── Fixtures ───────────────────────────────────────────────────────────
 
 
 @pytest.fixture(autouse=True)
@@ -228,69 +353,52 @@ def _register_models():
         register_table(model, overwrite=True)
 
 
-@pytest_asyncio.fixture
-async def db(tmp_path):
-    """Fresh SQLite DB with schema + seed for each test."""
-    db_path = tmp_path / "test.db"
-
-    conn = sqlite3.connect(db_path)
-    conn.executescript(SCHEMA_SQL)
-    conn.executescript(SEED_SQL)
-    conn.close()
-
+@pytest_asyncio.fixture(params=_DIALECTS)
+async def db(request, tmp_path, _pg_container, _mysql_container):
+    """Fresh DB with main seed data, parametrized by dialect."""
+    url = _get_url(request.param, tmp_path, _pg_container, _mysql_container)
     database = AsyncDatabase(
-        f"sqlite://{db_path}",
-        name=f"test_{uuid.uuid4().hex}",
-        overwrite=True,
+        url, name=f"test_{uuid.uuid4().hex[:12]}", overwrite=True
     )
     await database.connect()
-    try:
-        yield database
-    finally:
-        await disconnect_all()
+    await _ensure_tables(database)
+    await _seed(database, MAIN_SEED)
+
+    yield database
+    await disconnect_all()
 
 
-@pytest_asyncio.fixture
-async def event_db(tmp_path):
-    """Fresh SQLite DB with events for datetime filtering tests."""
-    db_path = tmp_path / "events.db"
-    conn = sqlite3.connect(db_path)
-    conn.executescript(EVENT_SCHEMA)
-    conn.executescript(EVENT_SEED)
-    conn.close()
+@pytest_asyncio.fixture(params=_DIALECTS)
+async def event_db(request, tmp_path, _pg_container, _mysql_container):
+    """Fresh DB with event seed data for datetime filtering tests."""
+    url = _get_url(request.param, tmp_path, _pg_container, _mysql_container)
     database = AsyncDatabase(
-        f"sqlite://{db_path}",
-        name=f"evt_{uuid.uuid4().hex}",
-        overwrite=True,
+        url, name=f"evt_{uuid.uuid4().hex[:12]}", overwrite=True
     )
     await database.connect()
-    try:
-        yield database
-    finally:
-        await disconnect_all()
+    await _ensure_tables(database)
+    await _seed(database, EVENT_SEED)
+
+    yield database
+    await disconnect_all()
 
 
-@pytest_asyncio.fixture
-async def aliased_db(tmp_path):
-    """Fresh SQLite DB with aliased_events for db_column remapping tests."""
-    db_path = tmp_path / "aliased.db"
-    conn = sqlite3.connect(db_path)
-    conn.executescript(ALIASED_EVENT_SCHEMA)
-    conn.executescript(ALIASED_EVENT_SEED)
-    conn.close()
+@pytest_asyncio.fixture(params=_DIALECTS)
+async def aliased_db(request, tmp_path, _pg_container, _mysql_container):
+    """Fresh DB with aliased_events seed for db_column remapping tests."""
+    url = _get_url(request.param, tmp_path, _pg_container, _mysql_container)
     database = AsyncDatabase(
-        f"sqlite://{db_path}",
-        name=f"alias_{uuid.uuid4().hex}",
-        overwrite=True,
+        url, name=f"alias_{uuid.uuid4().hex[:12]}", overwrite=True
     )
     await database.connect()
-    try:
-        yield database
-    finally:
-        await disconnect_all()
+    await _ensure_tables(database)
+    await _seed(database, ALIASED_EVENT_SEED)
+
+    yield database
+    await disconnect_all()
 
 
-# ── Factories ───────────────────────────────────────────────────────────
+# ── Factories ──────────────────────────────────────────────────────────
 
 
 async def create_author(db, **overrides):

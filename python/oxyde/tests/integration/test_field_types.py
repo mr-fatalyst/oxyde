@@ -1,11 +1,10 @@
 """Round-trip tests for all supported field types.
 
-Tests create → get → assert for each Python type through the full pipeline:
-Python → msgpack IR → Rust → SQL → SQLite → Rust convert → msgpack → Python → Pydantic
+Tests create -> get -> assert for each Python type through the full pipeline:
+Python -> msgpack IR -> Rust -> SQL -> DB -> Rust convert -> msgpack -> Python -> Pydantic
 """
 from __future__ import annotations
 
-import sqlite3
 import uuid
 
 import pytest
@@ -15,108 +14,14 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID
 
-from oxyde import AsyncDatabase, Field, Model, disconnect_all
-from oxyde.models.registry import register_table
+from oxyde.queries.raw import execute_raw
+
+from .conftest import AllTypes, BytesModel, NullableTypes, TdModel
 
 
-# ── Models ──────────────────────────────────────────────────────────────
-
-
-class AllTypes(Model):
-    id: int | None = Field(default=None, db_pk=True)
-    int_val: int = Field(default=0)
-    str_val: str = Field(default="")
-    float_val: float = Field(default=0.0)
-    bool_val: bool = Field(default=False)
-    datetime_val: datetime | None = Field(default=None, db_nullable=True)
-    date_val: date | None = Field(default=None, db_nullable=True)
-    time_val: time | None = Field(default=None, db_nullable=True)
-    uuid_val: UUID | None = Field(default=None, db_nullable=True)
-    decimal_val: Decimal | None = Field(default=None, db_nullable=True)
-    json_val: dict | None = Field(default=None, db_nullable=True)
-
-    class Meta:
-        is_table = True
-        table_name = "all_types"
-
-
-class NullableTypes(Model):
-    id: int | None = Field(default=None, db_pk=True)
-    int_val: int | None = Field(default=None, db_nullable=True)
-    str_val: str | None = Field(default=None, db_nullable=True)
-    float_val: float | None = Field(default=None, db_nullable=True)
-    bool_val: bool | None = Field(default=None, db_nullable=True)
-    datetime_val: datetime | None = Field(default=None, db_nullable=True)
-    date_val: date | None = Field(default=None, db_nullable=True)
-    time_val: time | None = Field(default=None, db_nullable=True)
-    uuid_val: UUID | None = Field(default=None, db_nullable=True)
-    decimal_val: Decimal | None = Field(default=None, db_nullable=True)
-    json_val: dict | None = Field(default=None, db_nullable=True)
-
-    class Meta:
-        is_table = True
-        table_name = "nullable_types"
-
-
-ALL_TYPE_MODELS = [AllTypes, NullableTypes]
-
-SCHEMA_SQL = """\
-CREATE TABLE all_types (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    int_val INTEGER NOT NULL DEFAULT 0,
-    str_val TEXT NOT NULL DEFAULT '',
-    float_val REAL NOT NULL DEFAULT 0.0,
-    bool_val INTEGER NOT NULL DEFAULT 0,
-    datetime_val TEXT,
-    date_val TEXT,
-    time_val TEXT,
-    uuid_val TEXT,
-    decimal_val TEXT,
-    json_val TEXT
-);
-
-CREATE TABLE nullable_types (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    int_val INTEGER,
-    str_val TEXT,
-    float_val REAL,
-    bool_val INTEGER,
-    datetime_val TEXT,
-    date_val TEXT,
-    time_val TEXT,
-    uuid_val TEXT,
-    decimal_val TEXT,
-    json_val TEXT
-);
-"""
-
-
-# ── Fixtures ────────────────────────────────────────────────────────────
-
-
-@pytest.fixture(autouse=True)
-def _register_models():
-    for model in ALL_TYPE_MODELS:
-        register_table(model, overwrite=True)
-
-
-@pytest_asyncio.fixture
-async def db(tmp_path):
-    db_path = tmp_path / "types.db"
-    conn = sqlite3.connect(db_path)
-    conn.executescript(SCHEMA_SQL)
-    conn.close()
-
-    database = AsyncDatabase(
-        f"sqlite://{db_path}",
-        name=f"types_{uuid.uuid4().hex}",
-        overwrite=True,
-    )
-    await database.connect()
-    try:
-        yield database
-    finally:
-        await disconnect_all()
+# ── Models for this file are defined in conftest.py ────────────────────
+# AllTypes, NullableTypes, BytesModel, TdModel
+# Tables created by create_tables() via conftest db fixture.
 
 
 # ── Basic type round-trips ──────────────────────────────────────────────
@@ -375,9 +280,8 @@ class TestNullRoundTrip:
     """
 
     @pytest_asyncio.fixture
-    async def db_with_nulls(self, db, tmp_path):
+    async def db_with_nulls(self, db):
         """Seed a row with all NULLs via raw SQL."""
-        from oxyde.queries import execute_raw
         await execute_raw(
             "INSERT INTO nullable_types (int_val, str_val, float_val, bool_val, "
             "datetime_val, date_val, time_val, uuid_val, decimal_val, json_val) "
@@ -401,7 +305,7 @@ class TestNullRoundTrip:
         assert fetched.json_val is None
 
 
-# ── Known broken types (xfail) ─────────────────────────────────────────
+# ── bytes & timedelta round-trips ──────────────────────────────────────
 
 
 class TestBytesRoundTrip:
@@ -409,25 +313,6 @@ class TestBytesRoundTrip:
 
     @pytest.mark.asyncio
     async def test_basic(self, db):
-        from oxyde.models.registry import register_table
-
-        class BytesModel(Model):
-            id: int | None = Field(default=None, db_pk=True)
-            data: bytes | None = Field(default=None, db_nullable=True)
-
-            class Meta:
-                is_table = True
-                table_name = "bytes_model"
-
-        register_table(BytesModel, overwrite=True)
-
-        from oxyde.queries import execute_raw
-        await execute_raw(
-            "CREATE TABLE IF NOT EXISTS bytes_model "
-            "(id INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB)",
-            client=db,
-        )
-
         obj = await BytesModel.objects.create(data=b"\x00\x01\x02\xff", client=db)
         fetched = await BytesModel.objects.get(id=obj.id, client=db)
         assert fetched.data == b"\x00\x01\x02\xff"
@@ -439,25 +324,6 @@ class TestTimedeltaRoundTrip:
 
     @pytest.mark.asyncio
     async def test_basic(self, db):
-        from oxyde.models.registry import register_table
-
-        class TdModel(Model):
-            id: int | None = Field(default=None, db_pk=True)
-            duration: timedelta | None = Field(default=None, db_nullable=True)
-
-            class Meta:
-                is_table = True
-                table_name = "td_model"
-
-        register_table(TdModel, overwrite=True)
-
-        from oxyde.queries import execute_raw
-        await execute_raw(
-            "CREATE TABLE IF NOT EXISTS td_model "
-            "(id INTEGER PRIMARY KEY AUTOINCREMENT, duration BIGINT)",
-            client=db,
-        )
-
         td = timedelta(hours=1, minutes=30)
         obj = await TdModel.objects.create(duration=td, client=db)
         fetched = await TdModel.objects.get(id=obj.id, client=db)

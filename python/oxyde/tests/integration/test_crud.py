@@ -159,12 +159,12 @@ class TestRefresh:
         author = await Author.objects.get(id=1, client=db)
         assert author.name == "Alice"
 
-        # Modify directly in DB
-        await execute_raw(
-            "UPDATE authors SET name = ? WHERE id = ?",
-            ["Alice Modified", 1],
-            client=db,
-        )
+        # Modify directly in DB (placeholder syntax differs per dialect)
+        if db.url.startswith("postgres"):
+            sql = "UPDATE authors SET name = $1 WHERE id = $2"
+        else:
+            sql = "UPDATE authors SET name = ? WHERE id = ?"
+        await execute_raw(sql, ["Alice Modified", 1], client=db)
 
         # Instance still has old value
         assert author.name == "Alice"

@@ -75,12 +75,12 @@ class TestRawInTransaction:
     @pytest.mark.asyncio
     async def test_execute_raw_in_transaction(self, db):
         """execute_raw participates in the active transaction."""
+        if db.url.startswith("postgres"):
+            sql = "INSERT INTO authors (name, email, active) VALUES ($1, $2, $3)"
+        else:
+            sql = "INSERT INTO authors (name, email, active) VALUES (?, ?, ?)"
         async with atomic(using=db.name):
-            await execute_raw(
-                "INSERT INTO authors (name, email, active) VALUES (?, ?, ?)",
-                ["RawTx", "rawtx@test.com", 1],
-                using=db.name,
-            )
+            await execute_raw(sql, ["RawTx", "rawtx@test.com", 1], using=db.name)
 
         authors = await Author.objects.filter(name="RawTx").all(client=db)
         assert len(authors) == 1
