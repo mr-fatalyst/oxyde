@@ -3,6 +3,7 @@
 //! Encodes MySQL row cells directly to msgpack bytes.
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use rust_decimal::Decimal;
 use sqlx::{mysql::MySqlRow, Row};
 
 use super::encoder::*;
@@ -80,11 +81,19 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "uuid" | "decimal" => {
+            "uuid" => {
                 match row.try_get::<Option<String>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v),
                     Ok(None) => write_nil(buf),
                     Err(_) => write_nil(buf),
+                }
+                true
+            }
+            "decimal" => {
+                match row.try_get::<Option<Decimal>, _>(idx) {
+                    Ok(Some(v)) => write_str(buf, &v.to_string()),
+                    Ok(None) => write_nil(buf),
+                    Err(_) => fallback_str(buf, row, idx),
                 }
                 true
             }
@@ -139,8 +148,8 @@ impl CellEncoder for MySqlEncoder {
                 }
             }
             name if name.contains("DECIMAL") || name.contains("NUMERIC") => {
-                match row.try_get::<Option<String>, _>(idx) {
-                    Ok(Some(v)) => write_str(buf, &v),
+                match row.try_get::<Option<Decimal>, _>(idx) {
+                    Ok(Some(v)) => write_str(buf, &v.to_string()),
                     Ok(None) => write_nil(buf),
                     Err(_) => fallback_str(buf, row, idx),
                 }
