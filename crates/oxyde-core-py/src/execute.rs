@@ -96,9 +96,10 @@ pub(crate) fn execute<'py>(
                 result
             }
             oxyde_codec::Operation::Insert => {
-                // Single insert with RETURNING * (ir.returning=true) returns full rows
-                // Bulk insert returns only PKs for efficiency
-                if ir.returning.unwrap_or(false) {
+                // Single insert with RETURNING * returns full rows (Postgres/SQLite).
+                // MySQL doesn't support RETURNING the query builder omits it,
+                // so we fall through to execute_insert_returning which uses last_insert_id().
+                if ir.returning.unwrap_or(false) && sql.contains("RETURNING") {
                     execute_mutation_returning(&pool_name, &sql, &params, ir.col_types.as_ref())
                         .await
                         .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
