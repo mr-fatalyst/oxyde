@@ -1,5 +1,6 @@
 //! Transaction lifecycle API: begin, commit, rollback, savepoints.
 
+use sqlx::Executor;
 use tracing::info;
 
 use crate::error::{DriverError, Result};
@@ -47,8 +48,8 @@ pub async fn commit_transaction(tx_id: u64) -> Result<()> {
     }
     if let Some(conn) = tx.conn.as_mut() {
         with_conn!(conn, |c| {
-            sqlx::query("COMMIT")
-                .execute(c.as_mut())
+            c.as_mut()
+                .execute("COMMIT")
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("COMMIT failed: {}", e)))
                 .map(|_| ())?
@@ -73,8 +74,8 @@ pub async fn rollback_transaction(tx_id: u64) -> Result<()> {
     }
     if let Some(conn) = tx.conn.as_mut() {
         with_conn!(conn, |c| {
-            sqlx::query("ROLLBACK")
-                .execute(c.as_mut())
+            c.as_mut()
+                .execute("ROLLBACK")
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {}", e)))
                 .map(|_| ())?
@@ -103,8 +104,8 @@ pub async fn create_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
     if let Some(conn) = tx.conn.as_mut() {
         let sql = format!("SAVEPOINT {}", savepoint_name);
         with_conn!(conn, |c| {
-            sqlx::query(&sql)
-                .execute(c.as_mut())
+            c.as_mut()
+                .execute(sql.as_str())
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("SAVEPOINT failed: {}", e)))
                 .map(|_| ())?
@@ -131,8 +132,8 @@ pub async fn rollback_to_savepoint(tx_id: u64, savepoint_name: &str) -> Result<(
     if let Some(conn) = tx.conn.as_mut() {
         let sql = format!("ROLLBACK TO SAVEPOINT {}", savepoint_name);
         with_conn!(conn, |c| {
-            sqlx::query(&sql)
-                .execute(c.as_mut())
+            c.as_mut()
+                .execute(sql.as_str())
                 .await
                 .map_err(|e| {
                     DriverError::ExecutionError(format!("ROLLBACK TO SAVEPOINT failed: {}", e))
@@ -161,8 +162,8 @@ pub async fn release_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
     if let Some(conn) = tx.conn.as_mut() {
         let sql = format!("RELEASE SAVEPOINT {}", savepoint_name);
         with_conn!(conn, |c| {
-            sqlx::query(&sql)
-                .execute(c.as_mut())
+            c.as_mut()
+                .execute(sql.as_str())
                 .await
                 .map_err(|e| {
                     DriverError::ExecutionError(format!("RELEASE SAVEPOINT failed: {}", e))

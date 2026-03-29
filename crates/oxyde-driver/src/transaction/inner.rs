@@ -1,5 +1,7 @@
 //! Transaction inner state
 
+use sqlx::Executor;
+
 use crate::error::{DriverError, Result};
 use crate::pool::{DatabaseBackend, DbPool};
 use std::time::Instant;
@@ -11,7 +13,7 @@ pub(crate) enum DbConn {
 }
 
 /// Execute the same code for all database backends.
-/// Usage: `with_conn!(conn, |c| { sqlx::query("...").execute(c.as_mut()).await })`
+/// Usage: `with_conn!(conn, |c| { c.as_mut().execute("...").await })`
 macro_rules! with_conn {
     ($conn:expr, |$c:ident| $body:expr) => {
         match $conn {
@@ -39,8 +41,8 @@ pub(crate) async fn begin_on_pool(pool: &DbPool, backend: DatabaseBackend) -> Re
                 .acquire()
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {}", e)))?;
-            sqlx::query(begin_sql)
-                .execute(conn.as_mut())
+            conn.as_mut()
+                .execute(begin_sql)
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("{} failed: {}", begin_sql, e)))?;
             Ok(DbConn::Postgres(conn))
@@ -50,8 +52,8 @@ pub(crate) async fn begin_on_pool(pool: &DbPool, backend: DatabaseBackend) -> Re
                 .acquire()
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {}", e)))?;
-            sqlx::query(begin_sql)
-                .execute(conn.as_mut())
+            conn.as_mut()
+                .execute(begin_sql)
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("{} failed: {}", begin_sql, e)))?;
             Ok(DbConn::MySql(conn))
@@ -61,8 +63,8 @@ pub(crate) async fn begin_on_pool(pool: &DbPool, backend: DatabaseBackend) -> Re
                 .acquire()
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {}", e)))?;
-            sqlx::query(begin_sql)
-                .execute(conn.as_mut())
+            conn.as_mut()
+                .execute(begin_sql)
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("{} failed: {}", begin_sql, e)))?;
             Ok(DbConn::Sqlite(conn))
@@ -102,8 +104,8 @@ impl TransactionInner {
 
         if let Some(conn) = self.conn.as_mut() {
             with_conn!(conn, |c| {
-                sqlx::query("ROLLBACK")
-                    .execute(&mut **c)
+                (&mut **c)
+                    .execute("ROLLBACK")
                     .await
                     .map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {}", e)))
                     .map(|_| ())?
