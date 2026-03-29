@@ -61,7 +61,7 @@ fn build_select_statement(ir: &QueryIR) -> Result<SelectStatement> {
     };
 
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree, default_table, ir.col_types.as_ref())?;
+        let expr = build_filter_node(filter_tree, default_table, ir.col_types.as_ref(), None)?;
         query.and_where(expr);
     }
 
@@ -80,7 +80,12 @@ fn build_select_statement(ir: &QueryIR) -> Result<SelectStatement> {
     }
 
     if let Some(having) = &ir.having {
-        let expr = build_filter_node(having, default_table, ir.col_types.as_ref())?;
+        let expr = build_filter_node(
+            having,
+            default_table,
+            ir.col_types.as_ref(),
+            ir.aggregates.as_deref(),
+        )?;
         query.and_having(expr);
     }
 
@@ -163,7 +168,7 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         };
 
         if let Some(filter_tree) = &ir.filter_tree {
-            let expr = build_filter_node(filter_tree, default_table, ir.col_types.as_ref())?;
+            let expr = build_filter_node(filter_tree, default_table, ir.col_types.as_ref(), None)?;
             count_query.and_where(expr);
         }
 

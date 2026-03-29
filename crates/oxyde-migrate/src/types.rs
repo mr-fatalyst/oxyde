@@ -48,6 +48,9 @@ pub struct FieldDef {
     pub default: Option<String>,
     #[serde(default)]
     pub auto_increment: bool,
+    /// Max length for str fields (used for VARCHAR(N) on PG/MySQL)
+    #[serde(default)]
+    pub max_length: Option<u32>,
 }
 
 /// Index definition

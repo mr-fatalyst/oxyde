@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import msgpack
@@ -180,7 +181,8 @@ class AggregationMixin:
                 rows = second
                 if rows:
                     row_dict = dict(zip(columns, rows[0]))
-                    return row_dict.get(result_key)
+                    value = row_dict.get(result_key)
+                    return self._coerce_aggregate(value, field, agg_class)
                 return None
 
         if isinstance(result, list) and len(result) > 0:
@@ -190,6 +192,36 @@ class AggregationMixin:
             else:
                 return getattr(row, result_key, None)
         return None
+
+    def _coerce_aggregate(self, value: Any, field: str, agg_class: type) -> Any:
+        """Coerce aggregate result to the field's Python type.
+
+        PG returns NUMERIC for SUM/AVG even on integer fields.
+        Rust encodes NUMERIC as string. Coerce back using field metadata.
+        """
+        if value is None or not isinstance(value, str):
+            return value
+
+        meta = self.model_class._db_meta.field_metadata.get(field)
+        if meta is None:
+            return value
+
+        python_type = meta.python_type
+
+        # AVG always returns float/Decimal, even for int fields
+        if agg_class is Avg:
+            if python_type is Decimal:
+                return Decimal(value)
+            return float(value)
+
+        if python_type is int:
+            return int(value)
+        if python_type is float:
+            return float(value)
+        if python_type is Decimal:
+            return Decimal(value)
+
+        return value
 
     async def count(
         self,

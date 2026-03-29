@@ -292,7 +292,7 @@ class TestNullRoundTrip:
 
     @pytest.mark.asyncio
     async def test_all_nulls(self, db_with_nulls):
-        fetched = await NullableTypes.objects.get(id=1, client=db_with_nulls)
+        fetched = await NullableTypes.objects.first(client=db_with_nulls)
         assert fetched.int_val is None
         assert fetched.str_val is None
         assert fetched.float_val is None

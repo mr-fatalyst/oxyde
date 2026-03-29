@@ -218,18 +218,19 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
             # Get python type name for cross-dialect type generation
             python_type_name = _get_python_type_name(python_type_for_sql)
 
-            fields.append(
-                {
-                    "name": field_meta.db_column,
-                    "python_type": python_type_name,
-                    "db_type": field_meta.db_type,  # explicit user override
-                    "nullable": field_meta.nullable,
-                    "primary_key": field_meta.primary_key,
-                    "unique": field_meta.unique,
-                    "default": default_val,
-                    "auto_increment": auto_increment,
-                }
-            )
+            field_dict: dict[str, Any] = {
+                "name": field_meta.db_column,
+                "python_type": python_type_name,
+                "db_type": field_meta.db_type,  # explicit user override
+                "nullable": field_meta.nullable,
+                "primary_key": field_meta.primary_key,
+                "unique": field_meta.unique,
+                "default": default_val,
+                "auto_increment": auto_increment,
+            }
+            if field_meta.max_length is not None:
+                field_dict["max_length"] = field_meta.max_length
+            fields.append(field_dict)
 
         # Extract indexes
         indexes = []

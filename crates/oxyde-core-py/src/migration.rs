@@ -40,7 +40,7 @@ pub(crate) fn migration_compute_diff(old_json: &str, new_json: &str) -> PyResult
 ///     List of SQL statements
 #[pyfunction]
 pub(crate) fn migration_to_sql(operations_json: &str, dialect: &str) -> PyResult<Vec<String>> {
-    use oxyde_migrate::{Dialect, MigrationOp};
+    use oxyde_migrate::{Dialect, Migration, MigrationOp};
 
     let ops: Vec<MigrationOp> = serde_json::from_str(operations_json)
         .map_err(|e| PyErr::new::<PyValueError, _>(format!("Failed to parse operations: {}", e)))?;
@@ -57,12 +57,11 @@ pub(crate) fn migration_to_sql(operations_json: &str, dialect: &str) -> PyResult
         }
     };
 
-    let mut all_sql = Vec::new();
-    for op in &ops {
-        let sqls = op
-            .to_sql(dialect_enum)
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(format!("Migration error: {}", e)))?;
-        all_sql.extend(sqls);
-    }
-    Ok(all_sql)
+    let migration = Migration {
+        name: String::new(),
+        operations: ops,
+    };
+    migration
+        .to_sql(dialect_enum)
+        .map_err(|e| PyErr::new::<PyRuntimeError, _>(format!("Migration error: {}", e)))
 }

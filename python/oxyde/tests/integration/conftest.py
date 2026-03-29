@@ -58,7 +58,7 @@ class AliasedEvent(Model):
 class Author(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(max_length=100)
-    email: str = Field(db_unique=True)
+    email: str = Field(db_unique=True, db_type="VARCHAR(255)")
     active: bool = Field(default=True)
     posts: list[Post] = Field(db_reverse_fk="author_id")
 
@@ -69,7 +69,7 @@ class Author(Model):
 
 class Category(Model):
     id: int | None = Field(default=None, db_pk=True)
-    name: str = Field(max_length=50, db_unique=True)
+    name: str = Field(max_length=50, db_unique=True, db_type="VARCHAR(50)")
 
     class Meta:
         is_table = True
@@ -104,7 +104,7 @@ class Comment(Model):
 
 class Tag(Model):
     id: int | None = Field(default=None, db_pk=True)
-    name: str = Field(max_length=50, db_unique=True)
+    name: str = Field(max_length=50, db_unique=True, db_type="VARCHAR(50)")
 
     class Meta:
         is_table = True
@@ -268,22 +268,14 @@ async def _ensure_tables(database: AsyncDatabase) -> None:
         if dialect != "sqlite":
             _tables_created.add(dialect)
     else:
-        await _truncate_all(database, dialect)
+        await _clear_all_tables(database)
 
 
-async def _truncate_all(database: AsyncDatabase, dialect: str) -> None:
-    """Truncate all tables, respecting FK constraints."""
+async def _clear_all_tables(database: AsyncDatabase) -> None:
+    """Delete all data from tables in reverse FK order."""
     tables = [m.Meta.table_name for m in ALL_MODELS]
-    if dialect == "postgres":
-        names = ", ".join(tables)
-        await execute_raw(
-            f"TRUNCATE {names} RESTART IDENTITY CASCADE", client=database
-        )
-    elif dialect == "mysql":
-        await execute_raw("SET FOREIGN_KEY_CHECKS = 0", client=database)
-        for t in tables:
-            await execute_raw(f"TRUNCATE TABLE {t}", client=database)
-        await execute_raw("SET FOREIGN_KEY_CHECKS = 1", client=database)
+    for t in reversed(tables):
+        await execute_raw(f"DELETE FROM {t}", client=database)
 
 
 async def _fix_pg_sequences(database: AsyncDatabase) -> None:
@@ -292,7 +284,7 @@ async def _fix_pg_sequences(database: AsyncDatabase) -> None:
         table = model.Meta.table_name
         await execute_raw(
             f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
-            f"COALESCE((SELECT MAX(id) FROM {table}), 0))",
+            f"GREATEST(COALESCE((SELECT MAX(id) FROM {table}), 1), 1))",
             client=database,
         )
 
@@ -301,17 +293,17 @@ async def _fix_pg_sequences(database: AsyncDatabase) -> None:
 
 MAIN_SEED = [
     "INSERT INTO authors (id, name, email, active) VALUES "
-    "(1, 'Alice', 'alice@test.com', 1), "
-    "(2, 'Bob', 'bob@test.com', 1), "
-    "(3, 'Charlie', 'charlie@test.com', 0)",
+    "(1, 'Alice', 'alice@test.com', true), "
+    "(2, 'Bob', 'bob@test.com', true), "
+    "(3, 'Charlie', 'charlie@test.com', false)",
     "INSERT INTO categories (id, name) VALUES (1, 'Tech'), (2, 'Science')",
     "INSERT INTO posts (id, title, body, author_id, category_id, views, published) VALUES "
-    "(1, 'Rust Patterns', '', 1, 1, 120, 1), "
-    "(2, 'Async Python', '', 1, 1, 35, 1), "
-    "(3, 'Quantum Computing', '', 2, 2, 80, 1), "
-    "(4, 'Draft Post', '', 2, NULL, 0, 0), "
-    "(5, 'ML Basics', '', 3, 2, 200, 1), "
-    "(6, 'Unpublished', '', 3, NULL, 0, 0)",
+    "(1, 'Rust Patterns', '', 1, 1, 120, true), "
+    "(2, 'Async Python', '', 1, 1, 35, true), "
+    "(3, 'Quantum Computing', '', 2, 2, 80, true), "
+    "(4, 'Draft Post', '', 2, NULL, 0, false), "
+    "(5, 'ML Basics', '', 3, 2, 200, true), "
+    "(6, 'Unpublished', '', 3, NULL, 0, false)",
     "INSERT INTO comments (id, post_id, body) VALUES "
     "(1, 1, 'Great read!'), "
     "(2, 1, 'Thanks for sharing'), "

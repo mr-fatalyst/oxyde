@@ -80,7 +80,7 @@ class TestRawInTransaction:
         else:
             sql = "INSERT INTO authors (name, email, active) VALUES (?, ?, ?)"
         async with atomic(using=db.name):
-            await execute_raw(sql, ["RawTx", "rawtx@test.com", 1], using=db.name)
+            await execute_raw(sql, ["RawTx", "rawtx@test.com", True], using=db.name)
 
         authors = await Author.objects.filter(name="RawTx").all(client=db)
         assert len(authors) == 1

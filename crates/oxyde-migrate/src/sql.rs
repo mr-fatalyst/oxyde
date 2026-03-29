@@ -121,6 +121,11 @@ fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
     if let Some(db_type) = &field.db_type {
         return translate_db_type(db_type, dialect);
     }
+    // str → VARCHAR(N) on PG/MySQL, TEXT on SQLite
+    if field.python_type == "str" && dialect != Dialect::Sqlite {
+        let len = field.max_length.unwrap_or(255);
+        return format!("VARCHAR({})", len);
+    }
     python_type_to_sql(&field.python_type, dialect, field.primary_key)
 }
 

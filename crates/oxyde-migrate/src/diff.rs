@@ -36,14 +36,24 @@ impl Migration {
         serde_json::from_str(json).map_err(|e| MigrateError::SerializationError(e.to_string()))
     }
 
-    /// Generate SQL statements for this migration
-    /// Returns Err if any operation is not supported by the dialect
+    /// Generate SQL statements for this migration.
+    ///
+    /// CREATE/DROP/INDEX statements come first, ALTER TABLE statements last.
+    /// This ensures referenced tables exist before FK constraints are added
+    /// (PG/MySQL emit FK as separate ALTER TABLE, not inline in CREATE TABLE).
     pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
         let mut all_sql = Vec::new();
         for op in &self.operations {
             let sqls = op.to_sql(dialect)?;
             all_sql.extend(sqls);
         }
+        all_sql.sort_by_key(|s| {
+            if s.trim_start().starts_with("ALTER") {
+                1
+            } else {
+                0
+            }
+        });
         Ok(all_sql)
     }
 }

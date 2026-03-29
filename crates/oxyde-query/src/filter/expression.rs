@@ -2,9 +2,10 @@
 
 use std::collections::HashMap;
 
-use oxyde_codec::{Filter, FilterNode};
+use oxyde_codec::{Aggregate, Filter, FilterNode};
 use sea_query::{BinOper, Expr, Func, SimpleExpr, Value};
 
+use crate::aggregate::build_aggregate;
 use crate::error::{QueryError, Result};
 use crate::utils::{rmpv_to_value_typed, ColumnIdent, TableIdent};
 
@@ -39,26 +40,29 @@ fn resolve_col_type<'a>(
     col_types.and_then(|ct| ct.get(col_key).map(String::as_str))
 }
 
-/// Build WHERE clause from FilterNode tree
+/// Build filter clause from FilterNode tree.
+///
 /// default_table: if provided, unqualified columns will be prefixed with this table name
 /// col_types: type hints for typed value conversion in filter conditions
+/// aggregates: if provided (HAVING), alias references are substituted with aggregate expressions
 pub fn build_filter_node(
     node: &FilterNode,
     default_table: Option<&str>,
     col_types: Option<&HashMap<String, String>>,
+    aggregates: Option<&[Aggregate]>,
 ) -> Result<SimpleExpr> {
     match node {
-        FilterNode::Condition(filter) => apply_filter(filter, default_table, col_types),
+        FilterNode::Condition(filter) => apply_filter(filter, default_table, col_types, aggregates),
         FilterNode::And { conditions } => {
             if conditions.is_empty() {
                 return Err(QueryError::InvalidQuery(
                     "AND node must have at least one condition".into(),
                 ));
             }
-            let first = build_filter_node(&conditions[0], default_table, col_types)?;
+            let first = build_filter_node(&conditions[0], default_table, col_types, aggregates)?;
             let mut result = first;
             for cond in &conditions[1..] {
-                let next = build_filter_node(cond, default_table, col_types)?;
+                let next = build_filter_node(cond, default_table, col_types, aggregates)?;
                 result = result.and(next);
             }
             Ok(result)
@@ -69,29 +73,42 @@ pub fn build_filter_node(
                     "OR node must have at least one condition".into(),
                 ));
             }
-            let first = build_filter_node(&conditions[0], default_table, col_types)?;
+            let first = build_filter_node(&conditions[0], default_table, col_types, aggregates)?;
             let mut result = first;
             for cond in &conditions[1..] {
-                let next = build_filter_node(cond, default_table, col_types)?;
+                let next = build_filter_node(cond, default_table, col_types, aggregates)?;
                 result = result.or(next);
             }
             Ok(result)
         }
         FilterNode::Not { condition } => {
-            let inner = build_filter_node(condition, default_table, col_types)?;
+            let inner = build_filter_node(condition, default_table, col_types, aggregates)?;
             Ok(inner.not())
         }
     }
 }
 
-/// Apply filter to expression
+/// Apply filter to expression.
+/// If `aggregates` is provided and the field matches an aggregate alias,
+/// the aggregate expression (e.g. SUM("views")) is used instead of a column ref.
 fn apply_filter(
     filter: &Filter,
     default_table: Option<&str>,
     col_types: Option<&HashMap<String, String>>,
+    aggregates: Option<&[Aggregate]>,
 ) -> Result<SimpleExpr> {
     let col_name = filter.column.as_ref().unwrap_or(&filter.field);
-    let col = make_col_expr(col_name, default_table);
+
+    // HAVING: substitute aggregate alias with aggregate expression
+    let agg_match =
+        aggregates.and_then(|aggs| aggs.iter().find(|a| a.alias.as_deref() == Some(col_name)));
+
+    let col = if let Some(agg) = agg_match {
+        Expr::expr(build_aggregate(agg)?)
+    } else {
+        make_col_expr(col_name, default_table)
+    };
+
     let col_type = resolve_col_type(col_name, col_types);
     let val = rmpv_to_value_typed(&filter.value, col_type);
 
