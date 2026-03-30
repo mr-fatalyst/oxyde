@@ -51,6 +51,12 @@ pub struct FieldDef {
     /// Max length for str fields (used for VARCHAR(N) on PG/MySQL)
     #[serde(default)]
     pub max_length: Option<u32>,
+    /// Total digits for decimal fields (used for DECIMAL(M,D))
+    #[serde(default)]
+    pub max_digits: Option<u32>,
+    /// Decimal places for decimal fields (used for DECIMAL(M,D))
+    #[serde(default)]
+    pub decimal_places: Option<u32>,
 }
 
 /// Index definition

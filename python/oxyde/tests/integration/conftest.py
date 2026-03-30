@@ -131,7 +131,9 @@ class AllTypes(Model):
     date_val: date | None = Field(default=None, db_nullable=True)
     time_val: time | None = Field(default=None, db_nullable=True)
     uuid_val: UUID | None = Field(default=None, db_nullable=True)
-    decimal_val: Decimal | None = Field(default=None, db_nullable=True)
+    decimal_val: Decimal | None = Field(
+        default=None, db_nullable=True, max_digits=20, decimal_places=10
+    )
     json_val: dict | None = Field(default=None, db_nullable=True)
 
     class Meta:
@@ -149,7 +151,9 @@ class NullableTypes(Model):
     date_val: date | None = Field(default=None, db_nullable=True)
     time_val: time | None = Field(default=None, db_nullable=True)
     uuid_val: UUID | None = Field(default=None, db_nullable=True)
-    decimal_val: Decimal | None = Field(default=None, db_nullable=True)
+    decimal_val: Decimal | None = Field(
+        default=None, db_nullable=True, max_digits=20, decimal_places=10
+    )
     json_val: dict | None = Field(default=None, db_nullable=True)
 
     class Meta:

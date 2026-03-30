@@ -17,11 +17,12 @@ Functions:
         int | None  →  (int, True)
         str         →  (str, False)
 
-    _extract_max_length(field_info) -> int | None:
-        Extract max_length from FieldInfo or Annotated metadata.
-        Used for VARCHAR(n) type inference.
+    _extract_constraints(field_info) -> dict[str, int]:
+        Extract type constraints from FieldInfo or Annotated metadata.
+        Used for VARCHAR(n), DECIMAL(m,d) type inference.
 
-        Field(max_length=100)  →  100
+        Field(max_length=100)           →  {"max_length": 100}
+        Field(max_digits=10, decimal_places=2)  →  {"max_digits": 10, "decimal_places": 2}
 """
 
 from __future__ import annotations
@@ -57,26 +58,33 @@ def _unwrap_optional(hint: Any) -> tuple[Any, bool]:
     return hint, False
 
 
-def _extract_max_length(field_info: FieldInfo) -> int | None:
-    """Extract max_length constraint from FieldInfo or metadata."""
-    candidates = []
-    max_length_attr = getattr(field_info, "max_length", None)
-    if max_length_attr is not None:
-        candidates.append(max_length_attr)
-    for meta in getattr(field_info, "metadata", ()):
-        length = getattr(meta, "max_length", None)
-        if length is not None:
-            candidates.append(length)
-    for value in candidates:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            continue
-    return None
+_CONSTRAINT_ATTRS = ("max_length", "max_digits", "decimal_places")
+
+
+def _extract_constraints(field_info: FieldInfo) -> dict[str, int]:
+    """Extract type constraints from FieldInfo or Annotated metadata.
+
+    Checks both direct FieldInfo attributes and Annotated metadata tuple.
+    Returns only constraints that are present and valid integers.
+    """
+    result: dict[str, int] = {}
+    for attr in _CONSTRAINT_ATTRS:
+        val = getattr(field_info, attr, None)
+        if val is None:
+            for meta in getattr(field_info, "metadata", ()):
+                val = getattr(meta, attr, None)
+                if val is not None:
+                    break
+        if val is not None:
+            try:
+                result[attr] = int(val)
+            except (TypeError, ValueError):
+                continue
+    return result
 
 
 __all__ = [
     "_unpack_annotated",
     "_unwrap_optional",
-    "_extract_max_length",
+    "_extract_constraints",
 ]

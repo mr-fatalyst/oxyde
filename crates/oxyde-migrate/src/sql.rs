@@ -126,6 +126,17 @@ fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
         let len = field.max_length.unwrap_or(255);
         return format!("VARCHAR({})", len);
     }
+    // decimal → DECIMAL(M,D) on MySQL when constraints are specified
+    if field.python_type == "decimal" {
+        if let Some(digits) = field.max_digits {
+            let places = field.decimal_places.unwrap_or(0);
+            return match dialect {
+                Dialect::Mysql => format!("DECIMAL({},{})", digits, places),
+                Dialect::Postgres => format!("NUMERIC({},{})", digits, places),
+                Dialect::Sqlite => "TEXT".to_string(),
+            };
+        }
+    }
     python_type_to_sql(&field.python_type, dialect, field.primary_key)
 }
 

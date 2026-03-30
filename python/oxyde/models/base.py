@@ -101,7 +101,7 @@ from oxyde.models.metadata import (
 )
 from oxyde.models.registry import finalize_pending, register_table
 from oxyde.models.serializers import _dump_update_data
-from oxyde.models.utils import _extract_max_length, _unpack_annotated, _unwrap_optional
+from oxyde.models.utils import _extract_constraints, _unpack_annotated, _unwrap_optional
 
 
 def _get_pk_field_name(model_cls: type) -> str:
@@ -519,10 +519,8 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                     on_update=db_on_update,
                 )
 
-            # Extract max_length for varchar fields
-            # Note: db_type is only set if user specifies Field(db_type="...")
-            # Type inference happens at schema extraction time.
-            max_length = _extract_max_length(model_field)
+            # Extract type constraints (max_length, max_digits, decimal_places)
+            constraints = _extract_constraints(model_field)
 
             # Determine actual DB column name
             if fk_info is not None:
@@ -590,7 +588,9 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                 default=default_value,
                 default_factory=default_factory,
                 db_default=db_default,
-                max_length=max_length,
+                max_length=constraints.get("max_length"),
+                max_digits=constraints.get("max_digits"),
+                decimal_places=constraints.get("decimal_places"),
                 foreign_key=fk_info,
                 checks=[],  # Field-level checks not supported yet
                 extra=extras_filtered,

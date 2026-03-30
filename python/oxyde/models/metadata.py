@@ -86,6 +86,8 @@ class ColumnMeta:
     default_factory: Any | None = None
     db_default: str | None = None  # Raw SQL DEFAULT expression
     max_length: int | None = None
+    max_digits: int | None = None
+    decimal_places: int | None = None
     foreign_key: ForeignKeyInfo | None = None
     checks: list[str] = dataclass_field(default_factory=list)
     extra: dict[str, Any] = dataclass_field(default_factory=dict)

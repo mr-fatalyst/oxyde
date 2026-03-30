@@ -228,8 +228,10 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
                 "default": default_val,
                 "auto_increment": auto_increment,
             }
-            if field_meta.max_length is not None:
-                field_dict["max_length"] = field_meta.max_length
+            for attr in ("max_length", "max_digits", "decimal_places"):
+                val = getattr(field_meta, attr, None)
+                if val is not None:
+                    field_dict[attr] = val
             fields.append(field_dict)
 
         # Extract indexes
