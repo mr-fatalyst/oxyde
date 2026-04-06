@@ -23,12 +23,17 @@ Example:
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, overload
 
-from oxyde.exceptions import IntegrityError, NotFoundError
+from oxyde.exceptions import IntegrityError, ManagerError, NotFoundError
 from oxyde.models.serializers import _derive_create_data, _dump_insert_data
 from oxyde.queries.base import _resolve_execution_client
 from oxyde.queries.insert import InsertQuery
+from oxyde.queries.mixins.mutation import (
+    _client_alias,
+    _decode_returning_models,
+    _is_mysql,
+)
 from oxyde.queries.select import Query
 
 if TYPE_CHECKING:
@@ -360,20 +365,45 @@ class QueryManager:
         )
         return saved_obj, False
 
+    @overload
     async def upsert(
         self,
         *,
         defaults: dict[str, Any],
+        returning: Literal[True],
+        using: str | None = ...,
+        client: SupportsExecute | None = ...,
+        **conflict_values: Any,
+    ) -> list[Model]: ...
+
+    @overload
+    async def upsert(
+        self,
+        *,
+        defaults: dict[str, Any],
+        returning: Literal[False] = ...,
+        using: str | None = ...,
+        client: SupportsExecute | None = ...,
+        **conflict_values: Any,
+    ) -> int: ...
+
+    async def upsert(
+        self,
+        *,
+        defaults: dict[str, Any],
+        returning: bool = False,
         using: str | None = None,
         client: SupportsExecute | None = None,
         **conflict_values: Any,
-    ) -> int:
+    ) -> int | list[Model]:
         """Execute a backend-native upsert keyed by exact model field kwargs.
 
         Args:
             defaults: Values to insert and update when the keyed row already
                 exists. Must be non-empty, must not overlap the key fields,
                 and must include any non-key fields required for inserts.
+            returning: If True, return inserted/updated model instances.
+                Default False returns affected row count.
             using: Database alias
             client: Optional database client
             **conflict_values: Exact model field values identifying the unique
@@ -381,8 +411,9 @@ class QueryManager:
                 constraint in the database.
 
         Returns:
-            Number of affected rows. Uses native SQL conflict handling and
-            does not run save() hooks.
+            Number of affected rows by default, or list of inserted/updated
+            model instances if returning=True. Uses native SQL conflict
+            handling and does not run save() hooks.
         """
         conflict_fields = list(conflict_values)
         if not conflict_fields:
@@ -445,14 +476,108 @@ class QueryManager:
         query = (
             InsertQuery(self.model_class)
             .values(**insert_values)
+            .returning(returning)
             .on_conflict(
                 columns=conflict_fields,
                 action="update",
                 update_values=resolved_update_values,
             )
         )
+        if returning and await _is_mysql(using, client):
+            return await self._mysql_upsert_returning(
+                query=query,
+                conflict_values=conflict_values,
+                insert_values=insert_values,
+                using=using,
+                client=client,
+                exec_client=exec_client,
+            )
+
         result = await self._query()._run_mutation(query, exec_client)
+        if returning:
+            return _decode_returning_models(self.model_class, result)
         return int(result.get("affected", 0))
+
+    async def _mysql_upsert_returning(
+        self,
+        *,
+        query: InsertQuery,
+        conflict_values: dict[str, Any],
+        insert_values: dict[str, Any],
+        using: str | None,
+        client: SupportsExecute | None,
+        exec_client: SupportsExecute,
+    ) -> list[Model]:
+        """MySQL fallback for upsert(returning=True): upsert, then re-select."""
+        from oxyde.db.pool import AsyncDatabase
+        from oxyde.db.transaction import (
+            AsyncTransaction,
+            AtomicTransactionContext,
+            atomic,
+            get_active_transaction,
+        )
+
+        alias = _client_alias(using, client)
+
+        async def _do(tx_client: SupportsExecute) -> list[Model]:
+            result = await self._query()._run_mutation(
+                query.returning(False), tx_client
+            )
+            refetch_filters = self._mysql_upsert_refetch_filters(
+                result=result,
+                conflict_values=conflict_values,
+                insert_values=insert_values,
+            )
+            return await self.filter(**refetch_filters).all(client=tx_client)
+
+        if isinstance(client, AsyncTransaction):
+            return await _do(exec_client)
+
+        if get_active_transaction(alias) is not None:
+            return await _do(exec_client)
+
+        if isinstance(client, AsyncDatabase):
+            async with AtomicTransactionContext(using=alias, database=client) as tx:
+                return await _do(tx)
+
+        if client is not None:
+            # Custom execute clients may be stubs or wrappers; reuse them as-is.
+            return await _do(exec_client)
+
+        async with atomic(using=alias) as tx:
+            return await _do(tx)
+
+    def _mysql_upsert_refetch_filters(
+        self,
+        *,
+        result: dict[str, Any],
+        conflict_values: dict[str, Any],
+        insert_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Choose a safe re-select filter for MySQL upsert(returning=True)."""
+        affected = int(result.get("affected", 0))
+        pk_field = self.model_class._db_meta.pk_field
+
+        if affected == 1 and pk_field:
+            inserted_ids = result.get("inserted_ids", [])
+            if inserted_ids:
+                return {pk_field: inserted_ids[0]}
+
+            pk_value = insert_values.get(pk_field)
+            if pk_value is not None:
+                return {pk_field: pk_value}
+
+        nullable_conflicts = sorted(
+            field for field, value in conflict_values.items() if value is None
+        )
+        if affected == 1 and nullable_conflicts:
+            fields = ", ".join(nullable_conflicts)
+            raise ManagerError(
+                "MySQL upsert(returning=True) cannot safely refetch inserted rows "
+                f"with NULL conflict fields without a primary key: {fields}"
+            )
+
+        return conflict_values
 
 
 __all__ = [

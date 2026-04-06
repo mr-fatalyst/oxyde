@@ -615,9 +615,7 @@ class TestComputedFieldExclusion:
 
         stub = StubExecuteClient([{"affected": 1, "inserted_ids": [1]}])
 
-        instance = await _Product.objects.create(
-            client=stub, price=10.0, quantity=3
-        )
+        instance = await _Product.objects.create(client=stub, price=10.0, quantity=3)
 
         assert instance.total == 30.0
         assert "total" not in stub.calls[0]["values"]
@@ -867,6 +865,7 @@ class TestManagerUpsert:
             "name": "Updated",
             "age": 25,
         }
+        assert stub.calls[0]["returning"] is False
         assert stub.calls[0]["on_conflict"] == {
             "columns": ["email"],
             "action": "update",
@@ -905,6 +904,32 @@ class TestManagerUpsert:
         }
 
     @pytest.mark.asyncio
+    async def test_upsert_returning_returns_models(self):
+        """upsert(returning=True) should hydrate returned rows into models."""
+        stub = StubExecuteClient(
+            [
+                {
+                    "affected": 1,
+                    "columns": ["id", "name", "email", "age", "is_active"],
+                    "rows": [[1, "Existing", "existing@example.com", 30, True]],
+                }
+            ]
+        )
+
+        rows = await OxydeTestModel.objects.upsert(
+            client=stub,
+            email="existing@example.com",
+            defaults={"name": "Existing", "age": 30},
+            returning=True,
+        )
+
+        assert len(rows) == 1
+        assert isinstance(rows[0], OxydeTestModel)
+        assert rows[0].email == "existing@example.com"
+        assert rows[0].name == "Existing"
+        assert stub.calls[0]["returning"] is True
+
+    @pytest.mark.asyncio
     async def test_upsert_mysql_returns_affected_without_refetch(self):
         """MySQL upsert() should return affected count without a follow-up SELECT."""
         stub = StubExecuteClient(
@@ -921,6 +946,196 @@ class TestManagerUpsert:
         )
 
         assert affected == 2
+        assert stub.calls[0]["returning"] is False
+        assert [call["op"] for call in stub.calls] == ["insert"]
+
+    @pytest.mark.asyncio
+    async def test_upsert_mysql_returning_refetches_models(self):
+        """MySQL upsert(returning=True) should re-select the row after the insert."""
+        stub = StubExecuteClient(
+            [
+                {"affected": 2, "inserted_ids": []},
+                [
+                    ["id", "name", "email", "age", "is_active"],
+                    [[1, "Existing", "existing@example.com", 30, True]],
+                ],
+            ]
+        )
+        stub.backend = "mysql"
+
+        rows = await OxydeTestModel.objects.upsert(
+            client=stub,
+            email="existing@example.com",
+            defaults={"name": "Existing", "age": 30},
+            returning=True,
+        )
+
+        assert len(rows) == 1
+        assert rows[0].email == "existing@example.com"
+        assert rows[0].name == "Existing"
+        assert [call["op"] for call in stub.calls] == ["insert", "select"]
+        assert stub.calls[0]["returning"] is False
+
+    @pytest.mark.asyncio
+    async def test_upsert_mysql_returning_detects_atomic_context_client(self):
+        """Atomic transaction contexts should still take the MySQL fallback path."""
+        stub = StubExecuteClient(
+            [
+                {"affected": 2, "inserted_ids": []},
+                [
+                    ["id", "name", "email", "age", "is_active"],
+                    [[1, "Existing", "existing@example.com", 30, True]],
+                ],
+            ]
+        )
+
+        class FakeAtomicTransactionContext:
+            def __init__(self, delegate):
+                self._database = None
+                self.using = "analytics"
+                self._delegate = delegate
+                self.transaction = type(
+                    "Tx",
+                    (),
+                    {
+                        "_database": type(
+                            "DB", (), {"backend": "mysql", "name": "analytics"}
+                        )()
+                    },
+                )()
+
+            async def execute(self, ir):
+                return await self._delegate.execute(ir)
+
+        rows = await OxydeTestModel.objects.upsert(
+            client=FakeAtomicTransactionContext(stub),
+            email="existing@example.com",
+            defaults={"name": "Existing", "age": 30},
+            returning=True,
+        )
+
+        assert len(rows) == 1
+        assert rows[0].email == "existing@example.com"
+        assert [call["op"] for call in stub.calls] == ["insert", "select"]
+        assert stub.calls[0]["returning"] is False
+
+    @pytest.mark.asyncio
+    async def test_upsert_mysql_returning_wraps_async_database_client(
+        self, monkeypatch
+    ):
+        """A plain AsyncDatabase client should get an implicit transaction wrapper."""
+        import oxyde.db.transaction as tx_mod
+        from oxyde.db.pool import AsyncDatabase
+
+        db = AsyncDatabase("mysql://user:pass@localhost/test", auto_register=False)
+        db.backend = "mysql"
+        tx_stub = StubExecuteClient(
+            [
+                {"affected": 2, "inserted_ids": []},
+                [
+                    ["id", "name", "email", "age", "is_active"],
+                    [[1, "Existing", "existing@example.com", 30, True]],
+                ],
+            ]
+        )
+        captured: dict[str, object] = {}
+
+        class FakeAtomicTransactionContext:
+            def __init__(self, *, using="default", timeout=None, database=None):
+                captured["using"] = using
+                captured["timeout"] = timeout
+                captured["database"] = database
+
+            async def __aenter__(self):
+                return tx_stub
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+        monkeypatch.setattr(
+            tx_mod, "AtomicTransactionContext", FakeAtomicTransactionContext
+        )
+
+        rows = await OxydeTestModel.objects.upsert(
+            client=db,
+            email="existing@example.com",
+            defaults={"name": "Existing", "age": 30},
+            returning=True,
+        )
+
+        assert len(rows) == 1
+        assert rows[0].email == "existing@example.com"
+        assert captured["using"] == "default"
+        assert captured["database"] is db
+        assert [call["op"] for call in tx_stub.calls] == ["insert", "select"]
+        assert tx_stub.calls[0]["returning"] is False
+
+    @pytest.mark.asyncio
+    async def test_upsert_mysql_returning_refetches_insert_by_primary_key(self):
+        """Inserted MySQL upserts should re-select by primary key when available."""
+
+        class NullableUniqueModel(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str | None = Field(default=None, db_unique=True)
+            name: str = ""
+
+            class Meta:
+                is_table = True
+
+        stub = StubExecuteClient(
+            [
+                {"affected": 1, "inserted_ids": [7]},
+                [
+                    ["id", "email", "name"],
+                    [[7, None, "Inserted"]],
+                ],
+            ]
+        )
+        stub.backend = "mysql"
+
+        rows = await NullableUniqueModel.objects.upsert(
+            client=stub,
+            email=None,
+            defaults={"name": "Inserted"},
+            returning=True,
+        )
+
+        assert len(rows) == 1
+        assert rows[0].id == 7
+        assert rows[0].email is None
+        assert [call["op"] for call in stub.calls] == ["insert", "select"]
+        assert stub.calls[1]["filter_tree"] == {
+            "type": "condition",
+            "field": "id",
+            "operator": "=",
+            "value": 7,
+        }
+
+    @pytest.mark.asyncio
+    async def test_upsert_mysql_returning_rejects_nullable_conflicts_without_pk_refetch(
+        self,
+    ):
+        """Nullable MySQL conflict keys must not fall back to a broad re-select."""
+
+        class NullableUniqueModel(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str | None = Field(default=None, db_unique=True)
+            name: str = ""
+
+            class Meta:
+                is_table = True
+
+        stub = StubExecuteClient([{"affected": 1, "inserted_ids": []}])
+        stub.backend = "mysql"
+
+        with pytest.raises(ManagerError, match="NULL conflict fields"):
+            await NullableUniqueModel.objects.upsert(
+                client=stub,
+                email=None,
+                defaults={"name": "Inserted"},
+                returning=True,
+            )
+
         assert [call["op"] for call in stub.calls] == ["insert"]
 
     @pytest.mark.asyncio

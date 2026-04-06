@@ -30,13 +30,69 @@ if TYPE_CHECKING:
     from oxyde.models.base import Model
 
 
+def _database_from_client(client: SupportsExecute | None) -> Any | None:
+    """Best-effort database extraction from execute-capable wrappers."""
+    if client is None:
+        return None
+
+    database = getattr(client, "_database", None)
+    if database is not None:
+        return database
+
+    try:
+        transaction = getattr(client, "transaction", None)
+    except Exception:
+        transaction = None
+    if transaction is not None:
+        return getattr(transaction, "_database", None)
+
+    return None
+
+
+def _client_alias(using: str | None, client: SupportsExecute | None) -> str:
+    """Resolve the connection alias from explicit using/client hints."""
+    if using is not None:
+        return using
+
+    database = _database_from_client(client)
+    if database is not None and getattr(database, "name", None):
+        return str(database.name)
+
+    if client is not None:
+        alias = getattr(client, "using", None)
+        if alias:
+            return str(alias)
+
+        name = getattr(client, "name", None)
+        if name:
+            return str(name)
+
+    return "default"
+
+
 async def _is_mysql(using: str | None, client: SupportsExecute | None) -> bool:
     """Check if the target database is MySQL via cached backend from Rust."""
     if client is not None:
-        # AsyncTransaction → ._database, AsyncDatabase → direct
-        db = getattr(client, "_database", client)
-        return getattr(db, "backend", None) == "mysql"
-    alias = using or "default"
+        # Fast path for direct clients; otherwise inspect wrapped
+        # transaction/database objects before falling back to alias lookup.
+        backend = getattr(client, "backend", None)
+        if backend is not None:
+            return backend == "mysql"
+
+        database = _database_from_client(client)
+        if database is not None:
+            backend = getattr(database, "backend", None)
+            if backend is not None:
+                return backend == "mysql"
+
+            alias = getattr(database, "name", None)
+            if alias:
+                db = await get_connection(str(alias), ensure_connected=False)
+                return db.backend == "mysql"
+
+        return False
+
+    alias = _client_alias(using, None)
     db = await get_connection(alias, ensure_connected=False)
     return db.backend == "mysql"
 

@@ -174,6 +174,19 @@ class TestUpsert:
         assert author.name == "Native Upserted Author"
         assert author.email == "native-upsert@test.com"
 
+    @pytest.mark.asyncio
+    async def test_upsert_returning(self, db):
+        rows = await Author.objects.upsert(
+            email="alice@test.com",
+            defaults={"name": "Alice Returning"},
+            returning=True,
+            using=db.name,
+        )
+
+        assert len(rows) == 1
+        assert rows[0].email == "alice@test.com"
+        assert rows[0].name == "Alice Returning"
+
 
 class TestSave:
     @pytest.mark.asyncio

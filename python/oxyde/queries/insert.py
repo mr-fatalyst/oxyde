@@ -40,11 +40,13 @@ class InsertQuery:
         self._values: dict[str, Any] = {}
         self._bulk_values: list[dict[str, Any]] | None = None
         self._on_conflict: dict[str, Any] | None = None
+        self._returning: bool | None = None
 
     def _clone(self) -> InsertQuery:
         clone = InsertQuery(self.model_class)
         clone._values = dict(self._values)
         clone._bulk_values = list(self._bulk_values) if self._bulk_values else None
+        clone._returning = self._returning
         clone._on_conflict = (
             {
                 **self._on_conflict,
@@ -72,6 +74,12 @@ class InsertQuery:
         clone = self._clone()
         clone._bulk_values = list(values)
         clone._values = {}
+        return clone
+
+    def returning(self, enabled: bool = True) -> InsertQuery:
+        """Set whether the insert should request RETURNING rows."""
+        clone = self._clone()
+        clone._returning = enabled
         return clone
 
     def on_conflict(
@@ -173,14 +181,14 @@ class InsertQuery:
                 for key, value in mapped_values.items()
             }
 
-            # Single insert: use RETURNING * to get all fields (including db defaults)
+            # Single-row inserts default to RETURNING * so create() hydrates db defaults.
             return ir.build_insert_ir(
                 table=table_name,
                 values=serialized_values,
                 col_types=col_types,
                 model=_model_key(self.model_class),
                 pk_column=pk_column,
-                returning=True,
+                returning=(self._returning if self._returning is not None else True),
                 on_conflict=on_conflict,
             )
 
