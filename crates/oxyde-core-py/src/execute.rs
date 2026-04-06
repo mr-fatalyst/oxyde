@@ -281,9 +281,15 @@ mod tests {
 
     #[test]
     fn returning_path_requires_flag_and_sql_clause() {
-        assert!(should_use_returning_path(Some(true), "INSERT ... RETURNING *"));
+        assert!(should_use_returning_path(
+            Some(true),
+            "INSERT ... RETURNING *"
+        ));
         assert!(!should_use_returning_path(Some(true), "INSERT ..."));
-        assert!(!should_use_returning_path(Some(false), "INSERT ... RETURNING *"));
+        assert!(!should_use_returning_path(
+            Some(false),
+            "INSERT ... RETURNING *"
+        ));
         assert!(!should_use_returning_path(None, "INSERT ... RETURNING *"));
     }
 }
