@@ -8,7 +8,7 @@ from oxyde import F
 from oxyde.exceptions import MultipleObjectsReturned, NotFoundError
 from oxyde.queries import execute_raw
 
-from .conftest import Author, Post, create_author
+from .conftest import Author, Post, Product, create_author
 
 
 class TestCreate:
