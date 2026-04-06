@@ -40,6 +40,7 @@ from oxyde import (
 # Model Definitions
 # =============================================================================
 
+
 class Product(Model):
     """Product model for demonstrating queries."""
 
@@ -72,9 +73,11 @@ class Order(Model):
 # Database Setup
 # =============================================================================
 
+
 async def setup_tables(db: AsyncDatabase) -> None:
     """Create tables using raw SQL."""
-    await execute_raw("""
+    await execute_raw(
+        """
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -83,15 +86,20 @@ async def setup_tables(db: AsyncDatabase) -> None:
             stock INTEGER DEFAULT 0,
             is_active INTEGER DEFAULT 1
         )
-    """, using=db.name)
-    await execute_raw("""
+    """,
+        using=db.name,
+    )
+    await execute_raw(
+        """
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             product_id INTEGER NOT NULL REFERENCES products(id),
             quantity INTEGER NOT NULL,
             total INTEGER NOT NULL
         )
-    """, using=db.name)
+    """,
+        using=db.name,
+    )
 
 
 async def seed_data(db: AsyncDatabase) -> None:
@@ -108,7 +116,13 @@ async def seed_data(db: AsyncDatabase) -> None:
             {"name": "Keyboard", "category": "Electronics", "price": 7500, "stock": 30},
             {"name": "Desk", "category": "Furniture", "price": 29900, "stock": 5},
             {"name": "Chair", "category": "Furniture", "price": 19900, "stock": 8},
-            {"name": "Monitor", "category": "Electronics", "price": 34900, "stock": 0, "is_active": False},
+            {
+                "name": "Monitor",
+                "category": "Electronics",
+                "price": 34900,
+                "stock": 0,
+                "is_active": False,
+            },
         ],
         using=db.name,
     )
@@ -131,6 +145,7 @@ async def seed_data(db: AsyncDatabase) -> None:
 # =============================================================================
 # Main Demo
 # =============================================================================
+
 
 async def main() -> None:
     url = os.getenv("DATABASE_URL", "sqlite://demo.db")
@@ -163,9 +178,9 @@ async def main() -> None:
         print(f"   Complex filter: {[p.name for p in results]}")
 
         # NOT: Products not in Electronics
-        results = await Product.objects.filter(
-            ~Q(category="Electronics")
-        ).all(using=db.name)
+        results = await Product.objects.filter(~Q(category="Electronics")).all(
+            using=db.name
+        )
         print(f"   NOT Electronics: {[p.name for p in results]}")
 
         # ---------------------------------------------------------------------
@@ -190,7 +205,9 @@ async def main() -> None:
         print("\n3. Lookups (operators)...")
 
         # Range
-        results = await Product.objects.filter(price__gte=5000, price__lte=30000).all(using=db.name)
+        results = await Product.objects.filter(price__gte=5000, price__lte=30000).all(
+            using=db.name
+        )
         print(f"   Price $50-$300: {[p.name for p in results]}")
 
         # Contains (case-insensitive)
@@ -198,7 +215,9 @@ async def main() -> None:
         print(f"   Name contains 'o': {[p.name for p in results]}")
 
         # In list
-        results = await Product.objects.filter(category__in=["Electronics", "Furniture"]).all(using=db.name)
+        results = await Product.objects.filter(
+            category__in=["Electronics", "Furniture"]
+        ).all(using=db.name)
         print(f"   In categories: {[p.name for p in results]}")
 
         # ---------------------------------------------------------------------
@@ -215,12 +234,20 @@ async def main() -> None:
         print(f"   Active products: {active_count}")
 
         # Sum
-        total_stock = await Product.objects.filter(is_active=True).sum("stock", using=db.name)
+        total_stock = await Product.objects.filter(is_active=True).sum(
+            "stock", using=db.name
+        )
         print(f"   Total stock (active): {total_stock}")
 
         # Avg
-        avg_price = await Product.objects.filter(is_active=True).avg("price", using=db.name)
-        print(f"   Average price (active): ${avg_price / 100:.2f}" if avg_price else "   No data")
+        avg_price = await Product.objects.filter(is_active=True).avg(
+            "price", using=db.name
+        )
+        print(
+            f"   Average price (active): ${avg_price / 100:.2f}"
+            if avg_price
+            else "   No data"
+        )
 
         # Max/Min
         max_price = await Product.objects.max("price", using=db.name)
@@ -232,7 +259,9 @@ async def main() -> None:
         # ---------------------------------------------------------------------
         print("\n5. exists() - Existence Check...")
 
-        has_expensive = await Product.objects.filter(price__gt=50000).exists(using=db.name)
+        has_expensive = await Product.objects.filter(price__gt=50000).exists(
+            using=db.name
+        )
         print(f"   Has expensive products (>$500): {has_expensive}")
 
         has_cheap = await Product.objects.filter(price__lt=1000).exists(using=db.name)
@@ -251,7 +280,9 @@ async def main() -> None:
         print(f"   Incremented stock for {updated} Electronics products")
 
         # Check updated values
-        electronics = await Product.objects.filter(category="Electronics").all(using=db.name)
+        electronics = await Product.objects.filter(category="Electronics").all(
+            using=db.name
+        )
         print(f"   New stock levels: {[(p.name, p.stock) for p in electronics]}")
 
         # ---------------------------------------------------------------------
@@ -260,19 +291,31 @@ async def main() -> None:
         print("\n7. Ordering and Pagination...")
 
         # Order by price descending
-        expensive_first = await Product.objects.order_by("-price").limit(3).all(using=db.name)
+        expensive_first = (
+            await Product.objects.order_by("-price").limit(3).all(using=db.name)
+        )
         print(f"   Top 3 expensive: {[p.name for p in expensive_first]}")
 
         # Order by multiple fields
-        sorted_products = await Product.objects.order_by("category", "-price").all(using=db.name)
-        print(f"   By category, then price: {[(p.category, p.name) for p in sorted_products]}")
+        sorted_products = await Product.objects.order_by("category", "-price").all(
+            using=db.name
+        )
+        print(
+            f"   By category, then price: {[(p.category, p.name) for p in sorted_products]}"
+        )
 
         # Pagination with offset
-        page2 = await Product.objects.order_by("id").offset(2).limit(2).all(using=db.name)
+        page2 = (
+            await Product.objects.order_by("id").offset(2).limit(2).all(using=db.name)
+        )
         print(f"   Page 2 (2 items): {[p.name for p in page2]}")
 
         # Distinct categories
-        categories = await Product.objects.values_list("category", flat=True).distinct().all(using=db.name)
+        categories = (
+            await Product.objects.values_list("category", flat=True)
+            .distinct()
+            .all(using=db.name)
+        )
         print(f"   Distinct categories: {categories}")
 
         # ---------------------------------------------------------------------
@@ -281,9 +324,11 @@ async def main() -> None:
         print("\n8. Group By with Aggregates...")
 
         # Count products per category
-        by_category = await Product.objects.annotate(
-            product_count=Count("id")
-        ).group_by("category").all(using=db.name)
+        by_category = (
+            await Product.objects.annotate(product_count=Count("id"))
+            .group_by("category")
+            .all(using=db.name)
+        )
         for row in by_category:
             print(f"   {row['category']}: {row['product_count']} products")
 

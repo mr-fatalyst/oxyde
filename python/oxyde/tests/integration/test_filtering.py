@@ -1,4 +1,5 @@
 """Integration tests for filtering and Q expressions."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -95,16 +96,16 @@ class TestExclude:
 class TestQExpressions:
     @pytest.mark.asyncio
     async def test_q_and(self, db):
-        posts = await Post.objects.filter(
-            Q(published=True) & Q(views__gte=100)
-        ).all(using=db.name)
+        posts = await Post.objects.filter(Q(published=True) & Q(views__gte=100)).all(
+            using=db.name
+        )
         assert len(posts) == 2  # Rust Patterns (120), ML Basics (200)
 
     @pytest.mark.asyncio
     async def test_q_or(self, db):
-        posts = await Post.objects.filter(
-            Q(views__gte=200) | Q(views=0)
-        ).all(using=db.name)
+        posts = await Post.objects.filter(Q(views__gte=200) | Q(views=0)).all(
+            using=db.name
+        )
         assert len(posts) == 3  # ML Basics, Draft Post, Unpublished
 
     @pytest.mark.asyncio
@@ -139,11 +140,13 @@ class TestChaining:
     async def test_filter_chaining(self, db):
         """Chained .filter() calls should AND conditions."""
         posts_chained = await (
-            Post.objects.filter(published=True).filter(views__gte=100).all(using=db.name)
+            Post.objects.filter(published=True)
+            .filter(views__gte=100)
+            .all(using=db.name)
         )
-        posts_single = await Post.objects.filter(
-            published=True, views__gte=100
-        ).all(using=db.name)
+        posts_single = await Post.objects.filter(published=True, views__gte=100).all(
+            using=db.name
+        )
         assert len(posts_chained) == len(posts_single)
         assert {p.id for p in posts_chained} == {p.id for p in posts_single}
 
@@ -279,6 +282,50 @@ class TestDbColumnAliasing:
         assert refreshed.title == "Morning Saved"
 
     @pytest.mark.asyncio
+    async def test_update_or_create_with_aliased_columns(self, aliased_db):
+        """update_or_create() on an existing row must use aliased db_column names."""
+        existing = await AliasedEvent.objects.get(
+            title="Morning A", using=aliased_db.name
+        )
+
+        event, created = await AliasedEvent.objects.update_or_create(
+            id=existing.id,
+            defaults={"title": "Morning Upserted"},
+            using=aliased_db.name,
+        )
+
+        assert created is False
+        assert event.title == "Morning Upserted"
+
+        refreshed = await AliasedEvent.objects.get(
+            id=existing.id, using=aliased_db.name
+        )
+        assert refreshed.title == "Morning Upserted"
+
+    @pytest.mark.asyncio
+    async def test_native_upsert_with_aliased_columns(self, aliased_db):
+        """Native upsert() on an existing row must use aliased db_column names."""
+        existing = await AliasedEvent.objects.get(
+            title="Morning A", using=aliased_db.name
+        )
+
+        affected = await AliasedEvent.objects.upsert(
+            id=existing.id,
+            defaults={
+                "title": "Morning Native Upserted",
+                "created": existing.created,
+            },
+            using=aliased_db.name,
+        )
+
+        assert affected == (2 if aliased_db.url.startswith("mysql") else 1)
+
+        refreshed = await AliasedEvent.objects.get(
+            id=existing.id, using=aliased_db.name
+        )
+        assert refreshed.title == "Morning Native Upserted"
+
+    @pytest.mark.asyncio
     async def test_bulk_create_with_aliased_columns(self, aliased_db):
         """bulk_create must map field names to db_column."""
         new_events = [
@@ -305,9 +352,11 @@ class TestDbColumnAliasing:
     @pytest.mark.asyncio
     async def test_values_with_aliased_columns(self, aliased_db):
         """values() must return field names, not db_columns."""
-        rows = await AliasedEvent.objects.order_by("id").values(
-            "id", "title"
-        ).all(using=aliased_db.name)
+        rows = (
+            await AliasedEvent.objects.order_by("id")
+            .values("id", "title")
+            .all(using=aliased_db.name)
+        )
         assert len(rows) == 2
         assert rows[0]["title"] == "Morning A"
         assert "event_title" not in rows[0]
@@ -315,7 +364,9 @@ class TestDbColumnAliasing:
     @pytest.mark.asyncio
     async def test_values_list_with_aliased_columns(self, aliased_db):
         """values_list() must work with field names."""
-        rows = await AliasedEvent.objects.order_by("id").values_list(
-            "title", flat=True
-        ).all(using=aliased_db.name)
+        rows = (
+            await AliasedEvent.objects.order_by("id")
+            .values_list("title", flat=True)
+            .all(using=aliased_db.name)
+        )
         assert rows == ["Morning A", "Midnight"]

@@ -13,7 +13,8 @@ Example (via Manager):
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any, Literal
 
 import msgpack
 
@@ -38,11 +39,25 @@ class InsertQuery:
         self.model_class = model_class
         self._values: dict[str, Any] = {}
         self._bulk_values: list[dict[str, Any]] | None = None
+        self._on_conflict: dict[str, Any] | None = None
 
     def _clone(self) -> InsertQuery:
         clone = InsertQuery(self.model_class)
         clone._values = dict(self._values)
         clone._bulk_values = list(self._bulk_values) if self._bulk_values else None
+        clone._on_conflict = (
+            {
+                **self._on_conflict,
+                "columns": list(self._on_conflict["columns"]),
+                "update_values": (
+                    dict(self._on_conflict["update_values"])
+                    if self._on_conflict.get("update_values") is not None
+                    else None
+                ),
+            }
+            if self._on_conflict is not None
+            else None
+        )
         return clone
 
     def values(self, **kwargs: Any) -> InsertQuery:
@@ -59,6 +74,33 @@ class InsertQuery:
         clone._values = {}
         return clone
 
+    def on_conflict(
+        self,
+        *,
+        columns: Iterable[str],
+        action: Literal["nothing", "update"],
+        update_values: dict[str, Any] | None = None,
+    ) -> InsertQuery:
+        """Configure ON CONFLICT / ON DUPLICATE KEY behavior."""
+        clone = self._clone()
+        conflict_columns = list(columns)
+        if not conflict_columns:
+            raise ValueError("on_conflict requires at least one column")
+        if action == "update":
+            if not update_values:
+                raise ValueError("on_conflict(update) requires update_values")
+            clone._on_conflict = {
+                "columns": conflict_columns,
+                "action": action,
+                "update_values": dict(update_values),
+            }
+        else:
+            clone._on_conflict = {
+                "columns": conflict_columns,
+                "action": action,
+            }
+        return clone
+
     def _get_pk_column(self) -> str | None:
         """Get the database column name for the primary key field."""
         try:
@@ -67,11 +109,37 @@ class InsertQuery:
         except Exception:
             return None
 
+    def _serialize_on_conflict(self) -> dict[str, Any] | None:
+        """Map ON CONFLICT fields through model metadata before building IR."""
+        if self._on_conflict is None:
+            return None
+
+        metadata = self.model_class._db_meta.field_metadata
+        columns = []
+        for column in self._on_conflict["columns"]:
+            meta = metadata.get(column)
+            columns.append(meta.db_column if meta else column)
+        serialized = {
+            "columns": columns,
+            "action": self._on_conflict["action"],
+        }
+
+        update_values = self._on_conflict.get("update_values")
+        if update_values is not None:
+            mapped_values = _map_values_to_columns(self.model_class, update_values)
+            serialized["update_values"] = {
+                key: _serialize_value_for_ir(value)
+                for key, value in mapped_values.items()
+            }
+
+        return serialized
+
     def to_ir(self) -> dict[str, Any]:
         """Convert to IR format."""
         table_name = self.model_class.get_table_name()
         pk_column = self._get_pk_column()
         col_types = _build_col_types(self.model_class)
+        on_conflict = self._serialize_on_conflict()
 
         if self._bulk_values is not None:
             if not self._bulk_values:
@@ -93,6 +161,7 @@ class InsertQuery:
                 col_types=col_types,
                 model=_model_key(self.model_class),
                 pk_column=pk_column,
+                on_conflict=on_conflict,
             )
         else:
             if not self._values:
@@ -112,6 +181,7 @@ class InsertQuery:
                 model=_model_key(self.model_class),
                 pk_column=pk_column,
                 returning=True,
+                on_conflict=on_conflict,
             )
 
     async def execute(self, client: SupportsExecute) -> dict[str, Any]:

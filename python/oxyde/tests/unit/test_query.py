@@ -20,6 +20,7 @@ from oxyde.exceptions import (
 )
 from oxyde.models.registry import clear_registry, registered_tables
 from oxyde.queries import F
+from oxyde.queries.insert import InsertQuery
 from oxyde.tests.helpers import StubExecuteClient
 
 
@@ -161,7 +162,7 @@ def test_field_metadata_captures_db_attributes() -> None:
     # db_type is NOT auto-inferred - only set if user explicitly specifies Field(db_type="...")
     # Type inference happens at schema extraction time based on dialect
     assert user_meta.field_metadata["email"].db_type is None
-    assert user_meta.field_metadata["email"].python_type == str
+    assert user_meta.field_metadata["email"].python_type is str
 
     article_meta = Article._db_meta
 
@@ -373,10 +374,9 @@ async def test_async_manager_create_update_delete_and_save() -> None:
         class Meta:
             is_table = True
 
-    create_stub = StubExecuteClient([{
-        "columns": ["id", "name", "price"],
-        "rows": [[1, "Widget", None]]
-    }])
+    create_stub = StubExecuteClient(
+        [{"columns": ["id", "name", "price"], "rows": [[1, "Widget", None]]}]
+    )
     item = await Item.objects.create(client=create_stub, name="Widget")
     assert isinstance(item, Item)
     assert create_stub.calls[0]["op"] == "insert"
@@ -387,10 +387,9 @@ async def test_async_manager_create_update_delete_and_save() -> None:
     item.price = 5
 
     # Test save() - should update all fields (no dirty tracking)
-    update_stub = StubExecuteClient([{
-        "columns": ["id", "name", "price"],
-        "rows": [[10, "Gadget", 5]]
-    }])
+    update_stub = StubExecuteClient(
+        [{"columns": ["id", "name", "price"], "rows": [[10, "Gadget", 5]]}]
+    )
     await item.save(client=update_stub)
     assert update_stub.calls[0]["op"] == "update"
     assert update_stub.calls[0]["values"]["name"] == "Gadget"
@@ -705,17 +704,59 @@ async def test_async_manager_bulk_create_and_get_or_create() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_manager_upsert_placeholder() -> None:
+async def test_async_manager_update_or_create() -> None:
     clear_registry()
 
     class Thing(Model):
         id: int | None = Field(default=None, db_pk=True)
+        value: str
 
         class Meta:
             is_table = True
 
-    with pytest.raises(ManagerError):
-        await Thing.objects.upsert()
+    stub = StubExecuteClient([[], {"affected": 1, "inserted_ids": [1]}])
+    obj, created = await Thing.objects.update_or_create(
+        client=stub,
+        defaults={"value": "created"},
+        id=1,
+    )
+    assert created is True
+    assert isinstance(obj, Thing)
+    assert stub.calls[0]["op"] == "select"
+    assert stub.calls[1]["op"] == "insert"
+
+    clear_registry()
+
+
+@pytest.mark.asyncio
+async def test_insert_query_on_conflict_maps_aliased_columns() -> None:
+    clear_registry()
+
+    class Thing(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        value: str = Field(db_column="stored_value")
+
+        class Meta:
+            is_table = True
+
+    stub = StubExecuteClient([{"affected": 1, "inserted_ids": [1]}])
+    query = (
+        InsertQuery(Thing)
+        .values(value="created")
+        .on_conflict(
+            columns=["value"],
+            action="update",
+            update_values={"value": "updated"},
+        )
+    )
+    await query.execute(stub)
+
+    assert stub.calls[0]["values"] == {"stored_value": "created"}
+    assert stub.calls[0]["on_conflict"] == {
+        "columns": ["stored_value"],
+        "action": "update",
+        "update_values": {"stored_value": "updated"},
+    }
 
     clear_registry()
 
@@ -964,9 +1005,7 @@ def test_fk_filter_in_q_expression() -> None:
             is_table = True
 
     # Q expression with FK traversal and OR
-    query = Pet.objects.filter(
-        Q(name="Fluffy") | Q(owner__verified=True)
-    )
+    query = Pet.objects.filter(Q(name="Fluffy") | Q(owner__verified=True))
     ir = query.to_ir()
 
     # Should have JOIN from FK traversal

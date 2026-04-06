@@ -23,6 +23,7 @@ from oxyde import AsyncDatabase, Model, Field, disconnect_all, execute_raw
 # Model Definitions
 # =============================================================================
 
+
 class Author(Model):
     """Author model with primary key."""
 
@@ -66,16 +67,21 @@ class Comment(Model):
 # Database Setup (for demo purposes)
 # =============================================================================
 
+
 async def setup_tables(db: AsyncDatabase) -> None:
     """Create tables using raw SQL (in real apps, use migrations)."""
-    await execute_raw("""
+    await execute_raw(
+        """
         CREATE TABLE IF NOT EXISTS authors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE
         )
-    """, using=db.name)
-    await execute_raw("""
+    """,
+        using=db.name,
+    )
+    await execute_raw(
+        """
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -83,15 +89,20 @@ async def setup_tables(db: AsyncDatabase) -> None:
             views INTEGER DEFAULT 0,
             author_id INTEGER REFERENCES authors(id) ON DELETE CASCADE
         )
-    """, using=db.name)
-    await execute_raw("""
+    """,
+        using=db.name,
+    )
+    await execute_raw(
+        """
         CREATE TABLE IF NOT EXISTS comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
             body TEXT NOT NULL,
             likes INTEGER DEFAULT 0
         )
-    """, using=db.name)
+    """,
+        using=db.name,
+    )
 
 
 async def cleanup(db: AsyncDatabase) -> None:
@@ -104,6 +115,7 @@ async def cleanup(db: AsyncDatabase) -> None:
 # =============================================================================
 # Main Demo
 # =============================================================================
+
 
 async def main() -> None:
     # Connect to database
@@ -162,7 +174,9 @@ async def main() -> None:
         print(f"   Fetched author: {fetched.name}")
 
         # Get or None (no exception if not found)
-        missing = await Author.objects.get_or_none(using=db.name, email="nobody@example.com")
+        missing = await Author.objects.get_or_none(
+            using=db.name, email="nobody@example.com"
+        )
         print(f"   Missing author: {missing}")
 
         # Filter with lookups

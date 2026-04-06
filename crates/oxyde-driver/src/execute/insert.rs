@@ -33,7 +33,7 @@ pub async fn execute_insert_returning(
     sql: &str,
     params: &[Value],
     pk_column: Option<&str>,
-) -> Result<Vec<rmpv::Value>> {
+) -> Result<(u64, Vec<rmpv::Value>)> {
     let pk_col = pk_column.unwrap_or("id");
     debug!(
         "Executing INSERT RETURNING on '{}': {} ({} params, pk={})",
@@ -68,7 +68,7 @@ pub async fn execute_insert_returning(
                 pool_name,
                 ids.len()
             );
-            Ok(ids)
+            Ok((rows.len() as u64, ids))
         }
         DbPool::MySql(pool) => {
             let query = bind_mysql(sqlx::query(sql), params)?;
@@ -84,6 +84,8 @@ pub async fn execute_insert_returning(
                 (last_id..last_id + rows_affected)
                     .map(|id| rmpv::Value::Integer(rmpv::Integer::from(id)))
                     .collect()
+            } else if rows_affected > 0 && sql.to_uppercase().contains("ON DUPLICATE KEY UPDATE") {
+                vec![rmpv::Value::Nil; rows_affected as usize]
             } else {
                 vec![]
             };
@@ -95,7 +97,7 @@ pub async fn execute_insert_returning(
                 last_id,
                 ids.len()
             );
-            Ok(ids)
+            Ok((rows_affected as u64, ids))
         }
         DbPool::Sqlite(pool) => {
             let has_returning = sql.to_uppercase().contains("RETURNING");
@@ -119,7 +121,7 @@ pub async fn execute_insert_returning(
                         pool_name,
                         ids.len()
                     );
-                    Ok(ids)
+                    Ok((rows.len() as u64, ids))
                 }
                 Err(_) => {
                     warn!(
@@ -146,7 +148,7 @@ pub async fn execute_insert_returning(
                         "INSERT on '{}' (SQLite) affected {} rows, last_id={}, generated {} IDs via fallback",
                         pool_name, rows_affected, last_id, ids.len()
                     );
-                    Ok(ids)
+                    Ok((rows_affected as u64, ids))
                 }
             }
         }
@@ -159,7 +161,7 @@ pub async fn execute_insert_returning_in_transaction(
     sql: &str,
     params: &[Value],
     pk_column: Option<&str>,
-) -> Result<Vec<rmpv::Value>> {
+) -> Result<(u64, Vec<rmpv::Value>)> {
     let pk_col = pk_column.unwrap_or("id");
     let registry = transaction_registry();
     let arc = registry
@@ -201,7 +203,7 @@ pub async fn execute_insert_returning_in_transaction(
                 tx_id,
                 ids.len()
             );
-            Ok(ids)
+            Ok((rows.len() as u64, ids))
         }
         DbConn::MySql(conn) => {
             let query = bind_mysql(sqlx::query(sql), params)?;
@@ -217,6 +219,8 @@ pub async fn execute_insert_returning_in_transaction(
                 (last_id..last_id + rows_affected)
                     .map(|id| rmpv::Value::Integer(rmpv::Integer::from(id)))
                     .collect()
+            } else if rows_affected > 0 && sql.to_uppercase().contains("ON DUPLICATE KEY UPDATE") {
+                vec![rmpv::Value::Nil; rows_affected as usize]
             } else {
                 vec![]
             };
@@ -228,7 +232,7 @@ pub async fn execute_insert_returning_in_transaction(
                 last_id,
                 ids.len()
             );
-            Ok(ids)
+            Ok((rows_affected as u64, ids))
         }
         DbConn::Sqlite(conn) => {
             let has_returning = sql.to_uppercase().contains("RETURNING");
@@ -252,7 +256,7 @@ pub async fn execute_insert_returning_in_transaction(
                         tx_id,
                         ids.len()
                     );
-                    Ok(ids)
+                    Ok((rows.len() as u64, ids))
                 }
                 Err(_) => {
                     warn!(
@@ -279,7 +283,7 @@ pub async fn execute_insert_returning_in_transaction(
                         "INSERT in transaction {} (SQLite) affected {} rows, last_id={}, generated {} IDs via fallback",
                         tx_id, rows_affected, last_id, ids.len()
                     );
-                    Ok(ids)
+                    Ok((rows_affected as u64, ids))
                 }
             }
         }

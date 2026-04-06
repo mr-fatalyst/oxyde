@@ -1,4 +1,5 @@
 """Integration tests for CRUD operations."""
+
 from __future__ import annotations
 
 import pytest
@@ -7,7 +8,7 @@ from oxyde import F
 from oxyde.exceptions import MultipleObjectsReturned, NotFoundError
 from oxyde.queries import execute_raw
 
-from .conftest import Author, Post, Product, create_author, create_post
+from .conftest import Author, Post, create_author
 
 
 class TestCreate:
@@ -111,6 +112,69 @@ class TestGet:
         assert author.email == "new@test.com"
 
 
+class TestUpdateOrCreate:
+    @pytest.mark.asyncio
+    async def test_update_or_create_existing_with_same_values(self, db):
+        author, created = await Author.objects.update_or_create(
+            email="alice@test.com",
+            defaults={"name": "Alice"},
+            using=db.name,
+        )
+        assert created is False
+        assert author.name == "Alice"
+
+    @pytest.mark.asyncio
+    async def test_update_or_create_existing_changed(self, db):
+        author, created = await Author.objects.update_or_create(
+            email="alice@test.com",
+            defaults={"name": "Alice Updated"},
+            using=db.name,
+        )
+        assert created is False
+        assert author.name == "Alice Updated"
+
+        refreshed = await Author.objects.get(email="alice@test.com", using=db.name)
+        assert refreshed.name == "Alice Updated"
+
+    @pytest.mark.asyncio
+    async def test_update_or_create_new(self, db):
+        author, created = await Author.objects.update_or_create(
+            email="upsert@test.com",
+            defaults={"name": "Upserted Author"},
+            using=db.name,
+        )
+        assert created is True
+        assert author.name == "Upserted Author"
+        assert author.email == "upsert@test.com"
+
+
+class TestUpsert:
+    @pytest.mark.asyncio
+    async def test_upsert_existing_changed(self, db):
+        affected = await Author.objects.upsert(
+            email="alice@test.com",
+            defaults={"name": "Alice Updated"},
+            using=db.name,
+        )
+        assert affected == (2 if db.url.startswith("mysql") else 1)
+
+        refreshed = await Author.objects.get(email="alice@test.com", using=db.name)
+        assert refreshed.name == "Alice Updated"
+
+    @pytest.mark.asyncio
+    async def test_upsert_new(self, db):
+        affected = await Author.objects.upsert(
+            email="native-upsert@test.com",
+            defaults={"name": "Native Upserted Author"},
+            using=db.name,
+        )
+        assert affected == 1
+
+        author = await Author.objects.get(email="native-upsert@test.com", using=db.name)
+        assert author.name == "Native Upserted Author"
+        assert author.email == "native-upsert@test.com"
+
+
 class TestSave:
     @pytest.mark.asyncio
     async def test_save_insert(self, db):
@@ -196,17 +260,13 @@ class TestUpdate:
 
     @pytest.mark.asyncio
     async def test_update_with_f_expression(self, db):
-        await Post.objects.filter(id=1).update(
-            views=F("views") + 1, using=db.name
-        )
+        await Post.objects.filter(id=1).update(views=F("views") + 1, using=db.name)
         post = await Post.objects.get(id=1, using=db.name)
         assert post.views == 121  # 120 + 1
 
     @pytest.mark.asyncio
     async def test_increment(self, db):
-        result = await Post.objects.filter(id=1).increment(
-            "views", by=5, using=db.name
-        )
+        result = await Post.objects.filter(id=1).increment("views", by=5, using=db.name)
         assert result >= 1
 
         post = await Post.objects.get(id=1, using=db.name)

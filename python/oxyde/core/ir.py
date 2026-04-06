@@ -210,6 +210,7 @@ def build_insert_ir(
     model: str | None = None,
     returning: bool | None = None,
     pk_column: str | None = None,
+    on_conflict: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build an INSERT query IR payload.
 
@@ -222,6 +223,7 @@ def build_insert_ir(
         model: Model name for validation
         returning: Whether to return inserted rows
         pk_column: Primary key column name (defaults to "id" if not specified)
+        on_conflict: Optional ON CONFLICT / ON DUPLICATE KEY configuration
     """
     if not values and not bulk_values:
         raise ValueError("INSERT requires either 'values' or 'bulk_values'")
@@ -242,6 +244,8 @@ def build_insert_ir(
         payload["returning"] = bool(returning)
     if pk_column is not None:
         payload["pk_column"] = pk_column
+    if on_conflict is not None:
+        payload["on_conflict"] = dict(on_conflict)
     return payload
 
 

@@ -28,11 +28,13 @@ class TestPreSaveHook:
             async def pre_save(
                 self, *, is_create: bool, update_fields: set[str] | None = None
             ) -> None:
-                hook_calls.append({
-                    "is_create": is_create,
-                    "update_fields": update_fields,
-                    "name": self.name,
-                })
+                hook_calls.append(
+                    {
+                        "is_create": is_create,
+                        "update_fields": update_fields,
+                        "name": self.name,
+                    }
+                )
 
         stub = StubExecuteClient([{"affected": 1, "inserted_ids": [1]}])
         instance = HookedModel(name="Alice")
@@ -58,15 +60,14 @@ class TestPreSaveHook:
             async def pre_save(
                 self, *, is_create: bool, update_fields: set[str] | None = None
             ) -> None:
-                hook_calls.append({
-                    "is_create": is_create,
-                    "update_fields": update_fields,
-                })
+                hook_calls.append(
+                    {
+                        "is_create": is_create,
+                        "update_fields": update_fields,
+                    }
+                )
 
-        stub = StubExecuteClient([{
-            "columns": ["id", "name"],
-            "rows": [[1, "Bob"]]
-        }])
+        stub = StubExecuteClient([{"columns": ["id", "name"], "rows": [[1, "Bob"]]}])
         instance = HookedModel(id=1, name="Bob")
         await instance.save(client=stub)
 
@@ -90,15 +91,21 @@ class TestPreSaveHook:
             async def pre_save(
                 self, *, is_create: bool, update_fields: set[str] | None = None
             ) -> None:
-                hook_calls.append({
-                    "is_create": is_create,
-                    "update_fields": update_fields,
-                })
+                hook_calls.append(
+                    {
+                        "is_create": is_create,
+                        "update_fields": update_fields,
+                    }
+                )
 
-        stub = StubExecuteClient([{
-            "columns": ["id", "name", "email"],
-            "rows": [[1, "Charlie", "c@example.com"]]
-        }])
+        stub = StubExecuteClient(
+            [
+                {
+                    "columns": ["id", "name", "email"],
+                    "rows": [[1, "Charlie", "c@example.com"]],
+                }
+            ]
+        )
         instance = HookedModel(id=1, name="Charlie", email="c@example.com")
         await instance.save(client=stub, update_fields=["name"])
 
@@ -151,11 +158,13 @@ class TestPostSaveHook:
             async def post_save(
                 self, *, is_create: bool, update_fields: set[str] | None = None
             ) -> None:
-                hook_calls.append({
-                    "is_create": is_create,
-                    "update_fields": update_fields,
-                    "id": self.id,  # Should have ID assigned
-                })
+                hook_calls.append(
+                    {
+                        "is_create": is_create,
+                        "update_fields": update_fields,
+                        "id": self.id,  # Should have ID assigned
+                    }
+                )
 
         stub = StubExecuteClient([{"affected": 1, "inserted_ids": [42]}])
         instance = HookedModel(name="Alice")
@@ -180,14 +189,13 @@ class TestPostSaveHook:
             async def post_save(
                 self, *, is_create: bool, update_fields: set[str] | None = None
             ) -> None:
-                hook_calls.append({
-                    "is_create": is_create,
-                })
+                hook_calls.append(
+                    {
+                        "is_create": is_create,
+                    }
+                )
 
-        stub = StubExecuteClient([{
-            "columns": ["id", "name"],
-            "rows": [[1, "Bob"]]
-        }])
+        stub = StubExecuteClient([{"columns": ["id", "name"], "rows": [[1, "Bob"]]}])
         instance = HookedModel(id=1, name="Bob")
         await instance.save(client=stub)
 
@@ -359,10 +367,12 @@ class TestGetOrCreateHooks:
                 hook_calls.append("post_save")
 
         # First call returns empty (not found), second is the create
-        stub = StubExecuteClient([
-            [],  # get() returns empty
-            {"affected": 1, "inserted_ids": [1]},  # create()
-        ])
+        stub = StubExecuteClient(
+            [
+                [],  # get() returns empty
+                {"affected": 1, "inserted_ids": [1]},  # create()
+            ]
+        )
         obj, created = await HookedModel.objects.get_or_create(name="Test", client=stub)
 
         assert created is True
@@ -390,13 +400,203 @@ class TestGetOrCreateHooks:
             ) -> None:
                 hook_calls.append("post_save")
 
-        stub = StubExecuteClient([
-            [{"id": 1, "name": "Existing"}],  # get() returns existing
-        ])
-        obj, created = await HookedModel.objects.get_or_create(name="Existing", client=stub)
+        stub = StubExecuteClient(
+            [
+                [{"id": 1, "name": "Existing"}],  # get() returns existing
+            ]
+        )
+        obj, created = await HookedModel.objects.get_or_create(
+            name="Existing", client=stub
+        )
 
         assert created is False
         assert hook_calls == []  # No hooks called
+
+
+class TestUpdateOrCreateHooks:
+    """Test hooks work with QueryManager.update_or_create()."""
+
+    @pytest.mark.asyncio
+    async def test_update_or_create_calls_hooks_on_create(self):
+        """update_or_create() calls hooks when creating through create()."""
+        hook_calls: list[str] = []
+
+        class HookedModel(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str
+
+            class Meta:
+                is_table = True
+
+            async def pre_save(
+                self, *, is_create: bool, update_fields: set[str] | None = None
+            ) -> None:
+                hook_calls.append("pre_save")
+
+            async def post_save(
+                self, *, is_create: bool, update_fields: set[str] | None = None
+            ) -> None:
+                hook_calls.append("post_save")
+
+        stub = StubExecuteClient(
+            [
+                [],  # get() returns empty
+                {"affected": 1, "inserted_ids": [1]},  # create()
+            ]
+        )
+        obj, created = await HookedModel.objects.update_or_create(
+            id=1,
+            defaults={"name": "Test"},
+            client=stub,
+        )
+
+        assert created is True
+        assert isinstance(obj, HookedModel)
+        assert [call["op"] for call in stub.calls] == ["select", "insert"]
+        assert hook_calls == ["pre_save", "post_save"]
+
+    @pytest.mark.asyncio
+    async def test_update_or_create_calls_hooks_on_update(self):
+        """update_or_create() fires hooks on the save/update path."""
+        hook_calls: list[dict[str, Any]] = []
+
+        class HookedModel(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            name: str
+
+            class Meta:
+                is_table = True
+
+            async def pre_save(
+                self, *, is_create: bool, update_fields: set[str] | None = None
+            ) -> None:
+                hook_calls.append(
+                    {
+                        "hook": "pre_save",
+                        "is_create": is_create,
+                        "update_fields": update_fields,
+                        "name": self.name,
+                    }
+                )
+
+            async def post_save(
+                self, *, is_create: bool, update_fields: set[str] | None = None
+            ) -> None:
+                hook_calls.append(
+                    {
+                        "hook": "post_save",
+                        "is_create": is_create,
+                        "update_fields": update_fields,
+                        "name": self.name,
+                    }
+                )
+
+        stub = StubExecuteClient(
+            [
+                [{"id": 1, "name": "Existing"}],  # get() returns existing
+                {
+                    "columns": ["id", "name"],
+                    "rows": [[1, "Updated"]],
+                },  # save() returning
+            ]
+        )
+        obj, created = await HookedModel.objects.update_or_create(
+            id=1,
+            defaults={"name": "Updated"},
+            client=stub,
+        )
+
+        assert created is False
+        assert obj.name == "Updated"
+        assert [call["op"] for call in stub.calls] == ["select", "update"]
+        assert hook_calls == [
+            {
+                "hook": "pre_save",
+                "is_create": False,
+                "update_fields": {"name"},
+                "name": "Updated",
+            },
+            {
+                "hook": "post_save",
+                "is_create": False,
+                "update_fields": {"name"},
+                "name": "Updated",
+            },
+        ]
+
+    @pytest.mark.asyncio
+    async def test_update_or_create_preserves_pre_save_lookup_changes(self):
+        """update_or_create() keeps lookup fields modified by pre_save()."""
+
+        class HookedModel(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str
+
+            class Meta:
+                is_table = True
+
+            async def pre_save(
+                self, *, is_create: bool, update_fields: set[str] | None = None
+            ) -> None:
+                self.email = self.email.lower()
+
+        stub = StubExecuteClient(
+            [
+                [],  # get() returns empty
+                {"affected": 1, "inserted_ids": [1]},  # create()
+            ]
+        )
+        obj, created = await HookedModel.objects.update_or_create(
+            email="Alice@Example.COM",
+            client=stub,
+        )
+
+        assert created is True
+        assert obj.email == "alice@example.com"
+        assert stub.calls[1]["values"]["email"] == "alice@example.com"
+
+    @pytest.mark.asyncio
+    async def test_native_upsert_does_not_call_save_hooks(self):
+        """Native upsert() should bypass save hooks and rely on SQL conflict handling."""
+        hook_calls: list[str] = []
+
+        class HookedModel(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str
+            name: str
+
+            class Meta:
+                is_table = True
+
+            async def pre_save(
+                self, *, is_create: bool, update_fields: set[str] | None = None
+            ) -> None:
+                hook_calls.append("pre_save")
+
+            async def post_save(
+                self, *, is_create: bool, update_fields: set[str] | None = None
+            ) -> None:
+                hook_calls.append("post_save")
+
+        stub = StubExecuteClient(
+            [
+                {
+                    "affected": 1,
+                    "columns": ["id", "email", "name"],
+                    "rows": [[1, "hooked@example.com", "Updated"]],
+                }
+            ]
+        )
+
+        affected = await HookedModel.objects.upsert(
+            email="hooked@example.com",
+            defaults={"name": "Updated"},
+            client=stub,
+        )
+
+        assert affected == 1
+        assert stub.calls[0]["op"] == "insert"
+        assert hook_calls == []
 
 
 class TestHookExceptionHandling:

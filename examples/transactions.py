@@ -25,6 +25,7 @@ from oxyde.db.transaction import TransactionTimeoutError
 # Model Definitions
 # =============================================================================
 
+
 class Account(Model):
     """Bank account model for transaction demo."""
 
@@ -41,15 +42,19 @@ class Account(Model):
 # Database Setup
 # =============================================================================
 
+
 async def setup_tables(db: AsyncDatabase) -> None:
     """Create tables using raw SQL."""
-    await execute_raw("""
+    await execute_raw(
+        """
         CREATE TABLE IF NOT EXISTS accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner TEXT NOT NULL,
             balance INTEGER NOT NULL DEFAULT 0
         )
-    """, using=db.name)
+    """,
+        using=db.name,
+    )
 
 
 async def seed_data(db: AsyncDatabase) -> list[Account]:
@@ -59,8 +64,8 @@ async def seed_data(db: AsyncDatabase) -> list[Account]:
     accounts = await Account.objects.bulk_create(
         [
             {"owner": "Alice", "balance": 100000},  # $1000
-            {"owner": "Bob", "balance": 50000},     # $500
-            {"owner": "Charlie", "balance": 25000}, # $250
+            {"owner": "Bob", "balance": 50000},  # $500
+            {"owner": "Charlie", "balance": 25000},  # $250
         ],
         using=db.name,
     )
@@ -77,6 +82,7 @@ async def print_balances(db: AsyncDatabase) -> None:
 # =============================================================================
 # Transaction Examples
 # =============================================================================
+
 
 async def transfer_funds(
     db: AsyncDatabase,
@@ -102,7 +108,9 @@ async def transfer_funds(
         )
 
 
-async def demo_successful_transaction(db: AsyncDatabase, accounts: list[Account]) -> None:
+async def demo_successful_transaction(
+    db: AsyncDatabase, accounts: list[Account]
+) -> None:
     """Demo: Successful transaction commits automatically."""
     print("\n1. Successful Transaction")
     print("   Transferring $100 from Alice to Bob...")
@@ -199,6 +207,7 @@ async def demo_nested_transactions(db: AsyncDatabase, accounts: list[Account]) -
 # =============================================================================
 # Main Demo
 # =============================================================================
+
 
 async def main() -> None:
     url = os.getenv("DATABASE_URL", "sqlite://demo.db")

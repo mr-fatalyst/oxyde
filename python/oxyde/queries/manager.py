@@ -25,8 +25,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-from oxyde.exceptions import IntegrityError, ManagerError, NotFoundError
-from oxyde.models.serializers import _derive_create_data
+from oxyde.exceptions import IntegrityError, NotFoundError
+from oxyde.models.serializers import _derive_create_data, _dump_insert_data
+from oxyde.queries.base import _resolve_execution_client
+from oxyde.queries.insert import InsertQuery
 from oxyde.queries.select import Query
 
 if TYPE_CHECKING:
@@ -315,9 +317,142 @@ class QueryManager:
             client=client,
         )
 
-    async def upsert(self, *args: Any, **kwargs: Any) -> Any:
-        """Not implemented yet."""
-        raise ManagerError("upsert() is not implemented yet")
+    async def update_or_create(
+        self,
+        *,
+        defaults: dict[str, Any] | None = None,
+        using: str | None = None,
+        client: SupportsExecute | None = None,
+        **filters: Any,
+    ) -> tuple[Model, bool]:
+        """Get existing object and update it, or create it if it does not exist.
+
+        Args:
+            defaults: Field values to use when creating or updating
+            using: Database alias
+            client: Optional database client
+            **filters: Lookup conditions for finding existing object
+
+        Returns:
+            Tuple of (instance, created) where created is True if a new
+            object was made.
+        """
+        try:
+            obj = await self.get(using=using, client=client, **filters)
+        except NotFoundError:
+            create_data = _derive_create_data(filters, defaults)
+            try:
+                obj = await self.create(using=using, client=client, **create_data)
+                return obj, True
+            except IntegrityError:
+                obj = await self.get(using=using, client=client, **filters)
+
+        if not defaults:
+            return obj, False
+
+        for key, value in defaults.items():
+            setattr(obj, key, value)
+
+        saved_obj = await obj.save(
+            client=client,
+            using=using,
+            update_fields=defaults.keys(),
+        )
+        return saved_obj, False
+
+    async def upsert(
+        self,
+        *,
+        defaults: dict[str, Any],
+        using: str | None = None,
+        client: SupportsExecute | None = None,
+        **conflict_values: Any,
+    ) -> int:
+        """Execute a backend-native upsert keyed by exact model field kwargs.
+
+        Args:
+            defaults: Values to insert and update when the keyed row already
+                exists. Must be non-empty, must not overlap the key fields,
+                and must include any non-key fields required for inserts.
+            using: Database alias
+            client: Optional database client
+            **conflict_values: Exact model field values identifying the unique
+                row to upsert. These fields must map to a primary key or unique
+                constraint in the database.
+
+        Returns:
+            Number of affected rows. Uses native SQL conflict handling and
+            does not run save() hooks.
+        """
+        conflict_fields = list(conflict_values)
+        if not conflict_fields:
+            raise ValueError("upsert requires at least one conflict field")
+        if not defaults:
+            raise ValueError("upsert requires non-empty defaults")
+
+        lookup_fields = [field for field in conflict_fields if "__" in field]
+        if lookup_fields:
+            lookup_list = ", ".join(sorted(lookup_fields))
+            raise ValueError(
+                f"upsert conflict fields must be exact model field names: {lookup_list}"
+            )
+
+        default_lookup_fields = [field for field in defaults if "__" in field]
+        if default_lookup_fields:
+            lookup_list = ", ".join(sorted(default_lookup_fields))
+            raise ValueError(
+                f"upsert defaults must be exact model field names: {lookup_list}"
+            )
+
+        overlapping = sorted(set(conflict_fields) & set(defaults))
+        if overlapping:
+            overlap = ", ".join(overlapping)
+            raise ValueError(
+                f"upsert defaults cannot include conflict fields: {overlap}"
+            )
+
+        values = {**conflict_values, **defaults}
+        instance = self.model_class(**values)
+        insert_values = _dump_insert_data(instance)
+        if not insert_values:
+            raise ValueError("upsert requires at least one insertable value")
+
+        missing_insertables = [
+            field for field in conflict_fields if field not in insert_values
+        ]
+        if missing_insertables:
+            missing = ", ".join(sorted(missing_insertables))
+            raise ValueError(
+                f"upsert conflict fields must map to insertable model fields: {missing}"
+            )
+
+        missing_default_insertables = [
+            field for field in defaults if field not in insert_values
+        ]
+        if missing_default_insertables:
+            missing = ", ".join(sorted(missing_default_insertables))
+            raise ValueError(
+                f"upsert defaults must map to insertable model fields: {missing}"
+            )
+
+        resolved_update_values = {
+            key: insert_values[key] for key in defaults if key in insert_values
+        }
+        if not resolved_update_values:
+            raise ValueError("upsert requires at least one insertable default value")
+
+        exec_client = await _resolve_execution_client(using, client)
+        query = (
+            InsertQuery(self.model_class)
+            .values(**insert_values)
+            .on_conflict(
+                columns=conflict_fields,
+                action="update",
+                update_values=resolved_update_values,
+            )
+        )
+        result = await self._query()._run_mutation(query, exec_client)
+        return int(result.get("affected", 0))
 
 
 __all__ = [
