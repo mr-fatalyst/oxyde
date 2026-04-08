@@ -8,6 +8,7 @@ from pydantic import computed_field
 from oxyde import Field, Model
 from oxyde.exceptions import (
     FieldError,
+    IntegrityError,
     ManagerError,
     MultipleObjectsReturned,
     NotFoundError,
@@ -690,14 +691,23 @@ class TestManagerUpdateOrCreate:
         assert stub.calls[1]["values"] == {"age": 25}
 
     @pytest.mark.asyncio
-    async def test_update_or_create_finds_existing_changed(self):
-        """update_or_create() returns updated rows from the save path."""
-        stub = StubExecuteClient(
+    async def test_update_or_create_retries_after_integrity_error(self):
+        """update_or_create() retries with get() after a conflicting create()."""
+
+        class IntegrityRetryStub(StubExecuteClient):
+            async def execute(self, ir):
+                if ir["op"] == "insert":
+                    self.calls.append(ir)
+                    raise IntegrityError("duplicate key value violates unique constraint")
+                return await super().execute(ir)
+
+        stub = IntegrityRetryStub(
             [
+                [],
                 [
                     {
                         "id": 1,
-                        "name": "Existing",
+                        "name": "Recovered",
                         "email": "existing@example.com",
                         "age": 25,
                         "is_active": True,
@@ -705,23 +715,24 @@ class TestManagerUpdateOrCreate:
                 ],
                 {
                     "columns": ["id", "name", "email", "age", "is_active"],
-                    "rows": [[1, "Existing", "existing@example.com", 30, True]],
+                    "rows": [[1, "Recovered", "existing@example.com", 30, True]],
                 },
             ]
         )
 
         obj, created = await OxydeTestModel.objects.update_or_create(
             client=stub,
-            defaults={"age": 30},
+            defaults={"name": "Recovered", "age": 30},
             id=1,
         )
 
         assert created is False
         assert isinstance(obj, OxydeTestModel)
         assert obj.id == 1
+        assert obj.name == "Recovered"
         assert obj.age == 30
-        assert stub.calls[1]["op"] == "update"
-        assert stub.calls[1]["values"] == {"age": 30}
+        assert [call["op"] for call in stub.calls] == ["select", "insert", "select", "update"]
+        assert stub.calls[3]["values"] == {"name": "Recovered", "age": 30}
 
     @pytest.mark.asyncio
     async def test_update_or_create_existing_without_defaults_skips_update(self):

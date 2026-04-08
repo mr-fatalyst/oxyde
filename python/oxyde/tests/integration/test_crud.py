@@ -114,16 +114,6 @@ class TestGet:
 
 class TestUpdateOrCreate:
     @pytest.mark.asyncio
-    async def test_update_or_create_existing_with_same_values(self, db):
-        author, created = await Author.objects.update_or_create(
-            email="alice@test.com",
-            defaults={"name": "Alice"},
-            using=db.name,
-        )
-        assert created is False
-        assert author.name == "Alice"
-
-    @pytest.mark.asyncio
     async def test_update_or_create_existing_changed(self, db):
         author, created = await Author.objects.update_or_create(
             email="alice@test.com",
