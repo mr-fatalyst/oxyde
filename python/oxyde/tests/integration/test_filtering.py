@@ -290,40 +290,17 @@ class TestDbColumnAliasing:
 
         event, created = await AliasedEvent.objects.update_or_create(
             id=existing.id,
-            defaults={"title": "Morning Upserted"},
+            defaults={"title": "Morning Updated"},
             using=aliased_db.name,
         )
 
         assert created is False
-        assert event.title == "Morning Upserted"
+        assert event.title == "Morning Updated"
 
         refreshed = await AliasedEvent.objects.get(
             id=existing.id, using=aliased_db.name
         )
-        assert refreshed.title == "Morning Upserted"
-
-    @pytest.mark.asyncio
-    async def test_native_upsert_with_aliased_columns(self, aliased_db):
-        """Native upsert() on an existing row must use aliased db_column names."""
-        existing = await AliasedEvent.objects.get(
-            title="Morning A", using=aliased_db.name
-        )
-
-        affected = await AliasedEvent.objects.upsert(
-            id=existing.id,
-            defaults={
-                "title": "Morning Native Upserted",
-                "created": existing.created,
-            },
-            using=aliased_db.name,
-        )
-
-        assert affected == (2 if aliased_db.url.startswith("mysql") else 1)
-
-        refreshed = await AliasedEvent.objects.get(
-            id=existing.id, using=aliased_db.name
-        )
-        assert refreshed.title == "Morning Native Upserted"
+        assert refreshed.title == "Morning Updated"
 
     @pytest.mark.asyncio
     async def test_bulk_create_with_aliased_columns(self, aliased_db):

@@ -278,37 +278,6 @@ else:
 
 Uses the normal ORM create/save path, including aliased fields and save hooks.
 
-#### upsert()
-
-Insert or update using a native database upsert:
-
-```python
-affected = await User.objects.upsert(
-    email="alice@example.com",
-    defaults={"name": "Alice", "age": 31},
-)
-```
-
-Pass exact model field kwargs for the unique key. Use model field names, not
-raw `db_column` names or lookup expressions.
-
-`defaults` provides the values to insert and the values to update on conflict.
-It must be non-empty, must not overlap the key fields, and must include any
-required non-key fields for inserts.
-
-For composite unique constraints:
-
-```python
-affected = await Membership.objects.upsert(
-    account_id=1,
-    user_id=42,
-    defaults={"role": "admin"},
-)
-```
-
-`upsert()` returns the number of affected rows. It uses a native SQL write
-path, so `save()` hooks do not run.
-
 ### Updating Records
 
 #### update()

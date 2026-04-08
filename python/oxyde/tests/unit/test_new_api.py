@@ -133,7 +133,6 @@ def test_manager_methods():
     assert hasattr(manager, "get")
     assert hasattr(manager, "get_or_create")
     assert hasattr(manager, "update_or_create")
-    assert hasattr(manager, "upsert")
     assert hasattr(manager, "create")
 
     # Note: update/delete/increment are on Query (via MutationMixin), accessed through filter()

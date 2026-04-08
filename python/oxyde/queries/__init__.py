@@ -19,7 +19,6 @@ Execution Methods:
     - get_or_none(): Get one or None
     - get_or_create(): Get existing object or create a new one
     - update_or_create(): Get existing object and update it, or create a new one
-    - upsert(): Native database upsert keyed by exact kwargs plus defaults, optionally returns models
     - count(), exists(): Aggregate queries
     - create(), bulk_create(): Insert objects
     - update(), delete(): Modify/remove objects

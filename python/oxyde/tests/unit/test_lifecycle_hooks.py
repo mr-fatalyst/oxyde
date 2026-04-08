@@ -555,49 +555,6 @@ class TestUpdateOrCreateHooks:
         assert obj.email == "alice@example.com"
         assert stub.calls[1]["values"]["email"] == "alice@example.com"
 
-    @pytest.mark.asyncio
-    async def test_native_upsert_does_not_call_save_hooks(self):
-        """Native upsert() should bypass save hooks and rely on SQL conflict handling."""
-        hook_calls: list[str] = []
-
-        class HookedModel(Model):
-            id: int | None = Field(default=None, db_pk=True)
-            email: str
-            name: str
-
-            class Meta:
-                is_table = True
-
-            async def pre_save(
-                self, *, is_create: bool, update_fields: set[str] | None = None
-            ) -> None:
-                hook_calls.append("pre_save")
-
-            async def post_save(
-                self, *, is_create: bool, update_fields: set[str] | None = None
-            ) -> None:
-                hook_calls.append("post_save")
-
-        stub = StubExecuteClient(
-            [
-                {
-                    "affected": 1,
-                    "columns": ["id", "email", "name"],
-                    "rows": [[1, "hooked@example.com", "Updated"]],
-                }
-            ]
-        )
-
-        affected = await HookedModel.objects.upsert(
-            email="hooked@example.com",
-            defaults={"name": "Updated"},
-            client=stub,
-        )
-
-        assert affected == 1
-        assert stub.calls[0]["op"] == "insert"
-        assert hook_calls == []
-
 
 class TestHookExceptionHandling:
     """Test exception handling in hooks."""

@@ -106,12 +106,11 @@ pub(crate) fn execute<'py>(
                 } else {
                     // Bulk insert: return only PKs
                     let pk_column = ir.pk_column.as_deref();
-                    let (affected, ids) =
-                        execute_insert_returning(&pool_name, &sql, &params, pk_column)
-                            .await
-                            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                    let ids = execute_insert_returning(&pool_name, &sql, &params, pk_column)
+                        .await
+                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 
-                    encode_insert_result(affected as usize, &ids)
+                    encode_insert_result(ids.len(), &ids)
                 }
             }
             oxyde_codec::Operation::Update | oxyde_codec::Operation::Delete => {
@@ -240,12 +239,12 @@ pub(crate) fn execute_in_transaction<'py>(
                     .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
                     let pk_column = ir.pk_column.as_deref();
-                    let (affected, ids) =
+                    let ids =
                         execute_insert_returning_in_transaction(tx_id, &sql, &params, pk_column)
                             .await
                             .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
 
-                    encode_insert_result(affected as usize, &ids)
+                    encode_insert_result(ids.len(), &ids)
                 }
             }
             oxyde_codec::Operation::Update | oxyde_codec::Operation::Delete => {

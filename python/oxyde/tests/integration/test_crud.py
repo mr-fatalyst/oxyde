@@ -139,53 +139,13 @@ class TestUpdateOrCreate:
     @pytest.mark.asyncio
     async def test_update_or_create_new(self, db):
         author, created = await Author.objects.update_or_create(
-            email="upsert@test.com",
-            defaults={"name": "Upserted Author"},
+            email="created@test.com",
+            defaults={"name": "Created Author"},
             using=db.name,
         )
         assert created is True
-        assert author.name == "Upserted Author"
-        assert author.email == "upsert@test.com"
-
-
-class TestUpsert:
-    @pytest.mark.asyncio
-    async def test_upsert_existing_changed(self, db):
-        affected = await Author.objects.upsert(
-            email="alice@test.com",
-            defaults={"name": "Alice Updated"},
-            using=db.name,
-        )
-        assert affected == (2 if db.url.startswith("mysql") else 1)
-
-        refreshed = await Author.objects.get(email="alice@test.com", using=db.name)
-        assert refreshed.name == "Alice Updated"
-
-    @pytest.mark.asyncio
-    async def test_upsert_new(self, db):
-        affected = await Author.objects.upsert(
-            email="native-upsert@test.com",
-            defaults={"name": "Native Upserted Author"},
-            using=db.name,
-        )
-        assert affected == 1
-
-        author = await Author.objects.get(email="native-upsert@test.com", using=db.name)
-        assert author.name == "Native Upserted Author"
-        assert author.email == "native-upsert@test.com"
-
-    @pytest.mark.asyncio
-    async def test_upsert_returning(self, db):
-        rows = await Author.objects.upsert(
-            email="alice@test.com",
-            defaults={"name": "Alice Returning"},
-            returning=True,
-            using=db.name,
-        )
-
-        assert len(rows) == 1
-        assert rows[0].email == "alice@test.com"
-        assert rows[0].name == "Alice Returning"
+        assert author.name == "Created Author"
+        assert author.email == "created@test.com"
 
 
 class TestSave:

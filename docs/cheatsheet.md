@@ -42,8 +42,7 @@ Complete API reference.
 <tr><td><code>get()</code></td><td><code>User.objects.get(id=42)</code></td><td><code>Model</code></td><td>Raises if 0 or &gt;1</td></tr>
 <tr><td><code>get_or_none()</code></td><td><code>User.objects.get_or_none(id=42)</code></td><td><code>Model | None</code></td><td>None if not found</td></tr>
 <tr><td><code>get_or_create()</code></td><td><code>User.objects.get_or_create(email="...")</code></td><td><code>(Model, bool)</code></td><td>Atomic</td></tr>
-<tr><td><code>update_or_create()</code></td><td><code>User.objects.update_or_create(email="...", defaults={"name": "A"})</code></td><td><code>(Model, bool)</code></td><td>Upsert + return</td></tr>
-<tr><td><code>upsert()</code></td><td><code>User.objects.upsert(email="...", defaults={"name": "A"})</code></td><td><code>int</code></td><td>Bulk UPDATE</td></tr>
+<tr><td><code>update_or_create()</code></td><td><code>User.objects.update_or_create(email="...", defaults={"name": "A"})</code></td><td><code>(Model, bool)</code></td><td>Get, update, or create</td></tr>
 <tr><td><code>count()</code></td><td><code>User.objects.count()</code></td><td><code>int</code></td><td>Count all</td></tr>
 <tr><th colspan="4">Query Builder</th></tr>
 <tr><td><code>filter()</code></td><td><code>.filter(is_active=True, age__gte=18)</code></td><td><code>Query</code></td><td>WHERE conditions</td></tr>

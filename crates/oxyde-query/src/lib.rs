@@ -335,50 +335,6 @@ mod tests {
     }
 
     #[test]
-    fn test_postgres_on_conflict_update_sql() {
-        let ir = QueryIR {
-            op: Operation::Insert,
-            table: "users".into(),
-            values: Some(HashMap::from([
-                ("email".into(), rmpv_str("test@example.com")),
-                ("name".into(), rmpv_str("Updated")),
-            ])),
-            on_conflict: Some(OnConflict {
-                columns: vec!["email".into()],
-                action: ConflictAction::Update,
-                update_values: Some(HashMap::from([("name".into(), rmpv_str("Updated"))])),
-            }),
-            ..Default::default()
-        };
-        let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
-        let upper = sql.to_uppercase();
-        assert!(upper.contains("ON CONFLICT"), "{}", sql);
-        assert!(upper.contains("DO UPDATE"), "{}", sql);
-    }
-
-    #[test]
-    fn test_sqlite_on_conflict_update_sql() {
-        let ir = QueryIR {
-            op: Operation::Insert,
-            table: "users".into(),
-            values: Some(HashMap::from([
-                ("email".into(), rmpv_str("test@example.com")),
-                ("name".into(), rmpv_str("Updated")),
-            ])),
-            on_conflict: Some(OnConflict {
-                columns: vec!["email".into()],
-                action: ConflictAction::Update,
-                update_values: Some(HashMap::from([("name".into(), rmpv_str("Updated"))])),
-            }),
-            ..Default::default()
-        };
-        let (sql, _) = build_sql(&ir, Dialect::Sqlite).unwrap();
-        let upper = sql.to_uppercase();
-        assert!(upper.contains("ON CONFLICT"), "{}", sql);
-        assert!(upper.contains("DO UPDATE"), "{}", sql);
-    }
-
-    #[test]
     fn test_ilike_uses_column_alias() {
         let ir = QueryIR {
             table: "products".into(),
