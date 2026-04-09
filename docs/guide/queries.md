@@ -134,6 +134,9 @@ users = await User.objects.order_by("-created_at").all()
 
 # Multiple columns
 users = await User.objects.order_by("status", "-created_at").all()
+
+# Random order
+users = await User.objects.order_by("?").all()
 ```
 
 ### Pagination
