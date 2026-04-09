@@ -57,6 +57,19 @@ class TestOrderBy:
         assert names == ["Charlie", "Bob", "Alice"]
 
 
+class TestOrderByRandom:
+    @pytest.mark.asyncio
+    async def test_order_by_random_returns_all_records(self, db):
+        authors = await Author.objects.order_by("?").all(using=db.name)
+        assert len(authors) == 3
+        assert {a.name for a in authors} == {"Alice", "Bob", "Charlie"}
+
+    @pytest.mark.asyncio
+    async def test_order_by_random_combined_with_limit(self, db):
+        authors = await Author.objects.order_by("?").limit(2).all(using=db.name)
+        assert len(authors) == 2
+
+
 class TestDistinct:
     @pytest.mark.asyncio
     async def test_distinct(self, db):

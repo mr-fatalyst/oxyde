@@ -437,6 +437,51 @@ mod tests {
     }
 
     #[test]
+    fn test_order_by_random() {
+        let ir = QueryIR {
+            table: "authors".into(),
+            order_by: Some(vec![("?".into(), "RANDOM".into())]),
+            ..Default::default()
+        };
+
+        let (sqlite_sql, _) = build_sql(&ir, Dialect::Sqlite).unwrap();
+        assert!(
+            sqlite_sql.contains("ORDER BY RANDOM()"),
+            "SQLite: expected ORDER BY RANDOM(), got: {sqlite_sql}"
+        );
+
+        let (pg_sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(
+            pg_sql.contains("ORDER BY RANDOM()"),
+            "Postgres: expected ORDER BY RANDOM(), got: {pg_sql}"
+        );
+
+        let (mysql_sql, _) = build_sql(&ir, Dialect::Mysql).unwrap();
+        assert!(
+            mysql_sql.contains("ORDER BY RAND()"),
+            "MySQL: expected ORDER BY RAND(), got: {mysql_sql}"
+        );
+    }
+
+    #[test]
+    fn test_order_by_random_mixed_with_field() {
+        let ir = QueryIR {
+            table: "authors".into(),
+            order_by: Some(vec![
+                ("name".into(), "ASC".into()),
+                ("?".into(), "RANDOM".into()),
+            ]),
+            ..Default::default()
+        };
+
+        let (sql, _) = build_sql(&ir, Dialect::Sqlite).unwrap();
+        assert!(
+            sql.contains("ORDER BY") && sql.contains("\"name\" ASC") && sql.contains("RANDOM()"),
+            "expected mixed ORDER BY with field and RANDOM(), got: {sql}"
+        );
+    }
+
+    #[test]
     fn test_union_all_generates_correct_sql() {
         let union_ir = QueryIR {
             table: "posts".into(),

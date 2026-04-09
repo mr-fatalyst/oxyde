@@ -237,7 +237,7 @@ class Query(
         # Convert field names to db_columns for Rust (Rust operates on columns only)
         db_columns = [self._column_for_field(f) for f in fields]
         order_by = [
-            (self._column_for_field(field), direction)
+            (field if field == "?" else self._column_for_field(field), direction)
             for field, direction in self._order_by_fields
         ]
 
