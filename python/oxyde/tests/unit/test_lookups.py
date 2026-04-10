@@ -207,6 +207,7 @@ class TestStringLookups:
 
         assert cond["operator"] == operator
         assert cond["value"] == pattern_fn("test")
+        assert "escape" not in cond
 
     def test_iexact_lookup(self):
         """Test iexact lookup."""
@@ -225,6 +226,7 @@ class TestStringLookups:
 
         assert cond["operator"] == "LIKE"
         assert "\\%" in cond["value"]
+        assert cond["escape"] == "\\"
 
     def test_contains_escapes_underscore(self):
         """Test that contains escapes underscore."""
@@ -234,6 +236,17 @@ class TestStringLookups:
 
         assert cond["operator"] == "LIKE"
         assert "\\_" in cond["value"]
+        assert cond["escape"] == "\\"
+
+    def test_contains_escapes_backslash(self):
+        """Test that contains escapes backslash."""
+        registered_tables()
+        ir = OxydeTestModel.objects.filter(name__contains=r"test\value").to_ir()
+        cond = get_filter_condition(ir)
+
+        assert cond["operator"] == "LIKE"
+        assert "\\\\" in cond["value"]
+        assert cond["escape"] == "\\"
 
     def test_string_lookup_requires_string_value(self):
         """Test that string lookups require string values."""
@@ -511,7 +524,9 @@ class TestMultipleFilters:
         """Test chaining filter() calls."""
         registered_tables()
         # Manager.filter() returns Query, chain with filter()
-        query = OxydeTestModel.objects.filter(name__icontains="test").filter(age__gte=18)
+        query = OxydeTestModel.objects.filter(name__icontains="test").filter(
+            age__gte=18
+        )
         ir = query.to_ir()
         conditions = get_and_conditions(ir)
 

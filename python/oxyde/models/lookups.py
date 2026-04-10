@@ -344,11 +344,15 @@ def _build_lookup_conditions(
         if lookup in {"icontains", "istartswith", "iendswith"}:
             operator = "ILIKE"
 
-        # Escape SQL wildcards to treat them as literal characters
-        # Order matters: escape backslash first, then wildcards
-        escaped_value = (
-            value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        )
+        escape = None
+        escaped_value = value
+        if any(ch in value for ch in ("\\", "%", "_")):
+            # Escape SQL wildcards to treat them as literal characters
+            # Order matters: escape backslash first, then wildcards
+            escaped_value = (
+                value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            escape = "\\"
 
         if lookup.endswith("contains"):
             pattern = f"%{escaped_value}%"
@@ -357,7 +361,15 @@ def _build_lookup_conditions(
         else:  # endswith / iendswith
             pattern = f"%{escaped_value}"
 
-        return [Condition(field_name, operator, pattern, column=column_meta.db_column)]
+        return [
+            Condition(
+                field_name,
+                operator,
+                pattern,
+                column=column_meta.db_column,
+                escape=escape,
+            )
+        ]
 
     if lookup == "iexact":
         if not isinstance(value, str):

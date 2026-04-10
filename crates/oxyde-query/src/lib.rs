@@ -136,6 +136,7 @@ mod tests {
             operator: operator.into(),
             value,
             column: None,
+            escape: None,
         })
     }
 
@@ -151,6 +152,22 @@ mod tests {
             operator: operator.into(),
             value,
             column: Some(column.into()),
+            escape: None,
+        })
+    }
+
+    fn filter_with_escape(
+        field: &str,
+        operator: &str,
+        value: rmpv::Value,
+        escape: &str,
+    ) -> FilterNode {
+        FilterNode::Condition(Filter {
+            field: field.into(),
+            operator: operator.into(),
+            value,
+            column: None,
+            escape: Some(escape.into()),
         })
     }
 
@@ -221,9 +238,55 @@ mod tests {
         };
         let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
         assert!(sql.to_uppercase().contains("LIKE"));
+        assert!(!sql.contains("ESCAPE"));
         assert_eq!(params.len(), 1);
         match &params[0] {
             Value::String(Some(val)) => assert_eq!(val.as_ref(), "%rust%"),
+            other => panic!("unexpected parameter value {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_select_like_escape_lookup() {
+        let ir = QueryIR {
+            table: "articles".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_with_escape(
+                "title",
+                "LIKE",
+                rmpv_str(r"%snake\_case%"),
+                "\\",
+            )),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Sqlite).unwrap();
+        assert!(sql.contains("ESCAPE"));
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            Value::String(Some(val)) => assert_eq!(val.as_ref(), r"%snake\_case%"),
+            other => panic!("unexpected parameter value {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_select_ilike_escape_lookup() {
+        let ir = QueryIR {
+            table: "articles".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_with_escape(
+                "title",
+                "ILIKE",
+                rmpv_str(r"%snake\_case%"),
+                "\\",
+            )),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Sqlite).unwrap();
+        assert!(sql.to_uppercase().contains("LOWER"));
+        assert!(sql.contains("ESCAPE"));
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            Value::String(Some(val)) => assert_eq!(val.as_ref(), r"%snake\_case%"),
             other => panic!("unexpected parameter value {:?}", other),
         }
     }

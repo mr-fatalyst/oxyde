@@ -99,6 +99,8 @@ pub struct Filter {
     pub value: rmpv::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub column: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escape: Option<String>,
 }
 
 /// Filter node for complex logical expressions (Q-expressions)

@@ -97,6 +97,7 @@ async fn sqlite_end_to_end_pipeline() {
             operator: "=".into(),
             value: rmpv::Value::Integer(1.into()),
             column: None,
+            escape: None,
         })),
         limit: None,
         offset: None,

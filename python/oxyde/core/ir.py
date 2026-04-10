@@ -78,6 +78,7 @@ def filter_condition(
     value: Any,
     *,
     column: str | None = None,
+    escape: str | None = None,
 ) -> FilterNode:
     """Create a simple condition node."""
     payload: FilterNode = {
@@ -88,6 +89,8 @@ def filter_condition(
     }
     if column is not None and column != field:
         payload["column"] = column
+    if escape is not None:
+        payload["escape"] = escape
     return payload
 
 

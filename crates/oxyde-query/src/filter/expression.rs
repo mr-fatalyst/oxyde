@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use oxyde_codec::{Aggregate, Filter, FilterNode};
-use sea_query::{BinOper, Expr, Func, SimpleExpr, Value};
+use sea_query::{Expr, Func, LikeExpr, SimpleExpr, Value};
 
 use crate::aggregate::build_aggregate;
 use crate::error::{QueryError, Result};
@@ -38,6 +38,21 @@ fn resolve_col_type<'a>(
 ) -> Option<&'a str> {
     let col_key = col_name.rsplit('.').next().unwrap_or(col_name);
     col_types.and_then(|ct| ct.get(col_key).map(String::as_str))
+}
+
+fn like_expr(filter: &Filter, pattern: String) -> Result<LikeExpr> {
+    let expr = LikeExpr::new(pattern);
+    let Some(escape) = filter.escape.as_deref() else {
+        return Ok(expr);
+    };
+
+    let mut chars = escape.chars();
+    match (chars.next(), chars.next()) {
+        (Some(ch), None) => Ok(expr.escape(ch)),
+        _ => Err(QueryError::InvalidQuery(
+            "LIKE escape requires a single character".into(),
+        )),
+    }
 }
 
 /// Build filter clause from FilterNode tree.
@@ -123,7 +138,7 @@ fn apply_filter(
             let text = filter.value.as_str().ok_or_else(|| {
                 QueryError::InvalidQuery("LIKE operator requires string value".into())
             })?;
-            col.binary(BinOper::Like, Expr::val(Value::from(text.to_string())))
+            col.like(like_expr(filter, text.to_string())?)
         }
         "ILIKE" => {
             let text = filter.value.as_str().ok_or_else(|| {
@@ -131,7 +146,7 @@ fn apply_filter(
             })?;
             let lowered = text.to_lowercase();
             let lower_col = Func::lower(make_col_expr(col_name, default_table));
-            Expr::expr(lower_col).binary(BinOper::Like, Expr::val(Value::from(lowered)))
+            Expr::expr(lower_col).like(like_expr(filter, lowered)?)
         }
         "IN" => {
             if let rmpv::Value::Array(arr) = &filter.value {

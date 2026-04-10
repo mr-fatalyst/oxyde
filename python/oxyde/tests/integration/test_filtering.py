@@ -36,6 +36,36 @@ class TestBasicFilters:
         assert len(posts) == 1
         assert posts[0].title == "Async Python"
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("lookup", "value"),
+        [
+            ("contains", "snake_case"),
+            ("icontains", "SNAKE_CASE"),
+            ("startswith", "snake_case"),
+            ("istartswith", "SNAKE_CASE"),
+            ("endswith", "case_title"),
+            ("iendswith", "CASE_TITLE"),
+        ],
+    )
+    async def test_pattern_lookups_match_literal_underscore(self, db, lookup, value):
+        await Post.objects.create(
+            title="snake_case_title",
+            body="",
+            author_id=1,
+            category_id=1,
+            views=1,
+            published=True,
+            using=db.name,
+        )
+
+        posts = await Post.objects.filter(**{f"title__{lookup}": value}).all(
+            using=db.name
+        )
+
+        assert len(posts) == 1
+        assert posts[0].title == "snake_case_title"
+
 
 class TestNumericFilters:
     @pytest.mark.asyncio
