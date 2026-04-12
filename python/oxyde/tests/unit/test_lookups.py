@@ -217,6 +217,27 @@ class TestStringLookups:
 
         assert cond["operator"] == "ILIKE"
         assert cond["value"] == "Test"
+        assert "escape" not in cond
+
+    def test_iexact_escapes_underscore(self):
+        """Test that iexact escapes underscore."""
+        registered_tables()
+        ir = OxydeTestModel.objects.filter(name__iexact="test_user").to_ir()
+        cond = get_filter_condition(ir)
+
+        assert cond["operator"] == "ILIKE"
+        assert "\\_" in cond["value"]
+        assert cond["escape"] == "\\"
+
+    def test_iexact_escapes_percent(self):
+        """Test that iexact escapes percent."""
+        registered_tables()
+        ir = OxydeTestModel.objects.filter(name__iexact="100%done").to_ir()
+        cond = get_filter_condition(ir)
+
+        assert cond["operator"] == "ILIKE"
+        assert "\\%" in cond["value"]
+        assert cond["escape"] == "\\"
 
     def test_contains_escapes_wildcards(self):
         """Test that contains escapes SQL wildcards."""

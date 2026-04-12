@@ -374,7 +374,22 @@ def _build_lookup_conditions(
     if lookup == "iexact":
         if not isinstance(value, str):
             raise FieldLookupValueError("Lookup 'iexact' requires a string value")
-        return [Condition(field_name, "ILIKE", value, column=column_meta.db_column)]
+        escape = None
+        escaped_value = value
+        if any(ch in value for ch in ("\\", "%", "_")):
+            escaped_value = (
+                value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            )
+            escape = "\\"
+        return [
+            Condition(
+                field_name,
+                "ILIKE",
+                escaped_value,
+                column=column_meta.db_column,
+                escape=escape,
+            )
+        ]
 
     if lookup == "year":
         return _build_year_conditions(field_name, value, column_meta)

@@ -66,6 +66,25 @@ class TestBasicFilters:
         assert len(posts) == 1
         assert posts[0].title == "snake_case_title"
 
+    @pytest.mark.asyncio
+    async def test_iexact_matches_literal_underscore(self, db):
+        await Post.objects.create(
+            title="snake_case_title",
+            body="",
+            author_id=1,
+            category_id=1,
+            views=1,
+            published=True,
+            using=db.name,
+        )
+
+        posts = await Post.objects.filter(
+            title__iexact="SNAKE_CASE_TITLE"
+        ).all(using=db.name)
+
+        assert len(posts) == 1
+        assert posts[0].title == "snake_case_title"
+
 
 class TestNumericFilters:
     @pytest.mark.asyncio
