@@ -28,7 +28,7 @@ dependencies = [
     "pydantic>=2.0",
     "msgpack>=1.0",
     "typer>=0.24",
-    "oxyde-core>=0.5.1,<0.6.0",
+    "oxyde-core>=0.5.0,<0.6.0",
 ]
 
 [project.optional-dependencies]
