@@ -42,10 +42,12 @@ class PaginationMixin:
         return clone
 
     def order_by(self, *fields: str) -> Self:
-        """Set ORDER BY fields."""
+        """Set ORDER BY fields. Use "?" for random ordering (ORDER BY RANDOM())."""
         clone = self._clone()
         for field in fields:
-            if field.startswith("-"):
+            if field == "?":
+                clone._order_by_fields.append(("?", "RANDOM"))
+            elif field.startswith("-"):
                 clone._order_by_fields.append((field[1:], "DESC"))
             else:
                 clone._order_by_fields.append((field, "ASC"))

@@ -47,7 +47,7 @@ Complete API reference.
 <tr><th colspan="4">Query Builder</th></tr>
 <tr><td><code>filter()</code></td><td><code>.filter(is_active=True, age__gte=18)</code></td><td><code>Query</code></td><td>WHERE conditions</td></tr>
 <tr><td><code>exclude()</code></td><td><code>.exclude(status="banned")</code></td><td><code>Query</code></td><td>WHERE NOT</td></tr>
-<tr><td><code>order_by()</code></td><td><code>.order_by("-created_at")</code></td><td><code>Query</code></td><td>ORDER BY</td></tr>
+<tr><td><code>order_by()</code></td><td><code>.order_by("-created_at")</code> / <code>.order_by("?")</code></td><td><code>Query</code></td><td>ORDER BY (use <code>"?"</code> for random)</td></tr>
 <tr><td><code>limit()</code></td><td><code>.limit(10)</code></td><td><code>Query</code></td><td>LIMIT</td></tr>
 <tr><td><code>offset()</code></td><td><code>.offset(20)</code></td><td><code>Query</code></td><td>OFFSET</td></tr>
 <tr><td><code>prefetch()</code></td><td><code>.prefetch("posts")</code></td><td><code>Query</code></td><td>Load reverse FK/M2M</td></tr>

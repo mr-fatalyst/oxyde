@@ -107,6 +107,10 @@ fn build_select_statement(ir: &QueryIR) -> Result<SelectStatement> {
     // ORDER BY, LIMIT, OFFSET — placed after UNION by sea-query
     if let Some(order_by) = &ir.order_by {
         for (field, direction) in order_by {
+            if field == "?" {
+                query.order_by_expr(Func::random().into(), Order::Asc);
+                continue;
+            }
             let order = match direction.to_uppercase().as_str() {
                 "ASC" => Order::Asc,
                 "DESC" => Order::Desc,
