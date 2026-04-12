@@ -31,13 +31,14 @@ Creation:
         → Condition("name", "LIKE", "%alice%")
 
 IR Format:
-    to_ir() returns dict for Rust codec:
+    to_ir() returns dict for Rust codec. For a LIKE condition with an
+    escape character:
     {
         "type": "condition",
-        "field": "age",
-        "op": ">=",
-        "value": 18,
-        "column": "age",
+        "field": "name",
+        "op": "LIKE",
+        "value": "A\\_%",
+        "column": "name",
         "escape": "\\"
     }
 """
