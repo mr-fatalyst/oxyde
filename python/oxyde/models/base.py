@@ -100,7 +100,12 @@ from oxyde.models.metadata import (
 )
 from oxyde.models.registry import finalize_pending, register_table
 from oxyde.models.serializers import _dump_update_data
-from oxyde.models.utils import _extract_constraints, _unpack_annotated, _unwrap_optional
+from oxyde.models.utils import (
+    _extract_constraints,
+    _extract_inner_constraints,
+    _unpack_annotated,
+    _unwrap_optional,
+)
 
 
 def _get_pk_field_name(model_cls: type) -> str:
@@ -523,7 +528,11 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                 )
 
             # Extract type constraints (max_length, max_digits, decimal_places)
+            # For list fields, inner Annotated constraints override top-level
+            # (top-level max_length on list = list size, inner = element constraint)
             constraints = _extract_constraints(model_field)
+            if get_origin(python_type) is list:
+                constraints.update(_extract_inner_constraints(model_field))
 
             # Determine actual DB column name
             if fk_info is not None:

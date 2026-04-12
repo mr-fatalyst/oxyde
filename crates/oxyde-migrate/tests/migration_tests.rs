@@ -923,3 +923,93 @@ fn test_rename_table_sql() {
     assert_eq!(sql.len(), 1);
     assert!(sql[0].contains("RENAME") || sql[0].contains("ALTER TABLE"));
 }
+
+#[test]
+fn test_array_field_preserves_constraints() {
+    let table = TableDef {
+        name: "items".into(),
+        fields: vec![
+            FieldDef {
+                name: "id".into(),
+                python_type: "int".into(),
+                db_type: None,
+                nullable: false,
+                primary_key: true,
+                unique: false,
+                default: None,
+                auto_increment: true,
+                max_length: None,
+                max_digits: None,
+                decimal_places: None,
+            },
+            FieldDef {
+                name: "tags".into(),
+                python_type: "str[]".into(),
+                db_type: None,
+                nullable: false,
+                primary_key: false,
+                unique: false,
+                default: None,
+                auto_increment: false,
+                max_length: Some(100),
+                max_digits: None,
+                decimal_places: None,
+            },
+            FieldDef {
+                name: "prices".into(),
+                python_type: "decimal[]".into(),
+                db_type: None,
+                nullable: false,
+                primary_key: false,
+                unique: false,
+                default: None,
+                auto_increment: false,
+                max_length: None,
+                max_digits: Some(10),
+                decimal_places: Some(2),
+            },
+        ],
+        indexes: vec![],
+        foreign_keys: vec![],
+        checks: vec![],
+        comment: None,
+    };
+
+    // PostgreSQL: array with inner constraints
+    let pg_sql = MigrationOp::CreateTable {
+        table: table.clone(),
+    }
+    .to_sql(Dialect::Postgres)
+    .unwrap();
+    let create = &pg_sql[0];
+    assert!(
+        create.contains("VARCHAR(100)[]"),
+        "PG str[] with max_length=100 should be VARCHAR(100)[], got: {create}"
+    );
+    assert!(
+        create.contains("NUMERIC(10,2)[]"),
+        "PG decimal[] with max_digits should be NUMERIC(10,2)[], got: {create}"
+    );
+
+    // MySQL: arrays become JSON
+    let mysql_sql = MigrationOp::CreateTable {
+        table: table.clone(),
+    }
+    .to_sql(Dialect::Mysql)
+    .unwrap();
+    let create = &mysql_sql[0];
+    assert!(
+        create.contains("JSON"),
+        "MySQL arrays should be JSON, got: {create}"
+    );
+
+    // SQLite: arrays become TEXT
+    let sqlite_sql = MigrationOp::CreateTable { table }
+        .to_sql(Dialect::Sqlite)
+        .unwrap();
+    let create = &sqlite_sql[0];
+    assert!(
+        create.contains("TEXT"),
+        "SQLite arrays should be TEXT, got: {create}"
+    );
+}

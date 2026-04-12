@@ -18,11 +18,16 @@ Functions:
         str         →  (str, False)
 
     _extract_constraints(field_info) -> dict[str, int]:
-        Extract type constraints from FieldInfo or Annotated metadata.
+        Extract type constraints from top-level FieldInfo.
         Used for VARCHAR(n), DECIMAL(m,d) type inference.
 
         Field(max_length=100)           →  {"max_length": 100}
         Field(max_digits=10, decimal_places=2)  →  {"max_digits": 10, "decimal_places": 2}
+
+    _extract_inner_constraints(field_info) -> dict[str, int]:
+        Extract constraints from inner Annotated for list[Annotated[T, Field(...)]].
+
+        list[Annotated[str, Field(max_length=100)]]  →  {"max_length": 100}
 """
 
 from __future__ import annotations
@@ -61,30 +66,51 @@ def _unwrap_optional(hint: Any) -> tuple[Any, bool]:
 _CONSTRAINT_ATTRS = ("max_length", "max_digits", "decimal_places")
 
 
-def _extract_constraints(field_info: FieldInfo) -> dict[str, int]:
-    """Extract type constraints from FieldInfo or Annotated metadata.
-
-    Checks both direct FieldInfo attributes and Annotated metadata tuple.
-    Returns only constraints that are present and valid integers.
-    """
+def _collect_attrs(sources: list[Any]) -> dict[str, int]:
+    """Collect constraint attributes from a list of metadata sources."""
     result: dict[str, int] = {}
     for attr in _CONSTRAINT_ATTRS:
-        val = getattr(field_info, attr, None)
-        if val is None:
-            for meta in getattr(field_info, "metadata", ()):
-                val = getattr(meta, attr, None)
-                if val is not None:
-                    break
-        if val is not None:
-            try:
-                result[attr] = int(val)
-            except (TypeError, ValueError):
-                continue
+        for source in sources:
+            val = getattr(source, attr, None)
+            if val is not None:
+                try:
+                    result[attr] = int(val)
+                except (TypeError, ValueError):
+                    continue
+                break
     return result
+
+
+def _extract_constraints(field_info: FieldInfo) -> dict[str, int]:
+    """Extract type constraints from top-level FieldInfo."""
+    return _collect_attrs([field_info, *getattr(field_info, "metadata", ())])
+
+
+def _extract_inner_constraints(field_info: FieldInfo) -> dict[str, int]:
+    """Extract constraints from inner Annotated type for list fields.
+
+    For list[Annotated[T, Field(max_length=100)]], extracts max_length=100
+    from the inner FieldInfo metadata.
+    """
+    annotation = getattr(field_info, "annotation", None)
+    if annotation is None:
+        return {}
+    unwrapped, _ = _unwrap_optional(annotation)
+    if get_origin(unwrapped) is not list:
+        return {}
+    inner_args = get_args(unwrapped)
+    if not inner_args or get_origin(inner_args[0]) is not Annotated:
+        return {}
+    sources: list[Any] = []
+    for ann in get_args(inner_args[0])[1:]:
+        sources.append(ann)
+        sources.extend(getattr(ann, "metadata", ()))
+    return _collect_attrs(sources)
 
 
 __all__ = [
     "_unpack_annotated",
     "_unwrap_optional",
     "_extract_constraints",
+    "_extract_inner_constraints",
 ]

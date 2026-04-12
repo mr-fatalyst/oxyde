@@ -44,6 +44,11 @@ class TypeModel(Model):
     data: dict | None = Field(default=None, db_nullable=True)
     blob: bytes | None = Field(default=None, db_nullable=True)
     tags: list[str] | None = Field(default=None, db_nullable=True)
+    int_tags: list[int] | None = Field(default=None, db_nullable=True)
+    uuid_tags: list[UUID] | None = Field(default=None, db_nullable=True)
+    decimal_tags: list[Decimal] | None = Field(
+        default=None, db_nullable=True, max_digits=10, decimal_places=2
+    )
 
     class Meta:
         is_table = True
@@ -74,6 +79,21 @@ FILTER_CASES = [
         "list_str_array",
         {"tags": ["a", "b"]},
         [("Array", ("String", ["a", "b"]))],
+    ),
+    (
+        "list_int_array",
+        {"int_tags": [1, 2, 3]},
+        [("Array", ("BigInt", [1, 2, 3]))],
+    ),
+    (
+        "list_uuid_array",
+        {"uuid_tags": [U]},
+        [("Array", ("Uuid", [str(U)]))],
+    ),
+    (
+        "list_decimal_array",
+        {"decimal_tags": [DEC]},
+        [("Array", ("Decimal", [str(DEC)]))],
     ),
 ]
 

@@ -328,3 +328,40 @@ class TestTimedeltaRoundTrip:
         obj = await TdModel.objects.create(duration=td, using=db.name)
         fetched = await TdModel.objects.get(id=obj.id, using=db.name)
         assert fetched.duration == td
+
+
+class TestArrayRoundTrip:
+    @pytest.mark.asyncio
+    async def test_str_list(self, db):
+        obj = await AllTypes.objects.create(
+            str_list=["alpha", "beta", "gamma"], using=db.name
+        )
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.str_list == ["alpha", "beta", "gamma"]
+        assert type(fetched.str_list) is list
+
+    @pytest.mark.asyncio
+    async def test_int_list(self, db):
+        obj = await AllTypes.objects.create(int_list=[1, 2, 3], using=db.name)
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.int_list == [1, 2, 3]
+        assert type(fetched.int_list) is list
+
+    @pytest.mark.asyncio
+    async def test_empty_list(self, db):
+        obj = await AllTypes.objects.create(str_list=[], using=db.name)
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.str_list == []
+
+    @pytest.mark.asyncio
+    async def test_decimal_list(self, db):
+        vals = [Decimal("1.50"), Decimal("99.99")]
+        obj = await AllTypes.objects.create(decimal_list=vals, using=db.name)
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.decimal_list == vals
+
+    @pytest.mark.asyncio
+    async def test_null_list(self, db):
+        obj = await AllTypes.objects.create(str_list=None, using=db.name)
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.str_list is None

@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from typing import Annotated
 from uuid import UUID
 
 import pytest
@@ -136,6 +137,13 @@ class AllTypes(Model):
         default=None, db_nullable=True, max_digits=20, decimal_places=10
     )
     json_val: dict | None = Field(default=None, db_nullable=True)
+    str_list: list[Annotated[str, Field(max_length=100)]] | None = Field(
+        default=None, db_nullable=True
+    )
+    int_list: list[int] | None = Field(default=None, db_nullable=True)
+    decimal_list: list[Annotated[Decimal, Field(max_digits=10, decimal_places=2)]] | None = Field(
+        default=None, db_nullable=True
+    )
 
     class Meta:
         is_table = True

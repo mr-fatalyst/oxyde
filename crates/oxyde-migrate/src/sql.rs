@@ -121,13 +121,26 @@ fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
     if let Some(db_type) = &field.db_type {
         return translate_db_type(db_type, dialect);
     }
+    if let Some(inner) = field.python_type.strip_suffix("[]") {
+        let inner_sql = resolve_scalar_type(inner, field, dialect);
+        return match dialect {
+            Dialect::Postgres => format!("{inner_sql}[]"),
+            Dialect::Mysql => "JSON".to_string(),
+            Dialect::Sqlite => "TEXT".to_string(),
+        };
+    }
+    resolve_scalar_type(&field.python_type, field, dialect)
+}
+
+/// Resolve SQL type for a scalar python_type, using field constraints (max_length, etc.).
+fn resolve_scalar_type(python_type: &str, field: &FieldDef, dialect: Dialect) -> String {
     // str → VARCHAR(N) on PG/MySQL, TEXT on SQLite
-    if field.python_type == "str" && dialect != Dialect::Sqlite {
+    if python_type == "str" && dialect != Dialect::Sqlite {
         let len = field.max_length.unwrap_or(255);
         return format!("VARCHAR({})", len);
     }
-    // decimal → DECIMAL(M,D) on MySQL when constraints are specified
-    if field.python_type == "decimal" {
+    // decimal → DECIMAL(M,D) when constraints are specified
+    if python_type == "decimal" {
         if let Some(digits) = field.max_digits {
             let places = field.decimal_places.unwrap_or(0);
             return match dialect {
@@ -137,7 +150,7 @@ fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
             };
         }
     }
-    python_type_to_sql(&field.python_type, dialect, field.primary_key)
+    python_type_to_sql(python_type, dialect, field.primary_key)
 }
 
 // ── sea-query helpers ───────────────────────────────────────────────────────
