@@ -363,6 +363,22 @@ def downgrade(ctx):
     ctx.drop_table("posts")
 ```
 
+## Programmatic Schema Management
+
+For tests and scripts where migration files are not needed, use `create_tables()` / `drop_tables()`:
+
+```python
+from oxyde import AsyncDatabase, create_tables, drop_tables
+
+database = AsyncDatabase("sqlite:///:memory:", name="default")
+async with database:
+    await create_tables(database)
+    # ... run tests ...
+    await drop_tables(database)
+```
+
+See [Connections — Schema Management](connections.md#schema-management) for details.
+
 ## Best Practices
 
 ### 1. Review Generated Migrations

@@ -68,15 +68,25 @@ class Example(Model):
 
 | Python Type | PostgreSQL | SQLite | MySQL |
 |-------------|------------|--------|-------|
-| `int` | BIGINT | INTEGER | BIGINT |
-| `str` | TEXT | TEXT | TEXT |
+| `int` | INTEGER | INTEGER | BIGINT |
+| `int` (PK) | BIGSERIAL | INTEGER AUTOINCREMENT | BIGINT AUTO_INCREMENT |
+| `str` | VARCHAR(255) | VARCHAR(255) | VARCHAR(255) |
 | `float` | DOUBLE PRECISION | REAL | DOUBLE |
 | `bool` | BOOLEAN | INTEGER | TINYINT |
-| `datetime` | TIMESTAMP | TEXT | DATETIME |
+| `datetime` | TIMESTAMP | TEXT | DATETIME(6) |
 | `date` | DATE | TEXT | DATE |
+| `time` | TIME | TEXT | TIME(6) |
 | `UUID` | UUID | TEXT | CHAR(36) |
-| `Decimal` | NUMERIC | NUMERIC | DECIMAL |
-| `bytes` | BYTEA | BLOB | BLOB |
+| `Decimal` | NUMERIC | TEXT | DECIMAL |
+| `bytes` | BYTEA | BLOB | LONGBLOB |
+| `dict` | JSONB | TEXT | JSON |
+| `list[T]` | T[] | TEXT | JSON |
+
+!!! tip "Custom string length"
+    `str` fields default to `VARCHAR(255)`. Use `max_length` to change: `Field(max_length=500)` → `VARCHAR(500)`.
+
+!!! tip "Decimal precision"
+    Use `max_digits` and `decimal_places` for precise numeric columns: `Field(max_digits=10, decimal_places=2)` → `NUMERIC(10,2)` / `DECIMAL(10,2)`.
 
 ## Primary Keys
 

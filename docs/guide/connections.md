@@ -227,6 +227,25 @@ settings = PoolSettings(
 
 Default settings are optimized for most use cases.
 
+## Schema Management
+
+Create or drop all registered model tables programmatically — no migration files needed. Useful for tests, scripts, and rapid prototyping.
+
+```python
+from oxyde import create_tables, drop_tables
+
+# Create all tables
+await create_tables(database)
+
+# Drop all tables (handles FK constraints per dialect)
+await drop_tables(database)
+```
+
+`create_tables()` generates dialect-aware DDL via the migration diff engine and executes it. `drop_tables()` uses `CASCADE` on PostgreSQL and `SET FOREIGN_KEY_CHECKS = 0` on MySQL to handle foreign key dependencies.
+
+!!! tip "For production"
+    Use [migrations](migrations.md) for production schema management. `create_tables()` / `drop_tables()` are best suited for tests and throwaway environments.
+
 ## Multiple Databases
 
 ### Configuration

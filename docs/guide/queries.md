@@ -292,8 +292,8 @@ Bulk update matching records:
 count = await User.objects.filter(status="pending").update(status="active")
 print(f"Updated {count} users")
 
-# Pass returning=True to get updated rows as list[dict]
-rows = await User.objects.filter(status="pending").update(status="active", returning=True)
+# Pass returning=True to get updated model instances
+users = await User.objects.filter(status="pending").update(status="active", returning=True)
 ```
 
 With F expressions:

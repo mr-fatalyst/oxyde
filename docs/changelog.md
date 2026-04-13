@@ -4,6 +4,118 @@ All notable changes to Oxyde are documented here.
 
 ---
 
+## 0.7.0 - Unreleased
+
+**Rust core: 0.6.0** (`core-v0.6.0`)
+
+### Breaking Changes
+
+#### `update(returning=True)` returns model instances
+
+`update(returning=True)` now returns `list[Model]` instead of `list[dict]`. Returned rows are validated through Pydantic and hydrated as full model instances.
+
+```python
+# Before (0.6.x)
+rows = await Post.objects.filter(id=42).update(status="published", returning=True)
+# rows was list[dict]
+
+# After (0.7.0)
+posts = await Post.objects.filter(id=42).update(status="published", returning=True)
+# posts is list[Model]
+```
+
+#### Default type mapping changes
+
+Several default type mappings have changed:
+
+| Python Type | Dialect | Before | After |
+|-------------|---------|--------|-------|
+| `int` (non-PK) | PostgreSQL | `BIGINT` | `INTEGER` |
+| `str` | All | `TEXT` | `VARCHAR(255)` |
+| `Decimal` | SQLite | `NUMERIC` | `TEXT` |
+| `datetime` | MySQL | `DATETIME` | `DATETIME(6)` |
+| `time` | MySQL | `TIME` | `TIME(6)` |
+| `bytes` | MySQL | `BLOB` | `LONGBLOB` |
+
+!!! note "Existing databases"
+    These changes affect **new migrations only**. Existing columns are not altered automatically. If you need the old types, use `db_type` override: `Field(db_type="BIGINT")`.
+
+### New Features
+
+- **`create_tables()` / `drop_tables()`** — programmatic schema management without migration files. Generates dialect-aware DDL from registered models and executes it directly. Useful for tests and scripts.
+
+    ```python
+    from oxyde import create_tables, drop_tables
+
+    await create_tables(database)   # CREATE all registered model tables
+    await drop_tables(database)     # DROP all registered model tables
+    ```
+
+- **`update_or_create()`** — get an existing record by filters and update it with `defaults`, or create a new one if not found. Race-condition safe (catches `IntegrityError`, retries `get`).
+
+    ```python
+    user, created = await User.objects.update_or_create(
+        email="alice@example.com",
+        defaults={"name": "Alice", "age": 31},
+    )
+    ```
+
+- **Random ordering** — `order_by("?")` generates `RANDOM()` (PostgreSQL/SQLite) or `RAND()` (MySQL).
+
+    ```python
+    random_users = await User.objects.order_by("?").limit(5).all()
+    ```
+
+- **SQL wildcard escaping in LIKE lookups** — `contains`, `startswith`, `endswith` and their case-insensitive variants now escape literal `%`, `_` and `\` characters with an `ESCAPE` clause. Previously `filter(name__contains="50%")` would treat `%` as a wildcard.
+
+- **TLS/SSL for connections** — new `PoolSettings` fields for encrypted connections:
+
+    ```python
+    PoolSettings(
+        ssl_mode="require",                       # PG / MySQL mode
+        ssl_root_cert="/path/to/ca.pem",          # CA certificate
+        ssl_client_cert="/path/to/client.crt",    # mTLS client cert
+        ssl_client_key="/path/to/client.key",     # mTLS client key
+    )
+    ```
+
+- **PostgreSQL pool settings** — `pg_application_name` (visible in `pg_stat_activity`) and `pg_statement_cache_capacity` (prepared statement cache size).
+
+- **MySQL pool settings** — `mysql_charset` and `mysql_collation`.
+
+- **Decimal field constraints** — `max_digits` and `decimal_places` in `Field()` now generate `DECIMAL(M,D)` / `NUMERIC(M,D)` in migrations. Changes to these constraints are detected and produce `ALTER COLUMN`.
+
+    ```python
+    price: Decimal = Field(max_digits=10, decimal_places=2)
+    # PostgreSQL: NUMERIC(10,2)  MySQL: DECIMAL(10,2)
+    ```
+
+- **Array inner type constraints** — array fields preserve inner type constraints in DDL: `list[Annotated[str, Field(max_length=50)]]` generates `VARCHAR(50)[]` on PostgreSQL.
+
+### Bug Fixes
+
+- **`update(returning=True)` on MySQL** — MySQL doesn't support `RETURNING`. Now uses an atomic `SELECT ... FOR UPDATE` → `UPDATE` → re-fetch pattern within a transaction, transparent to the caller.
+- **`iexact` lookup didn't escape wildcards** — `_` and `%` in `iexact` values were treated as SQL wildcards. Now escaped with `ESCAPE` clause, matching `contains`/`startswith`/`endswith` behavior.
+- **`@computed_field` included in INSERT/UPDATE** — Pydantic computed fields were serialized into mutation queries, causing validation errors. Now excluded.
+- **Aggregate return types** — PostgreSQL returns `NUMERIC` as string via msgpack. Aggregates now coerce results to the field's Python type (`int`, `float`, `Decimal`).
+- **Insert guard ignored RETURNING in transactions** — the code checked `ir.returning` flag but not whether the generated SQL actually contained `RETURNING`, causing incorrect execution path on MySQL within transactions.
+- **MySQL transactions** — transaction SQL (`COMMIT`, `ROLLBACK`, `SAVEPOINT`) refactored from `sqlx::query().execute()` to `conn.execute()` for MySQL compatibility.
+- **MySQL decimal** — decimal values were extracted as `String` instead of `rust_decimal::Decimal`, causing type mismatches.
+- **MySQL DATETIME/TIME precision** — now generates `DATETIME(6)` and `TIME(6)` for microsecond precision.
+- **`db_type` array handling** — array type constraints (e.g. `varchar(100)`) were not stripped before type lookup, causing encoding failures.
+
+### Internal
+
+- **mypy compliance** — fixed mypy errors across the codebase; mypy added to pre-commit hooks.
+- **Type overloads** for `update()`: `returning: Literal[True] → list[Model]`, `returning: Literal[False] → int`.
+- **Stub generator** updated with `update_or_create()` signature.
+- **Migration operation ordering** — `CREATE`/`DROP`/`INDEX` statements execute before `ALTER TABLE` (fixes FK constraints on PostgreSQL/MySQL).
+- **Constraint change detection** — migration diff detects changes in `max_length`, `max_digits`, `decimal_places`.
+- **Pool backend detection** — new Rust function `pool_backend()` exposed to Python for runtime database type detection.
+- **Rust core bumped to 0.6.0** (`core-v0.6.0`).
+
+---
+
 ## 0.6.1 - 2026-03-24
 
 ### Bug Fixes

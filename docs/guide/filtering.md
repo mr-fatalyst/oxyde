@@ -89,6 +89,9 @@ users = await User.objects.filter(email__endswith="@example.com").all()
 users = await User.objects.filter(email__iexact="JOHN@EXAMPLE.COM").all()
 ```
 
+!!! note "Wildcard escaping"
+    SQL wildcards (`%`, `_`, `\`) in filter values are automatically escaped as literal characters. For example, `filter(name__contains="50%")` matches the literal string `50%`, not "50 followed by anything". This applies to all LIKE-based lookups including `iexact`.
+
 ## NULL Checks
 
 ### isnull

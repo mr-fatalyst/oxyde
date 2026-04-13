@@ -249,6 +249,20 @@ price: float = Field(gt=0)          # price > 0
 quantity: int = Field(ge=1, le=100) # 1 <= quantity <= 100
 ```
 
+### Decimal Precision
+
+Control the SQL type for `Decimal` fields:
+
+```python
+from decimal import Decimal
+
+price: Decimal = Field(max_digits=10, decimal_places=2)
+# PostgreSQL: NUMERIC(10,2)
+# MySQL:      DECIMAL(10,2)
+```
+
+These constraints are tracked by migrations — changing `max_digits` or `decimal_places` generates an `ALTER COLUMN`.
+
 ### String Validation
 
 ```python
