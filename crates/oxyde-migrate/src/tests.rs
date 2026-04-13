@@ -37,7 +37,7 @@ fn test_python_type_to_sql_all_dialects() {
     );
     assert_eq!(
         python_type_to_sql("datetime", Dialect::Postgres, false),
-        "TIMESTAMP"
+        "TIMESTAMPTZ"
     );
     assert_eq!(
         python_type_to_sql("datetime", Dialect::Mysql, false),
@@ -58,7 +58,10 @@ fn test_python_type_to_sql_all_dialects() {
         python_type_to_sql("bytes", Dialect::Postgres, false),
         "BYTEA"
     );
-    assert_eq!(python_type_to_sql("bytes", Dialect::Mysql, false), "BLOB");
+    assert_eq!(
+        python_type_to_sql("bytes", Dialect::Mysql, false),
+        "LONGBLOB"
+    );
 
     // Test json type
     assert_eq!(python_type_to_sql("json", Dialect::Sqlite, false), "TEXT");

@@ -65,7 +65,7 @@ pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: boo
             "float" => "DOUBLE PRECISION".to_string(),
             "bool" => "BOOLEAN".to_string(),
             "bytes" => "BYTEA".to_string(),
-            "datetime" => "TIMESTAMP".to_string(),
+            "datetime" => "TIMESTAMPTZ".to_string(),
             "date" => "DATE".to_string(),
             "time" => "TIME".to_string(),
             "timedelta" => "BIGINT".to_string(),
@@ -80,7 +80,7 @@ pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: boo
             "str" => "TEXT".to_string(),
             "float" => "DOUBLE".to_string(),
             "bool" => "TINYINT".to_string(),
-            "bytes" => "BLOB".to_string(),
+            "bytes" => "LONGBLOB".to_string(),
             "datetime" => "DATETIME(6)".to_string(),
             "date" => "DATE".to_string(),
             "time" => "TIME(6)".to_string(),
@@ -135,8 +135,8 @@ fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
 
 /// Resolve SQL type for a scalar python_type, using field constraints (max_length, etc.).
 fn resolve_scalar_type(python_type: &str, field: &FieldDef, dialect: Dialect) -> String {
-    // str → VARCHAR(N) on PG/MySQL, TEXT on SQLite
-    if python_type == "str" && dialect != Dialect::Sqlite {
+    // str → VARCHAR(N) on all dialects (SQLite ignores length but DDL is consistent)
+    if python_type == "str" {
         let len = field.max_length.unwrap_or(255);
         return format!("VARCHAR({})", len);
     }

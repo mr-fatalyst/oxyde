@@ -493,7 +493,7 @@ fn test_sqlite_alter_column_with_schema_generates_rebuild() {
         stmts[1]
     );
     assert!(
-        stmts[1].contains("TEXT NOT NULL"),
+        stmts[1].contains("VARCHAR(255) NOT NULL"),
         "Should have altered column: {}",
         stmts[1]
     );
