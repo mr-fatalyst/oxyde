@@ -16,7 +16,7 @@ fn test_python_type_to_sql_all_dialects() {
         python_type_to_sql("int", Dialect::Postgres, true),
         "BIGSERIAL"
     ); // PK
-    assert_eq!(python_type_to_sql("int", Dialect::Mysql, false), "INTEGER");
+    assert_eq!(python_type_to_sql("int", Dialect::Mysql, false), "BIGINT");
     assert_eq!(python_type_to_sql("int", Dialect::Mysql, true), "BIGINT"); // PK
 
     // Test bool type
