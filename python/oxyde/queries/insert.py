@@ -15,8 +15,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import msgpack
-
+from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.queries.base import (
     SupportsExecute,

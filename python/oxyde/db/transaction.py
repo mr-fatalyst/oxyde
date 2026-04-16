@@ -76,8 +76,7 @@ from contextvars import ContextVar
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-import msgpack
-
+from oxyde._msgpack import msgpack
 from oxyde.db.pool import _msgpack_encoder, _normalize_duration
 from oxyde.db.registry import get_connection
 

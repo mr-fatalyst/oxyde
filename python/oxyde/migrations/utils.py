@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import msgpack
+from oxyde._msgpack import msgpack
 
 
 def detect_dialect(url: str) -> str:

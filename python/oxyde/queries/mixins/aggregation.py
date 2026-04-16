@@ -5,9 +5,9 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-import msgpack
 from typing_extensions import Self
 
+from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.models.lookups import ALL_LOOKUPS
 from oxyde.queries.aggregates import Avg, Max, Min, Sum

@@ -10,10 +10,10 @@ from __future__ import annotations
 from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any
 
-import msgpack
 from pydantic import TypeAdapter
 from typing_extensions import Self
 
+from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.exceptions import FieldLookupError, MultipleObjectsReturned, NotFoundError
 from oxyde.models.registry import registered_tables

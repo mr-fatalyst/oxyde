@@ -58,8 +58,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
-import msgpack
-
+from oxyde._msgpack import msgpack
 from oxyde.core.types import serialize_value
 from oxyde.db.registry import register_connection
 

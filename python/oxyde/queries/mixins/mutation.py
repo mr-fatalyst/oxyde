@@ -6,8 +6,7 @@ import warnings
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Literal, overload
 
-import msgpack
-
+from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.db.registry import get_connection
 from oxyde.exceptions import IntegrityError, ManagerError

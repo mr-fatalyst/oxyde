@@ -28,8 +28,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import msgpack
-
+from oxyde._msgpack import msgpack
 from oxyde.queries.base import _resolve_execution_client
 
 if TYPE_CHECKING:

@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any
 
-import msgpack
 from typing_extensions import Self
 
+from oxyde._msgpack import msgpack
 from oxyde.core.wrapper import explain_query, render_sql_debug
 from oxyde.db.pool import _msgpack_encoder
 from oxyde.queries.base import SupportsExecute, _resolve_pool_name

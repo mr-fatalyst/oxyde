@@ -5,8 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import msgpack
-
+from oxyde._msgpack import msgpack
 from oxyde.core import (
     begin_transaction,
     commit_transaction,
