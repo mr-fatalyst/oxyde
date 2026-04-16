@@ -94,6 +94,12 @@ class SchemaState:
                             field["default"] = changes["default"]
                         if "unique" in changes:
                             field["unique"] = changes["unique"]
+                        if "max_length" in changes:
+                            field["max_length"] = changes["max_length"]
+                        if "max_digits" in changes:
+                            field["max_digits"] = changes["max_digits"]
+                        if "decimal_places" in changes:
+                            field["decimal_places"] = changes["decimal_places"]
                         break
 
         elif op_type == "create_index":

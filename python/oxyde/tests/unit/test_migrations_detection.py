@@ -8,6 +8,9 @@ from uuid import UUID
 import pytest
 
 from oxyde import Field, Model
+from oxyde.migrations.context import MigrationContext
+from oxyde.migrations.generator import _operation_to_python
+from oxyde.migrations.replay import SchemaState
 from oxyde.models.registry import registered_tables
 
 
@@ -377,6 +380,96 @@ class TestSchemaDiff:
         indexed_meta = IndexedModel._db_meta.field_metadata["email"]
 
         assert unindexed_meta.index != indexed_meta.index
+
+    def test_detect_alter_max_length(self):
+        """Test detecting max_length changes in generated alter_column migrations."""
+        op = {
+            "type": "alter_column",
+            "table": "widgets",
+            "old_field": {
+                "name": "code",
+                "max_length": 64,
+            },
+            "new_field": {
+                "name": "code",
+                "max_length": 128,
+            },
+        }
+
+        rendered = _operation_to_python(op)
+
+        assert '    ctx.alter_column("widgets", "code", max_length=128)' == rendered
+
+    def test_detect_alter_max_digits(self):
+        """Test detecting max_digits changes during alter_column replay."""
+        state = SchemaState()
+        state.tables["widgets"] = {
+            "name": "widgets",
+            "fields": [
+                {
+                    "name": "price",
+                    "max_digits": 10,
+                }
+            ],
+        }
+
+        state.apply_operation(
+            {
+                "type": "alter_column",
+                "table": "widgets",
+                "column": "price",
+                "changes": {"max_digits": 12},
+            }
+        )
+
+        field = state.tables["widgets"]["fields"][0]
+        assert field["max_digits"] == 12
+
+    def test_detect_alter_decimal_places(self):
+        """Test detecting decimal_places changes during alter_column replay."""
+        state = SchemaState()
+        state.tables["widgets"] = {
+            "name": "widgets",
+            "fields": [
+                {
+                    "name": "price",
+                    "decimal_places": 2,
+                }
+            ],
+        }
+
+        state.apply_operation(
+            {
+                "type": "alter_column",
+                "table": "widgets",
+                "column": "price",
+                "changes": {"decimal_places": 4},
+            }
+        )
+
+        field = state.tables["widgets"]["fields"][0]
+        assert field["decimal_places"] == 4
+
+    def test_detect_alter_collect_replay(self):
+        """Test detecting collected alter_column changes during replay."""
+        ctx = MigrationContext(mode="collect")
+        ctx.alter_column("widgets", "name", max_length=255)
+
+        state = SchemaState()
+        state.tables["widgets"] = {
+            "name": "widgets",
+            "fields": [
+                {
+                    "name": "name",
+                    "max_length": 100,
+                }
+            ],
+        }
+
+        for op in ctx.get_collected_operations():
+            state.apply_operation(op)
+
+        assert state.tables["widgets"]["fields"][0]["max_length"] == 255
 
 
 class TestModelMetaOptions:

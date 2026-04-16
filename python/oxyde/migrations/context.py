@@ -246,6 +246,12 @@ class MigrationContext:
             new_field["default"] = changes["default"]
         if "unique" in changes:
             new_field["unique"] = changes["unique"]
+        if "max_length" in changes:
+            new_field["max_length"] = changes["max_length"]
+        if "max_digits" in changes:
+            new_field["max_digits"] = changes["max_digits"]
+        if "decimal_places" in changes:
+            new_field["decimal_places"] = changes["decimal_places"]
 
         # Build Rust-compatible operation
         op = {

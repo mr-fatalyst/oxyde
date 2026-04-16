@@ -132,6 +132,12 @@ def _operation_to_python(op: dict[str, Any], indent: str = "    ") -> str:
                 changes["default"] = new_field.get("default")
             if old_field.get("unique") != new_field.get("unique"):
                 changes["unique"] = new_field["unique"]
+            if old_field.get("max_length") != new_field.get("max_length"):
+                changes["max_length"] = new_field.get("max_length")
+            if old_field.get("max_digits") != new_field.get("max_digits"):
+                changes["max_digits"] = new_field.get("max_digits")
+            if old_field.get("decimal_places") != new_field.get("decimal_places"):
+                changes["decimal_places"] = new_field.get("decimal_places")
         else:
             # Python format - use as-is
             column = op["column"]
