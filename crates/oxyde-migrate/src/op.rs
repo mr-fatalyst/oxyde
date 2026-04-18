@@ -62,9 +62,10 @@ pub enum MigrationOp {
     },
     DropIndex {
         table: String,
-        index: String,
-        /// Full index definition for reverse migration
-        index_def: IndexDef,
+        name: String,
+        /// Full index definition for reverse migration (optional for forward migration)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index_def: Option<IndexDef>,
     },
     AddForeignKey {
         table: String,
@@ -73,8 +74,9 @@ pub enum MigrationOp {
     DropForeignKey {
         table: String,
         name: String,
-        /// Full foreign key definition for reverse migration
-        fk_def: ForeignKeyDef,
+        /// Full foreign key definition for reverse migration (optional for forward migration)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fk_def: Option<ForeignKeyDef>,
     },
     AddCheck {
         table: String,
@@ -83,7 +85,8 @@ pub enum MigrationOp {
     DropCheck {
         table: String,
         name: String,
-        /// Full check definition for reverse migration
-        check_def: CheckDef,
+        /// Full check definition for reverse migration (optional for forward migration)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        check_def: Option<CheckDef>,
     },
 }

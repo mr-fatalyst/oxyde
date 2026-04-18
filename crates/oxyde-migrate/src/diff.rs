@@ -158,8 +158,8 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Vec<MigrationOp> {
                 if !new_table.indexes.iter().any(|idx| idx.name == old_idx.name) {
                     ops.push(MigrationOp::DropIndex {
                         table: name.clone(),
-                        index: old_idx.name.clone(),
-                        index_def: old_idx.clone(),
+                        name: old_idx.name.clone(),
+                        index_def: Some(old_idx.clone()),
                     });
                 }
             }
@@ -188,7 +188,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Vec<MigrationOp> {
                     ops.push(MigrationOp::DropForeignKey {
                         table: name.clone(),
                         name: old_fk.name.clone(),
-                        fk_def: old_fk.clone(),
+                        fk_def: Some(old_fk.clone()),
                     });
                 }
             }
@@ -209,7 +209,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Vec<MigrationOp> {
                     ops.push(MigrationOp::DropCheck {
                         table: name.clone(),
                         name: old_check.name.clone(),
-                        check_def: old_check.clone(),
+                        check_def: Some(old_check.clone()),
                     });
                 }
             }

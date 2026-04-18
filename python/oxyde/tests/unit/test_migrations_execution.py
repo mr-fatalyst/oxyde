@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
 import pytest
+
+from oxyde.core import migration_compute_diff, migration_to_sql
+from oxyde.migrations.context import MigrationContext
 
 
 
@@ -453,3 +457,107 @@ class TestMigrationDependencies:
                     break
 
         assert missing == "0001_initial"
+
+
+class TestDropOpsMinimalPayloadRegression:
+    """Regression: ctx.drop_foreign_key/drop_index/drop_check must produce valid SQL.
+
+    Reproduces the bug where minimal payload from context.py
+    ({type, table, name}) failed to deserialize into Rust MigrationOp because
+    fk_def/index_def/check_def were required fields.
+    """
+
+    def test_drop_foreign_key_postgres(self):
+        ctx = MigrationContext(mode="collect", dialect="postgres")
+        ctx.drop_foreign_key("books", "fk_books_author_id")
+
+        ops = ctx.get_collected_operations()
+        sqls = migration_to_sql(json.dumps(ops), "postgres")
+
+        assert any("DROP" in s and "fk_books_author_id" in s for s in sqls)
+
+    def test_drop_foreign_key_mysql(self):
+        ctx = MigrationContext(mode="collect", dialect="mysql")
+        ctx.drop_foreign_key("books", "fk_books_author_id")
+
+        sqls = migration_to_sql(json.dumps(ctx.get_collected_operations()), "mysql")
+        assert any("DROP" in s and "fk_books_author_id" in s for s in sqls)
+
+    def test_drop_check_postgres(self):
+        ctx = MigrationContext(mode="collect", dialect="postgres")
+        ctx.drop_check("users", "chk_users_age")
+
+        sqls = migration_to_sql(json.dumps(ctx.get_collected_operations()), "postgres")
+        assert any("DROP CONSTRAINT" in s and "chk_users_age" in s for s in sqls)
+
+    def test_drop_check_mysql(self):
+        ctx = MigrationContext(mode="collect", dialect="mysql")
+        ctx.drop_check("users", "chk_users_age")
+
+        sqls = migration_to_sql(json.dumps(ctx.get_collected_operations()), "mysql")
+        assert any("DROP CHECK" in s and "chk_users_age" in s for s in sqls)
+
+    @pytest.mark.parametrize("dialect", ["postgres", "mysql", "sqlite"])
+    def test_drop_index(self, dialect):
+        ctx = MigrationContext(mode="collect", dialect=dialect)
+        ctx.drop_index("users", "idx_users_email")
+
+        sqls = migration_to_sql(json.dumps(ctx.get_collected_operations()), dialect)
+        assert any("idx_users_email" in s for s in sqls)
+
+    def test_rust_diff_drop_index_roundtrip(self):
+        """Rust-diff emits drop_index; that JSON must flow back through migration_to_sql."""
+        old_snapshot = {
+            "version": 1,
+            "tables": {
+                "users": {
+                    "name": "users",
+                    "fields": [
+                        {
+                            "name": "id",
+                            "python_type": "int",
+                            "db_type": None,
+                            "nullable": False,
+                            "primary_key": True,
+                            "unique": False,
+                            "default": None,
+                            "auto_increment": False,
+                        }
+                    ],
+                    "indexes": [
+                        {
+                            "name": "idx_users_email",
+                            "fields": ["email"],
+                            "unique": False,
+                            "method": None,
+                        }
+                    ],
+                    "foreign_keys": [],
+                    "checks": [],
+                    "comment": None,
+                }
+            },
+        }
+        new_snapshot = {
+            "version": 1,
+            "tables": {
+                "users": {
+                    "name": "users",
+                    "fields": old_snapshot["tables"]["users"]["fields"],
+                    "indexes": [],
+                    "foreign_keys": [],
+                    "checks": [],
+                    "comment": None,
+                }
+            },
+        }
+
+        ops_json = migration_compute_diff(
+            json.dumps(old_snapshot), json.dumps(new_snapshot)
+        )
+        ops = json.loads(ops_json)
+        assert any(op["type"] == "drop_index" for op in ops)
+
+        # Must not raise — round-trip through Rust must succeed
+        sqls = migration_to_sql(ops_json, "postgres")
+        assert any("idx_users_email" in s for s in sqls)

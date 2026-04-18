@@ -315,8 +315,8 @@ fn test_dialect_specific_sql() {
     };
     let drop_idx_mysql = MigrationOp::DropIndex {
         table: "users".into(),
-        index: "idx_name".into(),
-        index_def: dummy_index_def.clone(),
+        name: "idx_name".into(),
+        index_def: Some(dummy_index_def.clone()),
     }
     .to_sql(Dialect::Mysql)
     .unwrap();
@@ -324,8 +324,8 @@ fn test_dialect_specific_sql() {
 
     let drop_idx_pg = MigrationOp::DropIndex {
         table: "users".into(),
-        index: "idx_name".into(),
-        index_def: dummy_index_def,
+        name: "idx_name".into(),
+        index_def: Some(dummy_index_def),
     }
     .to_sql(Dialect::Postgres)
     .unwrap();
@@ -853,7 +853,7 @@ fn test_compute_diff_detects_index_changes() {
     );
     let drop_idx = ops
         .iter()
-        .any(|op| matches!(op, MigrationOp::DropIndex { index, .. } if index == "users_email_idx"));
+        .any(|op| matches!(op, MigrationOp::DropIndex { name, .. } if name == "users_email_idx"));
 
     assert!(create_idx, "Should detect new index");
     assert!(drop_idx, "Should detect dropped index");
@@ -895,13 +895,13 @@ fn test_create_drop_index_sql() {
     // DropIndex
     let sql = MigrationOp::DropIndex {
         table: "users".into(),
-        index: "users_email_idx".into(),
-        index_def: IndexDef {
+        name: "users_email_idx".into(),
+        index_def: Some(IndexDef {
             name: "users_email_idx".into(),
             fields: vec!["email".into()],
             unique: true,
             method: None,
-        },
+        }),
     }
     .to_sql(Dialect::Postgres)
     .unwrap();

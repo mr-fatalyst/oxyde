@@ -579,11 +579,11 @@ impl MigrationOp {
 
             MigrationOp::DropIndex {
                 table,
-                index,
+                name,
                 index_def: _,
             } => {
                 let mut stmt = SeaIndex::drop();
-                stmt.name(index).table(Alias::new(table));
+                stmt.name(name).table(Alias::new(table));
                 Ok(vec![build_sql!(stmt, dialect)])
             }
 
