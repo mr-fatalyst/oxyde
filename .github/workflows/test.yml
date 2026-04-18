@@ -57,7 +57,7 @@ jobs:
       - name: Install Python deps for mypy
         run: |
           uv venv
-          uv pip install mypy==1.19.1 pydantic msgpack typing-extensions pre-commit
+          uv pip install mypy==1.19.1 pydantic msgpack typing-extensions pre-commit typer
 
       - name: Run pre-commit
         run: uv run pre-commit run --all-files

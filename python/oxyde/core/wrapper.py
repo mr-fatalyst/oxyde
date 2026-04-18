@@ -124,7 +124,7 @@ def _load_functions() -> dict[str, Callable[..., Any]]:
     exports: dict[str, Callable[..., Any]] = {}
 
     try:
-        import _oxyde_core  # type: ignore[import-untyped]
+        import _oxyde_core  # type: ignore[import-untyped, import-not-found, unused-ignore]
 
         # ABI version check
         abi_version = getattr(_oxyde_core, "__abi_version__", None)
