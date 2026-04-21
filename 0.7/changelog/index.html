@@ -1,0 +1,2762 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance async Python ORM with Rust core">
+      
+      
+      
+        <link rel="canonical" href="https://oxyde.fatalyst.dev/0.7/changelog/">
+      
+      
+        <link rel="prev" href="../faq/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../img/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Changelog - Oxyde ORM</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="light-blue" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Oxyde ORM" class="md-header__button md-logo" aria-label="Oxyde ORM" data-md-component="logo">
+      
+  <img src="../img/favicon.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Oxyde ORM
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="light-blue" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="light-blue" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mr-fatalyst/oxyde" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    oxyde-orm/oxyde
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/installation/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../guide/models/" class="md-tabs__link">
+          
+  
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../advanced/performance/" class="md-tabs__link">
+          
+  
+  
+  Advanced
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../cheatsheet/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Cheatsheet
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../faq/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  FAQ
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Oxyde ORM" class="md-nav__button md-logo" aria-label="Oxyde ORM" data-md-component="logo">
+      
+  <img src="../img/favicon.png" alt="logo">
+
+    </a>
+    Oxyde ORM
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mr-fatalyst/oxyde" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    oxyde-orm/oxyde
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/first-project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    First Project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/fastapi-project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FastAPI Project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fields
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database Connections
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/filtering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Filtering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/expressions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    F-Expressions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/aggregation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aggregation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/relations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Relations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/transactions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transactions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/migrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Migrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Advanced
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/raw-queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Raw Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../advanced/internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Internals (Rust Core)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cheatsheet/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cheatsheet
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-04-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.0 - 2026-04-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.7.0 - 2026-04-21">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Breaking Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#updatereturningtrue-returns-model-instances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        update(returning=True) returns model instances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#default-type-mapping-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Default type mapping changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migrations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#061-2026-03-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.1 - 2026-03-24
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.1 - 2026-03-24">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-03-20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.0 - 2026-03-20
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.0 - 2026-03-20">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#052-2026-03-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.2 - 2026-03-13
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.5.2 - 2026-03-13">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#051-2026-03-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.1 - 2026-03-08
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.5.1 - 2026-03-08">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#050-2026-03-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.0 - 2026-03-07
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.5.0 - 2026-03-07">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Breaking Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#update-returns-row-count-by-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        update() returns row count by default
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#execute_to_pylist-execute_batched_dedup-removed-from-asyncdatabase" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        execute_to_pylist(), execute_batched_dedup() removed from AsyncDatabase
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#batch_size-removed-from-poolsettings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        batch_size removed from PoolSettings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#040-2026-02-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4.0 - 2026-02-23
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.4.0 - 2026-02-23">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Breaking Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#oxydemodel-renamed-to-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OxydeModel renamed to Model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limit-and-offset-reject-negative-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        limit() and offset() reject negative values
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ensure_field_metadata-removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ensure_field_metadata() removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resolve_pending_fk-replaced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_pending_fk() replaced
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrationstypes-module-removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        migrations.types module removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#070-2026-04-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.7.0 - 2026-04-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.7.0 - 2026-04-21">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Breaking Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#updatereturningtrue-returns-model-instances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        update(returning=True) returns model instances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#default-type-mapping-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Default type mapping changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migrations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#061-2026-03-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.1 - 2026-03-24
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.1 - 2026-03-24">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#060-2026-03-20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.6.0 - 2026-03-20
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.6.0 - 2026-03-20">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#new-features_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#052-2026-03-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.2 - 2026-03-13
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.5.2 - 2026-03-13">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#internal_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Internal
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#051-2026-03-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.1 - 2026-03-08
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.5.1 - 2026-03-08">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#050-2026-03-07" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.5.0 - 2026-03-07
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.5.0 - 2026-03-07">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Breaking Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#update-returns-row-count-by-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        update() returns row count by default
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#execute_to_pylist-execute_batched_dedup-removed-from-asyncdatabase" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        execute_to_pylist(), execute_batched_dedup() removed from AsyncDatabase
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#batch_size-removed-from-poolsettings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        batch_size removed from PoolSettings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#040-2026-02-23" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.4.0 - 2026-02-23
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.4.0 - 2026-02-23">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Breaking Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#oxydemodel-renamed-to-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OxydeModel renamed to Model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limit-and-offset-reject-negative-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        limit() and offset() reject negative values
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ensure_field_metadata-removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ensure_field_metadata() removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resolve_pending_fk-replaced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        resolve_pending_fk() replaced
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#migrationstypes-module-removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        migrations.types module removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-fixes_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Fixes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#improvements_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<p>All notable changes to Oxyde are documented here.</p>
+<hr />
+<h2 id="070-2026-04-21">0.7.0 - 2026-04-21<a class="headerlink" href="#070-2026-04-21" title="Permanent link">&para;</a></h2>
+<p><strong>Rust core: 0.6.1</strong> (<code>core-v0.6.1</code>)</p>
+<h3 id="breaking-changes">Breaking Changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h3>
+<h4 id="updatereturningtrue-returns-model-instances"><code>update(returning=True)</code> returns model instances<a class="headerlink" href="#updatereturningtrue-returns-model-instances" title="Permanent link">&para;</a></h4>
+<p><code>update(returning=True)</code> now returns <code>list[Model]</code> instead of <code>list[dict]</code>. Returned rows are validated through Pydantic and hydrated as full model instances.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Before (0.6.x)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Post</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;published&quot;</span><span class="p">,</span> <span class="n">returning</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># rows was list[dict]</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># After (0.7.0)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">posts</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Post</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;published&quot;</span><span class="p">,</span> <span class="n">returning</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># posts is list[Model]</span>
+</code></pre></div>
+<h4 id="default-type-mapping-changes">Default type mapping changes<a class="headerlink" href="#default-type-mapping-changes" title="Permanent link">&para;</a></h4>
+<p>Several default type mappings have changed:</p>
+<table>
+<thead>
+<tr>
+<th>Python Type</th>
+<th>Dialect</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int</code> (non-PK)</td>
+<td>PostgreSQL</td>
+<td><code>BIGINT</code></td>
+<td><code>INTEGER</code></td>
+</tr>
+<tr>
+<td><code>str</code></td>
+<td>All</td>
+<td><code>TEXT</code></td>
+<td><code>VARCHAR(255)</code></td>
+</tr>
+<tr>
+<td><code>Decimal</code></td>
+<td>SQLite</td>
+<td><code>NUMERIC</code></td>
+<td><code>TEXT</code></td>
+</tr>
+<tr>
+<td><code>datetime</code></td>
+<td>MySQL</td>
+<td><code>DATETIME</code></td>
+<td><code>DATETIME(6)</code></td>
+</tr>
+<tr>
+<td><code>time</code></td>
+<td>MySQL</td>
+<td><code>TIME</code></td>
+<td><code>TIME(6)</code></td>
+</tr>
+<tr>
+<td><code>bytes</code></td>
+<td>MySQL</td>
+<td><code>BLOB</code></td>
+<td><code>LONGBLOB</code></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Existing databases</p>
+<p>These changes affect <strong>new migrations only</strong>. Existing columns are not altered automatically. If you need the old types, use <code>db_type</code> override: <code>Field(db_type="BIGINT")</code>.</p>
+</div>
+<h3 id="new-features">New Features<a class="headerlink" href="#new-features" title="Permanent link">&para;</a></h3>
+<ul>
+<li>
+<p><strong><code>create_tables()</code> / <code>drop_tables()</code></strong> — programmatic schema management without migration files. Generates dialect-aware DDL from registered models and executes it directly. Useful for tests and scripts.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_tables</span><span class="p">,</span> <span class="n">drop_tables</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">await</span> <span class="n">create_tables</span><span class="p">(</span><span class="n">database</span><span class="p">)</span>   <span class="c1"># CREATE all registered model tables</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">await</span> <span class="n">drop_tables</span><span class="p">(</span><span class="n">database</span><span class="p">)</span>     <span class="c1"># DROP all registered model tables</span>
+</code></pre></div>
+</li>
+<li>
+<p><strong><code>update_or_create()</code></strong> — get an existing record by filters and update it with <code>defaults</code>, or create a new one if not found. Race-condition safe (catches <code>IntegrityError</code>, retries <code>get</code>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">user</span><span class="p">,</span> <span class="n">created</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">update_or_create</span><span class="p">(</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">email</span><span class="o">=</span><span class="s2">&quot;alice@example.com&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">defaults</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Alice&quot;</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">31</span><span class="p">},</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">)</span>
+</code></pre></div>
+</li>
+<li>
+<p><strong>Random ordering</strong> — <code>order_by("?")</code> generates <code>RANDOM()</code> (PostgreSQL/SQLite) or <code>RAND()</code> (MySQL).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">random_users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">&quot;?&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</code></pre></div>
+</li>
+<li>
+<p><strong>SQL wildcard escaping in LIKE lookups</strong> — <code>contains</code>, <code>startswith</code>, <code>endswith</code> and their case-insensitive variants now escape literal <code>%</code>, <code>_</code> and <code>\</code> characters with an <code>ESCAPE</code> clause. Previously <code>filter(name__contains="50%")</code> would treat <code>%</code> as a wildcard.</p>
+</li>
+<li>
+<p><strong>TLS/SSL for connections</strong> — new <code>PoolSettings</code> fields for encrypted connections:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">PoolSettings</span><span class="p">(</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">ssl_mode</span><span class="o">=</span><span class="s2">&quot;require&quot;</span><span class="p">,</span>                       <span class="c1"># PG / MySQL mode</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">ssl_root_cert</span><span class="o">=</span><span class="s2">&quot;/path/to/ca.pem&quot;</span><span class="p">,</span>          <span class="c1"># CA certificate</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">ssl_client_cert</span><span class="o">=</span><span class="s2">&quot;/path/to/client.crt&quot;</span><span class="p">,</span>    <span class="c1"># mTLS client cert</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">ssl_client_key</span><span class="o">=</span><span class="s2">&quot;/path/to/client.key&quot;</span><span class="p">,</span>     <span class="c1"># mTLS client key</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">)</span>
+</code></pre></div>
+</li>
+<li>
+<p><strong>PostgreSQL pool settings</strong> — <code>pg_application_name</code> (visible in <code>pg_stat_activity</code>) and <code>pg_statement_cache_capacity</code> (prepared statement cache size).</p>
+</li>
+<li>
+<p><strong>MySQL pool settings</strong> — <code>mysql_charset</code> and <code>mysql_collation</code>.</p>
+</li>
+<li>
+<p><strong>Decimal field constraints</strong> — <code>max_digits</code> and <code>decimal_places</code> in <code>Field()</code> now generate <code>DECIMAL(M,D)</code> / <code>NUMERIC(M,D)</code> in migrations. Changes to these constraints are detected and produce <code>ALTER COLUMN</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">price</span><span class="p">:</span> <span class="n">Decimal</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">max_digits</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">decimal_places</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># PostgreSQL: NUMERIC(10,2)  MySQL: DECIMAL(10,2)</span>
+</code></pre></div>
+</li>
+<li>
+<p><strong>Array inner type constraints</strong> — array fields preserve inner type constraints in DDL: <code>list[Annotated[str, Field(max_length=50)]]</code> generates <code>VARCHAR(50)[]</code> on PostgreSQL.</p>
+</li>
+</ul>
+<h3 id="bug-fixes">Bug Fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>update(returning=True)</code> on MySQL</strong> — MySQL doesn't support <code>RETURNING</code>. Now uses an atomic <code>SELECT ... FOR UPDATE</code> → <code>UPDATE</code> → re-fetch pattern within a transaction, transparent to the caller.</li>
+<li><strong><code>iexact</code> lookup didn't escape wildcards</strong> — <code>_</code> and <code>%</code> in <code>iexact</code> values were treated as SQL wildcards. Now escaped with <code>ESCAPE</code> clause, matching <code>contains</code>/<code>startswith</code>/<code>endswith</code> behavior.</li>
+<li><strong><code>@computed_field</code> included in INSERT/UPDATE</strong> — Pydantic computed fields were serialized into mutation queries, causing validation errors. Now excluded.</li>
+<li><strong>Aggregate return types</strong> — PostgreSQL returns <code>NUMERIC</code> as string via msgpack. Aggregates now coerce results to the field's Python type (<code>int</code>, <code>float</code>, <code>Decimal</code>).</li>
+<li><strong>Insert guard ignored RETURNING in transactions</strong> — the code checked <code>ir.returning</code> flag but not whether the generated SQL actually contained <code>RETURNING</code>, causing incorrect execution path on MySQL within transactions.</li>
+<li><strong>MySQL transactions</strong> — transaction SQL (<code>COMMIT</code>, <code>ROLLBACK</code>, <code>SAVEPOINT</code>) refactored from <code>sqlx::query().execute()</code> to <code>conn.execute()</code> for MySQL compatibility.</li>
+<li><strong>MySQL decimal</strong> — decimal values were extracted as <code>String</code> instead of <code>rust_decimal::Decimal</code>, causing type mismatches.</li>
+<li><strong>MySQL DATETIME/TIME precision</strong> — now generates <code>DATETIME(6)</code> and <code>TIME(6)</code> for microsecond precision.</li>
+<li><strong><code>db_type</code> array handling</strong> — array type constraints (e.g. <code>varchar(100)</code>) were not stripped before type lookup, causing encoding failures.</li>
+<li><strong>INSERT RETURNING on MySQL</strong> — targeted Rust driver fix so <code>create()</code> / <code>bulk_create(..., returning=True)</code> take the correct execution path on MySQL (which has no native <code>RETURNING</code>).</li>
+<li><strong>Stub generator emitted invalid syntax for bare types</strong> — unparameterized <code>dict</code>, <code>list</code>, <code>tuple</code>, <code>set</code> and similar produced stubs that failed to parse. Now emitted correctly.</li>
+<li><strong>Stub generator crashed on parameterized generics on older Python</strong> — <code>isinstance()</code> against a subscripted generic raises <code>TypeError</code> on Python 3.10/3.11. The generator now checks <code>__origin__</code> first.</li>
+</ul>
+<h3 id="migrations">Migrations<a class="headerlink" href="#migrations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Tables are topologically sorted by FK dependencies</strong> — <code>compute_diff</code> now orders <code>CREATE TABLE</code> statements so referenced tables are created before referencing ones; cyclic FK graphs are rejected with a clear error.</li>
+<li><strong>Minimal payload for drop operations</strong> — <code>drop_foreign_key</code>, <code>drop_index</code> and <code>drop_check</code> ops no longer require the full column/constraint definition, only the name. (#24)</li>
+<li><strong><code>alter_column</code> replay preserves constraints</strong> — <code>max_length</code>, <code>max_digits</code> and <code>decimal_places</code> survive migration replay; previously they were dropped when a column was rewritten by replay. (#25)</li>
+</ul>
+<h3 id="internal">Internal<a class="headerlink" href="#internal" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>mypy compliance</strong> — fixed mypy errors across the codebase; mypy added to pre-commit hooks.</li>
+<li><strong>Type overloads</strong> for <code>update()</code>: <code>returning: Literal[True] → list[Model]</code>, <code>returning: Literal[False] → int</code>.</li>
+<li><strong>Stub generator</strong> updated with <code>update_or_create()</code> signature.</li>
+<li><strong>Migration operation ordering</strong> — <code>CREATE</code>/<code>DROP</code>/<code>INDEX</code> statements execute before <code>ALTER TABLE</code> (fixes FK constraints on PostgreSQL/MySQL).</li>
+<li><strong>Constraint change detection</strong> — migration diff detects changes in <code>max_length</code>, <code>max_digits</code>, <code>decimal_places</code>.</li>
+<li><strong>Pool backend detection</strong> — new Rust function <code>pool_backend()</code> exposed to Python for runtime database type detection.</li>
+<li><strong>Stub generator rewritten on top of <code>ast</code></strong> — the generator previously relied on regex-based parsing; it now walks the AST, producing more reliable output and eliminating several classes of malformed stubs.</li>
+<li><strong>Rust core bumped to 0.6.1</strong> (<code>core-v0.6.1</code>).</li>
+</ul>
+<hr />
+<h2 id="061-2026-03-24">0.6.1 - 2026-03-24<a class="headerlink" href="#061-2026-03-24" title="Permanent link">&para;</a></h2>
+<h3 id="bug-fixes_1">Bug Fixes<a class="headerlink" href="#bug-fixes_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>count()</code> and <code>exists()</code> bypassed <code>to_ir()</code></strong> — both methods built their IR directly via <code>ir.build_select_ir()</code>, skipping the full <code>to_ir()</code> pipeline. This meant <code>col_types</code> and other query state were not included, which could produce incorrect SQL when type-sensitive filters were involved. Both now go through <code>to_ir()</code> like all other query methods.</li>
+<li><strong><code>save(update_fields)</code> silently ignored FK field names</strong> — passing a virtual FK name like <code>update_fields=["author"]</code> was silently accepted but the field was not included in the UPDATE because it didn't match any database column. Now correctly resolves FK names to their synthetic columns (e.g. <code>"author"</code> → <code>"author_id"</code>). Virtual relation fields (<code>reverse_fk</code>, <code>m2m</code>) now raise <code>FieldError</code>.</li>
+</ul>
+<h3 id="internal_1">Internal<a class="headerlink" href="#internal_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>TQuery</code> TypeVar replaced with <code>Self</code></strong> — all query mixins (<code>FilteringMixin</code>, <code>PaginationMixin</code>, <code>AggregationMixin</code>, <code>ExecutionMixin</code>, <code>JoiningMixin</code>, <code>DebugMixin</code>) and <code>Query</code> now use <code>typing_extensions.Self</code> for return-type annotations instead of the custom <code>TQuery</code> TypeVar. Fixes mypy errors with the previous approach.</li>
+</ul>
+<hr />
+<h2 id="060-2026-03-20">0.6.0 - 2026-03-20<a class="headerlink" href="#060-2026-03-20" title="Permanent link">&para;</a></h2>
+<h3 id="bug-fixes_2">Bug Fixes<a class="headerlink" href="#bug-fixes_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>bulk_update()</code> used field names instead of <code>db_column</code> as filter keys</strong> — when a model had a custom <code>db_column</code>, the generated SQL referenced the Python field name, which doesn't exist in the database. Now correctly maps field names to <code>db_column</code> via model metadata.</li>
+<li><strong>Result columns not remapped to field names</strong> — Rust returns <code>db_column</code> names (e.g. <code>author_id</code>), but Python expects field names (<code>author</code>). Added <code>reverse_column_map</code> to <code>ModelMeta</code> and <code>_remap_columns()</code> in the execution layer. Affects all result formats: dedup, columnar, and row dicts.</li>
+<li><strong><code>Decimal</code> bound as string on PostgreSQL</strong> — <code>Decimal</code> values were serialized as strings, causing type mismatches in comparisons. Now bound natively via <code>rust_decimal::Decimal</code>.</li>
+<li><strong><code>TIMESTAMPTZ</code> not decoded correctly</strong> — timezone-aware datetime columns lost timezone info during encoding. Now preserves timezone in RFC3339 format.</li>
+<li><strong><code>datetime</code> strings falsely parsed as datetime</strong> — ISO 8601 strings stored in <code>VARCHAR</code>/<code>TEXT</code> columns (e.g. <code>"2024-01-15T12:30:00Z"</code>) were auto-parsed into datetime values. Type hints now prevent this: if <code>col_type</code> is <code>"str"</code> or <code>"TEXT"</code>, the value stays as a string.</li>
+<li><strong><code>timedelta</code> encoded as integer microseconds</strong> — timedelta values were exposed as raw <code>i64</code> microseconds. Now correctly converted to <code>f64</code> seconds at the driver layer, matching Python's <code>timedelta</code> representation.</li>
+<li><strong>Type-unsafe filter binding</strong> — filter values were converted without consulting column type hints, leading to implicit string coercion (e.g. <code>age = '18'</code> instead of <code>age = 18</code>). Filter builder now receives <code>col_types</code> and binds values with correct SQL types.</li>
+<li><strong><code>DELETE</code> path ignored type hints</strong> — value conversion for DELETE queries did not pass <code>col_types</code>, causing the same coercion issues as filters. Fixed.</li>
+</ul>
+<h3 id="new-features_1">New Features<a class="headerlink" href="#new-features_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>PostgreSQL array support</strong> — native support for <code>int[]</code>, <code>str[]</code>, <code>uuid[]</code>, <code>bool[]</code>, <code>float[]</code>, <code>decimal[]</code>, <code>datetime[]</code> columns. Arrays are correctly bound as parameters, decoded from results (including NULL elements), and mapped in migrations (<code>BIGINT[]</code> on Postgres, <code>JSON</code> on MySQL, <code>TEXT</code> on SQLite).</li>
+<li><strong>JSON column support</strong> — <code>dict</code> fields are now mapped to <code>JSONB</code> (Postgres), <code>JSON</code> (MySQL), <code>TEXT</code> (SQLite) in migrations. Values are bound as <code>Value::Json</code> in queries.</li>
+<li><strong><code>.sql(with_types=True)</code></strong> — new optional parameter shows exact SQL type tags for each bound parameter: <code>[("BigInt", 18), ("Uuid", "550e...")]</code>. Useful for debugging type binding issues.</li>
+</ul>
+<h3 id="improvements">Improvements<a class="headerlink" href="#improvements" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Centralized type classification in Rust</strong> — new <code>classify_type()</code> function as single source of truth for mapping IR type names and SQL type names to semantic categories. Replaces scattered match arms across the codebase.</li>
+<li><strong>Typed NULL values</strong> — <code>NULL</code> parameters now carry their column type (e.g. <code>Value::Uuid(None)</code> instead of generic <code>Value::String(None)</code>), preventing type mismatch errors on strict databases.</li>
+<li><strong><code>BIGSERIAL</code> for integer PKs on PostgreSQL</strong> — integer primary keys now map to <code>BIGSERIAL</code> instead of <code>SERIAL</code>, supporting larger sequences out of the box.</li>
+<li><strong><code>reverse_column_map</code> cached on <code>ModelMeta</code></strong> — <code>db_column → field_name</code> mapping is computed once at model finalization, not on every query.</li>
+</ul>
+<h3 id="internal_2">Internal<a class="headerlink" href="#internal_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Rust core bumped to 0.5.0</strong> (core-v0.5.0).</li>
+<li>Removed <code>_convert_timedelta_columns()</code> from Python execution layer (moved to Rust driver).</li>
+<li>Removed field_name aliasing from Rust SELECT; column remapping now happens in Python via <code>reverse_column_map</code>.</li>
+<li>Unified <code>_get_python_type_name</code> to delegate to <code>get_ir_type</code>. Added <code>json</code> and <code>T[]</code> patterns to Rust <code>python_type_to_sql</code>.</li>
+<li>Added <code>test_type_binding</code> test suite covering type classification, array handling, typed nulls, and edge cases.</li>
+<li>Added datetime filtering integration tests.</li>
+</ul>
+<hr />
+<h2 id="052-2026-03-13">0.5.2 - 2026-03-13<a class="headerlink" href="#052-2026-03-13" title="Permanent link">&para;</a></h2>
+<h3 id="bug-fixes_3">Bug Fixes<a class="headerlink" href="#bug-fixes_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>create()</code> / <code>save()</code> now validates returned data via Pydantic</strong> — <code>RETURNING *</code> results were applied via raw <code>setattr</code>, bypassing Pydantic validation and type coercion. Additionally, <code>save()</code> on new instances did not update the object with auto-generated fields (PK, defaults) after insertion. Both paths now use <code>model_validate()</code>.</li>
+<li><strong><code>save()</code> on MySQL no longer raises <code>NotFoundError</code></strong> — <code>save()</code> for existing records always requested <code>RETURNING</code>, which MySQL doesn't support. Now detects the backend and falls back to affected row count for MySQL.</li>
+<li><strong><code>bulk_create()</code> no longer loses fields across rows</strong> — <code>_dump_insert_data()</code> used <code>exclude_none=True</code>, which couldn't distinguish "user didn't set the field" from "user explicitly set None". Changed to <code>exclude_unset=True</code> so explicitly passed <code>None</code> is preserved while unset fields are omitted (letting DB defaults work).</li>
+<li><strong><code>bulk_update()</code> no longer corrupts <code>bytes</code> fields</strong> — <code>model_dump(mode="json")</code> converted bytes to base64 strings, which Rust wrote as <code>VARCHAR</code> instead of binary. Now uses <code>mode="python"</code> with <code>_serialize_value_for_ir()</code>, matching the same serialization path as <code>update()</code>.</li>
+<li><strong><code>annotate()</code> rejects invalid expressions</strong> — passing an object without <code>to_ir()</code> (e.g. <code>annotate(x=object())</code>) was silently ignored. Now raises <code>TypeError</code>, matching Django's behavior.</li>
+<li><strong><code>bulk_create(batch_size=0)</code> raises <code>ValueError</code></strong> — previously crashed with an unhelpful <code>range()</code> error. Negative values silently skipped the INSERT. Now validates <code>batch_size &gt; 0</code>.</li>
+<li><strong>ContextVar transaction leak</strong> — child async tasks inherited the parent's transaction scope via <code>ContextVar</code>. Added <code>_get_owned_entry()</code> ownership check using <code>asyncio.current_task()</code> so child tasks no longer see the parent's transaction.</li>
+</ul>
+<h3 id="improvements_1">Improvements<a class="headerlink" href="#improvements_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Streaming query execution</strong> — replaced <code>fetch_all()</code> with <code>fetch()</code> streams in the Rust driver. Rows are now encoded to MessagePack incrementally as they arrive from the database, reducing peak memory usage for large result sets. (core-v0.4.2)</li>
+<li><strong>Unified migration ordering</strong> — <code>apply_migrations()</code>, <code>replay_migrations_up_to()</code>, and <code>get_pending_migrations()</code> now use topological sort via <code>depends_on</code>, matching the behavior already used in <code>replay_migrations()</code>. Previously these paths used lexicographic sorting only.</li>
+</ul>
+<h3 id="internal_3">Internal<a class="headerlink" href="#internal_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Removed dead <code>get_migration_order()</code> function from <code>replay.py</code>.</li>
+<li>Moved local imports to module level in migration integration tests.</li>
+</ul>
+<hr />
+<h2 id="051-2026-03-08">0.5.1 - 2026-03-08<a class="headerlink" href="#051-2026-03-08" title="Permanent link">&para;</a></h2>
+<h3 id="bug-fixes_4">Bug Fixes<a class="headerlink" href="#bug-fixes_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>Optional["Model"]</code> not detected as FK</strong> — <code>Optional["Author"]</code> (with a string forward reference) was not recognized as a foreign key because <code>ForwardRef</code> was not handled in the metaclass FK detection. Now works correctly alongside <code>Author | None</code> and <code>from __future__ import annotations</code>.</li>
+<li><strong>Python 3.14 compatibility</strong> — FK detection relied on reading <code>namespace["__annotations__"]</code> in the metaclass <code>__new__</code>, which is empty on Python 3.14 (PEP 749: lazy annotations). Moved FK detection after class creation, using Pydantic's <code>model_fields</code> which works on all Python versions.</li>
+</ul>
+<h3 id="improvements_2">Improvements<a class="headerlink" href="#improvements_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Metaclass cleanup</strong> — extracted <code>_build_globalns()</code> and <code>_get_db_attr()</code> helpers, reducing duplication in <code>_resolve_fk_fields()</code> and <code>_parse_field_tags()</code>. Relation field detection uses <code>OxydeFieldInfo.is_virtual</code> property.</li>
+</ul>
+<h3 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Fixed FK annotation examples</strong> — replaced <code>"Author" | None</code> (TypeError on Python 3.10-3.13) with <code>Author | None</code> across all docs. Added a detailed note on type annotations, forward references, and <code>from __future__ import annotations</code>.</li>
+</ul>
+<hr />
+<h2 id="050-2026-03-07">0.5.0 - 2026-03-07<a class="headerlink" href="#050-2026-03-07" title="Permanent link">&para;</a></h2>
+<h3 id="breaking-changes_1">Breaking Changes<a class="headerlink" href="#breaking-changes_1" title="Permanent link">&para;</a></h3>
+<h4 id="update-returns-row-count-by-default"><code>update()</code> returns row count by default<a class="headerlink" href="#update-returns-row-count-by-default" title="Permanent link">&para;</a></h4>
+<p><code>update()</code> now returns <code>int</code> (number of affected rows) instead of <code>list[dict]</code>. This aligns with Django's <code>update()</code> behavior. Pass <code>returning=True</code> to get the previous behavior.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Before (0.4.x)</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Post</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;published&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># rows was list[dict]</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="c1"># After (0.5.0)</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">count</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Post</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;published&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># count is int</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Post</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">status</span><span class="o">=</span><span class="s2">&quot;published&quot;</span><span class="p">,</span> <span class="n">returning</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="c1"># rows is list[dict] (explicit opt-in)</span>
+</code></pre></div>
+<h4 id="execute_to_pylist-execute_batched_dedup-removed-from-asyncdatabase"><code>execute_to_pylist()</code>, <code>execute_batched_dedup()</code> removed from <code>AsyncDatabase</code><a class="headerlink" href="#execute_to_pylist-execute_batched_dedup-removed-from-asyncdatabase" title="Permanent link">&para;</a></h4>
+<p>The Python-side batched/dedup execution methods have been removed. JOIN deduplication is now handled entirely in the Rust core encoder. Use <code>execute()</code> for all queries.</p>
+<h4 id="batch_size-removed-from-poolsettings"><code>batch_size</code> removed from <code>PoolSettings</code><a class="headerlink" href="#batch_size-removed-from-poolsettings" title="Permanent link">&para;</a></h4>
+<p>The <code>batch_size</code> parameter is no longer needed since batching is handled by the Rust core.</p>
+<hr />
+<h3 id="bug-fixes_5">Bug Fixes<a class="headerlink" href="#bug-fixes_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>distinct</code> ignored in aggregates</strong> — <code>Count("field", distinct=True)</code> (and <code>Sum</code>, <code>Avg</code>) now correctly generates <code>COUNT(DISTINCT field)</code>. The <code>distinct</code> flag was not propagated through the IR.</li>
+<li><strong><code>refresh()</code> overwrote virtual fields</strong> — calling <code>refresh()</code> on a model instance with <code>reverse_fk</code> or <code>m2m</code> relations would overwrite them with raw data from the database. Virtual relation fields are now skipped.</li>
+<li><strong><code>timedelta</code> not deserialized</strong> — <code>timedelta</code> columns came back as raw integers (microseconds). Now correctly converted back to <code>datetime.timedelta</code> objects on the Python side.</li>
+<li><strong><code>group_by()</code> produced incorrect SQL</strong> — custom group-by implementation replaced with native sea-query group-by, fixing edge cases with table qualification and JOIN queries.</li>
+<li><strong><code>union()</code> / <code>union_all()</code> rewritten</strong> — custom union SQL generation replaced with native sea-query <code>UNION</code> support. Fixes ordering and parenthesization issues. Union sub-queries are now built recursively.</li>
+<li><strong><code>datetime</code> cast incorrect</strong> — fixed datetime value conversion in the Rust driver layer.</li>
+<li><strong>Binary data corrupted through serde</strong> — binary fields (<code>bytes</code>) were mangled by the <code>serde_json::Value</code> intermediate layer. Replaced by <code>rmpv::Value</code> for lossless binary round-trip.</li>
+</ul>
+<hr />
+<h3 id="improvements_3">Improvements<a class="headerlink" href="#improvements_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>serde_json eliminated from data path</strong> — the entire row encoding pipeline now goes directly from sqlx rows to MessagePack via <code>rmpv</code>, removing the <code>serde_json::Value</code> intermediate representation. This fixes binary/timedelta data corruption and reduces allocations.</li>
+<li><strong><code>CellEncoder</code> trait</strong> — new unified trait in <code>oxyde-driver</code> for columnar row encoding. Each backend (Postgres, SQLite, MySQL) implements <code>CellEncoder</code> with type-specific decoding; generic functions handle the columnar structure.</li>
+<li><strong>JOIN dedup moved to Rust</strong> — relation deduplication for JOIN queries is now performed in the Rust encoder (<code>encoder.rs</code>), replacing the Python-side <code>execute_batched_dedup</code> path. Results use a compact 3-element msgpack format: <code>[main_columns, main_rows, relations_map]</code>.</li>
+<li><strong><code>having()</code> supports annotation aliases</strong> — <code>having(total__gt=100)</code> now correctly resolves <code>total</code> from <code>annotate(total=Sum(...))</code> instead of treating it as a model field. Supported lookups: <code>exact</code>, <code>gt</code>, <code>gte</code>, <code>lt</code>, <code>lte</code>.</li>
+<li><strong><code>group_by()</code> guards model hydration</strong> — calling <code>.all()</code> on a <code>group_by()</code> query now raises <code>TypeError</code> with a clear message suggesting <code>.values()</code> or <code>.fetch_all()</code> instead.</li>
+<li><strong>Aggregate <code>DISTINCT</code> support</strong> — <code>Count</code>, <code>Sum</code>, and <code>Avg</code> now accept <code>distinct=True</code> at both the IR and SQL generation levels. <code>Max</code>/<code>Min</code> ignore it (as <code>DISTINCT</code> is meaningless for those).</li>
+<li><strong>Rust crate modularization</strong> — <code>oxyde-core-py</code>, <code>oxyde-driver</code>, and <code>oxyde-migrate</code> monolithic <code>lib.rs</code> files split into focused modules (<code>convert.rs</code>, <code>execute.rs</code>, <code>pool.rs</code>, <code>migration.rs</code>, <code>diff.rs</code>, <code>op.rs</code>, <code>sql.rs</code>, etc.).</li>
+<li><strong>Migrations use native sea-query</strong> — migration SQL generation now uses sea-query builders instead of hand-crafted SQL strings, improving dialect compatibility.</li>
+<li><strong>Migration code deduplicated</strong> — shared utilities (<code>detect_dialect</code>, <code>load_migration_module</code>, <code>parse_query_result</code>) extracted to <code>oxyde.migrations.utils</code>.</li>
+<li><strong>Test suite restructured</strong> — tests organized into <code>unit/</code>, <code>smoke/</code>, and <code>integration/</code> directories with shared helpers (<code>StubExecuteClient</code>). New integration tests cover CRUD, aggregation, filtering, pagination, relations, transactions, field types, and edge cases against real SQLite.</li>
+<li><strong>Free-threaded Python support</strong> — CI now builds wheels for Python 3.13t and 3.14t (free-threaded / no-GIL builds).</li>
+<li><strong><code>typer</code> bumped to &gt;= 0.24</strong> — resolves deprecation warnings.</li>
+</ul>
+<hr />
+<h2 id="040-2026-02-23">0.4.0 - 2026-02-23<a class="headerlink" href="#040-2026-02-23" title="Permanent link">&para;</a></h2>
+<h3 id="breaking-changes_2">Breaking Changes<a class="headerlink" href="#breaking-changes_2" title="Permanent link">&para;</a></h3>
+<h4 id="oxydemodel-renamed-to-model"><code>OxydeModel</code> renamed to <code>Model</code><a class="headerlink" href="#oxydemodel-renamed-to-model" title="Permanent link">&para;</a></h4>
+<p>The base class has been renamed from <code>OxydeModel</code> to <code>Model</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Before (0.3.x)</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde</span><span class="w"> </span><span class="kn">import</span> <span class="n">OxydeModel</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">User</span><span class="p">(</span><span class="n">OxydeModel</span><span class="p">):</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="o">...</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># After (0.4.0+)</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="kn">from</span><span class="w"> </span><span class="nn">oxyde</span><span class="w"> </span><span class="kn">import</span> <span class="n">Model</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">User</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="o">...</span>
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Deprecation notice</p>
+<p><code>OxydeModel</code> still works in 0.4.x and emits a <code>DeprecationWarning</code>. It will be <strong>removed</strong> in a future release. Update your imports now:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a># Find and replace across your project:
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>OxydeModel → Model
+</code></pre></div>
+<p>Direct import <code>from oxyde.models.base import OxydeModel</code> is <strong>not supported</strong> and will raise <code>ImportError</code>.</p>
+</div>
+<h4 id="limit-and-offset-reject-negative-values"><code>limit()</code> and <code>offset()</code> reject negative values<a class="headerlink" href="#limit-and-offset-reject-negative-values" title="Permanent link">&para;</a></h4>
+<p>Both methods now raise <code>ValueError</code> on negative input. Previously negative values were silently accepted and produced invalid SQL.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># 0.3.x: silently generated broken SQL</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">qs</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># 0.4.0: raises ValueError</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">qs</span><span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># ValueError: limit() requires a non-negative value, got -1</span>
+</code></pre></div>
+<h4 id="ensure_field_metadata-removed"><code>ensure_field_metadata()</code> removed<a class="headerlink" href="#ensure_field_metadata-removed" title="Permanent link">&para;</a></h4>
+<p>The classmethod <code>Model.ensure_field_metadata()</code> has been removed. Model metadata is now finalized eagerly at class definition time. If you were calling this method manually, simply remove the call — it is no longer needed.</p>
+<h4 id="resolve_pending_fk-replaced"><code>resolve_pending_fk()</code> replaced<a class="headerlink" href="#resolve_pending_fk-replaced" title="Permanent link">&para;</a></h4>
+<p><code>resolve_pending_fk()</code> in <code>oxyde.models.registry</code> has been replaced by:</p>
+<ul>
+<li><code>finalize_pending()</code> — eagerly finalizes all pending models</li>
+<li><code>assert_no_pending_models()</code> — raises <code>RuntimeError</code> if any models are still pending</li>
+</ul>
+<h4 id="migrationstypes-module-removed"><code>migrations.types</code> module removed<a class="headerlink" href="#migrationstypes-module-removed" title="Permanent link">&para;</a></h4>
+<p>The <code>oxyde.migrations.types</code> module (<code>validate_sql_type</code>, <code>normalize_sql_type</code>, <code>translate_db_specific_type</code>) has been removed. Type handling is now internal to the Rust core.</p>
+<hr />
+<h3 id="bug-fixes_6">Bug Fixes<a class="headerlink" href="#bug-fixes_6" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>union()</code> / <code>union_all()</code> were silently ignored</strong> — union queries now correctly generate SQL and execute as expected.</li>
+<li><strong>FK relation fields included in INSERT/UPDATE</strong> — fields like <code>author: Author</code> were incorrectly serialized into INSERT/UPDATE statements alongside the actual <code>author_id</code> column. Now properly excluded.</li>
+<li><strong>Nested JOIN hydration failed</strong> — deeply nested joins (e.g. <code>post__author__profile</code>) could produce incorrect or missing data. Hydration logic rewritten to correctly resolve nested FK references.</li>
+<li><strong><code>get_or_create()</code> race condition</strong> — concurrent calls creating the same record could both fail with <code>IntegrityError</code>. Now retries <code>get()</code> on conflict.</li>
+<li><strong>Migration advisory lock on wrong connection</strong> — <code>pg_try_advisory_lock</code> and <code>pg_advisory_unlock</code> could execute on different pool connections. Lock now pins a connection via <code>begin_transaction()</code>.</li>
+<li><strong>Transaction leak on savepoint failure</strong> — if savepoint creation failed, transaction depth was already incremented, corrupting state. Depth is now incremented only after successful savepoint creation.</li>
+<li><strong><code>bulk_create([])</code> did not raise</strong> — empty list was silently accepted. Now correctly raises <code>ValueError</code>.</li>
+<li><strong>Negative pool duration accepted</strong> — <code>PoolSettings</code> durations now raise <code>ValueError</code> for negative values.</li>
+<li><strong><code>makemigrations</code> silently continued on broken migrations</strong> — if replaying existing migrations failed, the CLI used an empty schema as baseline, potentially generating destructive migrations. Now fails with exit code 1.</li>
+<li><strong><code>migrate</code> wrong exit code</strong> — <code>migrate</code> could exit with code 0 when migration was not found.</li>
+</ul>
+<hr />
+<h3 id="improvements_4">Improvements<a class="headerlink" href="#improvements_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Eager model finalization</strong> — model metadata (field metadata, column types, PK info) is now computed at class definition time instead of lazily on first query. Eliminates an entire class of "metadata not ready" bugs.</li>
+<li><strong>Unified type registry</strong> — <code>TYPE_REGISTRY</code> in <code>oxyde.core.types</code> consolidates all Python-to-IR type mappings. Fixes <code>bool</code> being misclassified as <code>int</code> in lookups.</li>
+<li><strong>Local imports removed</strong> — circular dependency issues resolved; all imports are now at module level for better readability and faster import time.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/mr-fatalyst/oxyde" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://linkedin.com/in/nikita-ryzhenkov" target="_blank" rel="noopener" title="linkedin.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M416 32H31.9C14.3 32 0 46.5 0 64.3v383.4C0 465.5 14.3 480 31.9 480H416c17.6 0 32-14.5 32-32.3V64.3c0-17.8-14.4-32.3-32-32.3M135.4 416H69V202.2h66.5V416zM102.2 96a38.5 38.5 0 1 1 0 77 38.5 38.5 0 1 1 0-77m282.1 320h-66.4V312c0-24.8-.5-56.7-34.5-56.7-34.6 0-39.9 27-39.9 54.9V416h-66.4V202.2h63.7v29.2h.9c8.9-16.8 30.6-34.5 62.9-34.5 67.2 0 79.7 44.3 79.7 101.9z"/></svg>
+    </a>
+  
+    
+    
+    
+    
+    <a href="mailto:nikita.ryzhenkoff@gmail.com" target="_blank" rel="noopener" title="" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4l208 156a48 48 0 0 0 57.6 0l208-156c12.1-9.1 19.2-23.3 19.2-38.4 0-26.5-21.5-48-48-48zM0 196v188c0 35.3 28.7 64 64 64h384c35.3 0 64-28.7 64-64V196L313.6 344.8c-34.1 25.6-81.1 25.6-115.2 0z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
