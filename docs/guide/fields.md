@@ -140,6 +140,23 @@ tags: list[str] = Field(db_type="TEXT[]")
 content: str = Field(db_type="LONGTEXT")
 ```
 
+### Array Inner Constraints
+
+For PostgreSQL array columns the inner element type can carry its own constraints via `Annotated`:
+
+```python
+from typing import Annotated
+from decimal import Decimal
+
+tags: list[Annotated[str, Field(max_length=50)]] | None = Field(default=None)
+# PostgreSQL: VARCHAR(50)[]
+
+prices: list[Annotated[Decimal, Field(max_digits=10, decimal_places=2)]] | None = Field(default=None)
+# PostgreSQL: NUMERIC(10,2)[]
+```
+
+On MySQL and SQLite arrays fall back to `JSON` / `TEXT`, so inner constraints only affect DDL on PostgreSQL.
+
 ## Foreign Keys
 
 Foreign keys are defined by type annotation:
@@ -285,6 +302,29 @@ status: str = Field(default="active")
 # Required but can be None
 data: str | None  # Must be passed, but can be None
 ```
+
+## Computed Fields
+
+Pydantic `@computed_field` is supported on models and is automatically excluded from `INSERT` / `UPDATE` statements — computed values live only on the instance.
+
+```python
+from pydantic import computed_field
+
+class Product(Model):
+    id: int | None = Field(default=None, db_pk=True)
+    price: float = Field(default=0.0)
+    quantity: int = Field(default=1)
+
+    @computed_field
+    @property
+    def total(self) -> float:
+        return self.price * self.quantity
+
+    class Meta:
+        is_table = True
+```
+
+`total` is available on loaded instances but is never sent to the database and is not tracked by migrations.
 
 ## Comments
 

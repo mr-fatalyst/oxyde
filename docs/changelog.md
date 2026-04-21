@@ -6,7 +6,7 @@ All notable changes to Oxyde are documented here.
 
 ## 0.7.0 - Unreleased
 
-**Rust core: 0.6.0** (`core-v0.6.0`)
+**Rust core: 0.6.1** (`core-v0.6.1`)
 
 ### Breaking Changes
 
@@ -103,6 +103,15 @@ Several default type mappings have changed:
 - **MySQL decimal** — decimal values were extracted as `String` instead of `rust_decimal::Decimal`, causing type mismatches.
 - **MySQL DATETIME/TIME precision** — now generates `DATETIME(6)` and `TIME(6)` for microsecond precision.
 - **`db_type` array handling** — array type constraints (e.g. `varchar(100)`) were not stripped before type lookup, causing encoding failures.
+- **INSERT RETURNING on MySQL** — targeted Rust driver fix so `create()` / `bulk_create(..., returning=True)` take the correct execution path on MySQL (which has no native `RETURNING`).
+- **Stub generator emitted invalid syntax for bare types** — unparameterized `dict`, `list`, `tuple`, `set` and similar produced stubs that failed to parse. Now emitted correctly.
+- **Stub generator crashed on parameterized generics on older Python** — `isinstance()` against a subscripted generic raises `TypeError` on Python 3.10/3.11. The generator now checks `__origin__` first.
+
+### Migrations
+
+- **Tables are topologically sorted by FK dependencies** — `compute_diff` now orders `CREATE TABLE` statements so referenced tables are created before referencing ones; cyclic FK graphs are rejected with a clear error.
+- **Minimal payload for drop operations** — `drop_foreign_key`, `drop_index` and `drop_check` ops no longer require the full column/constraint definition, only the name. (#24)
+- **`alter_column` replay preserves constraints** — `max_length`, `max_digits` and `decimal_places` survive migration replay; previously they were dropped when a column was rewritten by replay. (#25)
 
 ### Internal
 
@@ -112,7 +121,8 @@ Several default type mappings have changed:
 - **Migration operation ordering** — `CREATE`/`DROP`/`INDEX` statements execute before `ALTER TABLE` (fixes FK constraints on PostgreSQL/MySQL).
 - **Constraint change detection** — migration diff detects changes in `max_length`, `max_digits`, `decimal_places`.
 - **Pool backend detection** — new Rust function `pool_backend()` exposed to Python for runtime database type detection.
-- **Rust core bumped to 0.6.0** (`core-v0.6.0`).
+- **Stub generator rewritten on top of `ast`** — the generator previously relied on regex-based parsing; it now walks the AST, producing more reliable output and eliminating several classes of malformed stubs.
+- **Rust core bumped to 0.6.1** (`core-v0.6.1`).
 
 ---
 

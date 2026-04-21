@@ -363,6 +363,16 @@ def downgrade(ctx):
     ctx.drop_table("posts")
 ```
 
+## Foreign Key Ordering
+
+When `makemigrations` generates `create_table` / `drop_table` operations it topologically sorts tables by their foreign-key graph:
+
+- new tables are emitted so that referenced tables are created before referencing ones;
+- dropped tables are emitted in reverse order;
+- ties at the same level are broken alphabetically for stable output.
+
+If the schema contains a cyclic FK dependency, `makemigrations` fails with an error listing the tables involved. Break the cycle by making one side of the FK nullable and adding it in a separate migration step (e.g. create the tables first, then `add_foreign_key` afterwards).
+
 ## Programmatic Schema Management
 
 For tests and scripts where migration files are not needed, use `create_tables()` / `drop_tables()`:
