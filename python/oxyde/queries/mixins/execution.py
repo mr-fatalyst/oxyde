@@ -554,7 +554,7 @@ class ExecutionMixin:
             if descriptor is not None and hasattr(descriptor, "__set__"):
                 descriptor.__set__(parent, list(values))
             else:
-                parent.__dict__[relation_name] = list(values)
+                setattr(parent, relation_name, list(values))
 
         if len(segments) > 1:
             nested_children: list[Model] = [
@@ -677,4 +677,4 @@ class ExecutionMixin:
             if descriptor is not None and hasattr(descriptor, "__set__"):
                 descriptor.__set__(parent, list(values))
             else:
-                parent.__dict__[relation_name] = list(values)
+                setattr(parent, relation_name, list(values))

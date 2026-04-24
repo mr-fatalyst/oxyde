@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic.fields import PydanticUndefined
+from pydantic_core import PydanticUndefined
 
 from oxyde.models.base import Model
 from oxyde.models.registry import iter_tables, registered_tables
