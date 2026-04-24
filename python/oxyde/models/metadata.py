@@ -48,7 +48,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Any
 
-from pydantic.fields import PydanticUndefined
+from pydantic_core import PydanticUndefined
 
 from oxyde.models.decorators import Check, Index
 

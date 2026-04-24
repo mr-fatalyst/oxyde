@@ -53,6 +53,7 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Coroutine
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from typing_extensions import Self
@@ -308,6 +309,72 @@ class Query(
             count=self._count or None,
             exists=self._exists or None,
         )
+
+    # Narrow inherited mixin return types from Model → TModel for type checkers.
+    # These stubs are only visible to type checkers; the mixin implementations
+    # run at runtime (they are already correct since model_class carries the type).
+    if TYPE_CHECKING:
+        from collections.abc import Iterable
+
+        from oxyde.queries.base import SupportsExecute
+
+        async def fetch_models(  # type: ignore
+            self, client: SupportsExecute
+        ) -> list[TModel]: ...
+
+        def all(  # type: ignore
+            self,
+            *,
+            using: str | None = None,
+            client: SupportsExecute | None = None,
+        ) -> Coroutine[Any, Any, list[TModel]]: ...
+
+        async def get(
+            self,
+            *,
+            using: str | None = None,
+            client: SupportsExecute | None = None,
+        ) -> TModel: ...
+
+        async def get_or_none(
+            self,
+            *,
+            using: str | None = None,
+            client: SupportsExecute | None = None,
+        ) -> TModel | None: ...
+
+        async def first(
+            self,
+            *,
+            using: str | None = None,
+            client: SupportsExecute | None = None,
+        ) -> TModel | None: ...
+
+        async def last(
+            self,
+            *,
+            using: str | None = None,
+            client: SupportsExecute | None = None,
+        ) -> TModel | None: ...
+
+        async def create(
+            self,
+            *,
+            instance: Model | None = None,
+            using: str | None = None,
+            client: SupportsExecute | None = None,
+            _skip_hooks: bool = False,
+            **data: Any,
+        ) -> TModel: ...
+
+        async def bulk_create(  # type: ignore
+            self,
+            objects: Iterable[Any],
+            *,
+            using: str | None = None,
+            client: SupportsExecute | None = None,
+            batch_size: int | None = None,
+        ) -> list[TModel]: ...
 
 
 __all__ = ["Query"]
