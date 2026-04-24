@@ -80,8 +80,9 @@ from typing import (
 from pydantic import BaseModel, ConfigDict
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic.errors import PydanticUndefinedAnnotation
-from pydantic.fields import FieldInfo, PydanticUndefined
-from typing_extensions import dataclass_transform
+from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
+from typing_extensions import Self, dataclass_transform
 
 from oxyde.core import register_validator
 from oxyde.core.ir_types import get_ir_type
@@ -202,7 +203,7 @@ def _get_db_attr(field: FieldInfo, attr_name: str, default: Any = None) -> Any:
 
 @dataclass_transform(
     kw_only_default=True,
-    field_specifiers=(FieldInfo, Field, OxydeFieldInfo),
+    field_specifiers=(OxydeFieldInfo,),
 )
 class Model(BaseModel, metaclass=OxydeModelMeta):
     """Base class for Oxyde ORM models."""
@@ -211,7 +212,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         ignored_types=(RelationDescriptorBase,),
     )
     _db_meta: ClassVar[ModelMeta]
-    objects: ClassVar[QueryManager]
+    objects: ClassVar[QueryManager[Self]]
     _is_table: ClassVar[bool] = False
     __pending_fk_fields__: ClassVar[list[tuple[str, Any, Any]]] = []
     __fk_fields_resolved__: ClassVar[bool] = False
@@ -691,7 +692,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         client: SupportsExecute | None = None,
         using: str | None = None,
         update_fields: Iterable[str] | None = None,
-    ) -> Model:
+    ) -> Self:
         manager = self.__class__.objects
         pk_field = self.__class__._db_meta.pk_field
         pk_value = getattr(self, pk_field) if pk_field else None
@@ -751,12 +752,12 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             if not rows:
                 cls_name = self.__class__.__name__
                 raise NotFoundError(f"{cls_name} with {pk_field}={pk_value} not found")
-            self.__dict__.update(rows[0].__dict__)
+            vars(self).update(vars(rows[0]))
         else:
             created = await manager.create(
                 instance=self, client=client, using=using, _skip_hooks=True
             )
-            self.__dict__.update(created.__dict__)
+            vars(self).update(vars(created))
 
         # Call post_save hook
         await self.post_save(is_create=is_create, update_fields=update_fields_set)
@@ -797,7 +798,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         *,
         client: SupportsExecute | None = None,
         using: str | None = None,
-    ) -> Model:
+    ) -> Self:
         """
         Reload this instance from the database.
 

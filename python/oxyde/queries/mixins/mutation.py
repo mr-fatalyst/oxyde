@@ -122,7 +122,7 @@ class MutationMixin:
         using: str | None = ...,
         client: SupportsExecute | None = ...,
         **values: Any,
-    ) -> list[Model]: ...
+    ) -> list[Any]: ...
 
     @overload
     async def update(

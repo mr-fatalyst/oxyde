@@ -21,6 +21,17 @@ from oxyde.models.lookups import (
 )
 from oxyde.models.registry import registered_tables
 
+_CREATE_RESERVED_PARAMS = frozenset({"instance", "client", "using"})
+
+# Safe aliases used in __init__ signatures to avoid field-name / type-name conflicts (e.g. a field
+# named "datetime" annotated as "datetime | None" would shadow the imported datetime class inside
+# the class body).
+_SAFE_TYPE_ALIASES: dict[str, str] = {
+    "datetime": "_Datetime",
+    "date": "_Date",
+    "time": "_Time",
+}
+
 
 def _get_python_type_name(python_type: Any) -> str:
     """Get string representation of Python type for stub file."""
@@ -125,37 +136,53 @@ def _get_field_info(model_class: type[Model]) -> dict[str, tuple[Any, bool]]:
     return result
 
 
-def _generate_filter_params(model_class: type[Model]) -> str:
-    """Generate filter method parameters with all lookups."""
+def _append_scalar_lookups(lines: list[str], prefix: str, python_type: Any) -> None:
+    """Append exact-match + all lookup suffix params for a scalar field."""
+    type_name = _get_python_type_name(python_type)
+    lines.append(f"        {prefix}: {type_name} | None = None,")
+    for lookup in _get_lookups_for_type(python_type):
+        if lookup == "in":
+            lookup_type = f"list[{type_name}] | None"
+        elif lookup == "between":
+            lookup_type = f"tuple[{type_name}, {type_name}] | None"
+        elif lookup == "isnull":
+            lookup_type = "bool | None"
+        elif lookup in DATE_PART_LOOKUPS:
+            lookup_type = "int | None"
+        else:
+            lookup_type = f"{type_name} | None"
+        lines.append(f"        {prefix}__{lookup}: {lookup_type} = None,")
+
+
+def _generate_filter_params(model_class: type[Model], prefix: str = "") -> list[str]:
+    """Generate filter method parameters with all lookups, including FK traversal."""
     lines = []
     field_info = _get_field_info(model_class)
 
     for field_name, (python_type, _is_pk) in sorted(field_info.items()):
-        type_name = _get_python_type_name(python_type)
+        current_field = f"{prefix}__{field_name}" if prefix else field_name
 
-        # Exact match (field without lookup)
-        lines.append(f"        {field_name}: {type_name} | None = None,")
+        # FK field — emit isnull for relation itself, recurse into related model to emit type-specific filters
+        if isinstance(python_type, type) and issubclass(python_type, Model):
+            type_name = _get_python_type_name(python_type)
+            lines.append(f"        {current_field}: {type_name} | None = None,")
+            lines.append(f"        {current_field}__isnull: bool | None = None,")
 
-        # Add all lookups for this type
-        lookups = _get_lookups_for_type(python_type)
-        for lookup in lookups:
-            lookup_field = f"{field_name}__{lookup}"
+            related_fields = _get_field_info(python_type)
+            for related_name, (related_type, _) in sorted(related_fields.items()):
+                if isinstance(related_type, type) and issubclass(related_type, Model):
+                    nested_prefix = f"{current_field}__{related_name}"
+                    lines.extend(
+                        _generate_filter_params(related_type, prefix=nested_prefix)
+                    )
+                else:
+                    _append_scalar_lookups(
+                        lines, f"{current_field}__{related_name}", related_type
+                    )
+        else:
+            _append_scalar_lookups(lines, current_field, python_type)
 
-            # Determine type for lookup
-            if lookup == "in":
-                lookup_type = f"list[{type_name}] | None"
-            elif lookup == "between":
-                lookup_type = f"tuple[{type_name}, {type_name}] | None"
-            elif lookup == "isnull":
-                lookup_type = "bool | None"
-            elif lookup in DATE_PART_LOOKUPS:
-                lookup_type = "int | None"
-            else:
-                lookup_type = f"{type_name} | None"
-
-            lines.append(f"        {lookup_field}: {lookup_type} = None,")
-
-    return "\n".join(lines)
+    return lines
 
 
 def _generate_order_by_literal(model_class: type[Model]) -> str:
@@ -201,14 +228,38 @@ def _generate_update_params(model_class: type[Model]) -> str:
     return "\n".join(lines)
 
 
+def _get_safe_type_name(python_type: Any, field_name: str) -> str:
+    """Return a type name that won't shadow the field name in a class body."""
+    type_name = _get_python_type_name(python_type)
+    if type_name == field_name:
+        return _SAFE_TYPE_ALIASES.get(type_name, f"_{type_name}")
+    return type_name
+
+
 def _generate_create_params(model_class: type[Model]) -> str:
     """Generate create method parameters with proper optionality."""
     lines = []
     field_info = _get_field_info(model_class)
 
     for field_name, (python_type, _is_pk) in sorted(field_info.items()):
+        if field_name in _CREATE_RESERVED_PARAMS:
+            continue
         type_name = _get_python_type_name(python_type)
         # All create params are optional in stub (instance can be passed instead)
+        lines.append(f"        {field_name}: {type_name} | None = None,")
+
+    return "\n".join(lines)
+
+
+def _generate_init_params(model_class: type[Model]) -> str:
+    """Generate __init__ parameters using safe type aliases to avoid name shadowing."""
+    lines = []
+    field_info = _get_field_info(model_class)
+
+    for field_name, (python_type, _is_pk) in sorted(field_info.items()):
+        if field_name in _CREATE_RESERVED_PARAMS:
+            continue
+        type_name = _get_safe_type_name(python_type, field_name)
         lines.append(f"        {field_name}: {type_name} | None = None,")
 
     return "\n".join(lines)
@@ -248,6 +299,15 @@ def _extract_top_level_copyable(tree: ast.Module) -> list[str]:
     for node in tree.body:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             result.append(ast.unparse(node))
+        elif (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "TYPE_CHECKING"
+        ):
+            # Hoist TYPE_CHECKING imports directly — stubs don't need the guard
+            for child in node.body:
+                if isinstance(child, (ast.Import, ast.ImportFrom)):
+                    result.append(ast.unparse(child))
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # Skip the non-@overload implementation of an overloaded function —
             # `.pyi` cannot contain such an implementation.
@@ -317,6 +377,22 @@ def _generate_model_class_stub(
         else:
             lines.append(f"    {field_name}: {type_name}")
 
+        # Emit companion `{field}_id: int | None` for FK fields
+        if isinstance(python_type, type) and issubclass(python_type, Model):
+            lines.append(f"    {field_name}_id: int | None")
+
+    # Add explicit __init__ so type checkers resolve constructor parameter types against the module
+    # scope rather than the class body scope. This prevents field names that shadow built-in type
+    # names (e.g. a field named "datetime" typed as "datetime | None") from causing false
+    # positives.
+    init_params = _generate_init_params(model_class)
+    lines.append("    def __init__(")
+    lines.append("        self,")
+    lines.append("        *,")
+    if init_params:
+        lines.append(init_params)
+    lines.append("    ) -> None: ...")
+
     # Copy user-defined methods (body replaced by `...`)
     for method_src in custom_methods:
         for raw_line in method_src.splitlines():
@@ -333,7 +409,7 @@ def generate_model_stub(model_class: type[Model]) -> str:
     model_name = model_class.__name__
 
     # Generate model-dependent parameters
-    filter_params = _generate_filter_params(model_class)
+    filter_params = "\n".join(_generate_filter_params(model_class))
     order_by_literal = _generate_order_by_literal(model_class)
     field_literal = _generate_field_literal(model_class)
     create_params = _generate_create_params(model_class)
@@ -360,23 +436,31 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Exclude objects matching field lookups.\"\"\"
         ...
 
-    def order_by(self, *fields: {order_by_literal}) -> "{model_name}Query":  # type: ignore[override]
+    @overload
+    def order_by(self, *fields: {order_by_literal}) -> "{model_name}Query": ...
+    @overload
+    def order_by(self, *fields: str) -> "{model_name}Query": ...
+    def order_by(self, *fields: str) -> "{model_name}Query":
         \"\"\"Order results by fields.\"\"\"
         ...
 
-    def limit(self, n: int) -> "{model_name}Query":
+    def limit(self, value: int) -> Self:
         \"\"\"Limit number of results.\"\"\"
         ...
 
-    def offset(self, n: int) -> "{model_name}Query":
+    def offset(self, value: int) -> Self:
         \"\"\"Skip first n results.\"\"\"
         ...
 
-    def distinct(self, value: bool = True) -> "{model_name}Query":
+    def distinct(self, distinct: bool = True) -> Self:
         \"\"\"Return distinct results.\"\"\"
         ...
 
-    def select(self, *fields: {field_literal}) -> "{model_name}Query":  # type: ignore[override]
+    @overload
+    def select(self, *fields: {field_literal}) -> "{model_name}Query": ...
+    @overload
+    def select(self, *fields: str) -> "{model_name}Query": ...
+    def select(self, *fields: str) -> "{model_name}Query":
         \"\"\"Select specific fields.\"\"\"
         ...
 
@@ -400,7 +484,11 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Add computed fields using aggregate functions.\"\"\"
         ...
 
-    def group_by(self, *fields: {field_literal}) -> "{model_name}Query":  # type: ignore[override]
+    @overload
+    def group_by(self, *fields: {field_literal}) -> "{model_name}Query": ...
+    @overload
+    def group_by(self, *fields: str) -> "{model_name}Query": ...
+    def group_by(self, *fields: str) -> "{model_name}Query":
         \"\"\"Add GROUP BY clause.\"\"\"
         ...
 
@@ -408,11 +496,19 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Add HAVING clause for filtering grouped results.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> "{model_name}Query":  # type: ignore[override]
+    @overload
+    def values(self, *fields: {field_literal}) -> "{model_name}Query": ...
+    @overload
+    def values(self, *fields: str) -> "{model_name}Query": ...
+    def values(self, *fields: str) -> "{model_name}Query":
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    def values_list(self, *fields: {field_literal}, flat: bool = False) -> "{model_name}Query":  # type: ignore[override]
+    @overload
+    def values_list(self, *fields: {field_literal}, flat: bool = False) -> "{model_name}Query": ...
+    @overload
+    def values_list(self, *fields: str, flat: bool = False) -> "{model_name}Query": ...
+    def values_list(self, *fields: str, flat: bool = False) -> "{model_name}Query":
         \"\"\"Return tuples/values instead of models.\"\"\"
         ...
 
@@ -552,11 +648,19 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Exclude objects matching field lookups.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]
+    @overload
+    def values(self, *fields: {field_literal}) -> {model_name}Query: ...
+    @overload
+    def values(self, *fields: str) -> {model_name}Query: ...
+    def values(self, *fields: str) -> {model_name}Query:
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}Query:  # type: ignore[override]
+    @overload
+    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}Query: ...
+    @overload
+    def values_list(self, *fields: str, flat: bool = False) -> {model_name}Query: ...
+    def values_list(self, *fields: str, flat: bool = False) -> {model_name}Query:
         \"\"\"Return tuples/values instead of models.\"\"\"
         ...
 
@@ -624,7 +728,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Get object, create if missing, or update it when defaults are provided.\"\"\"
         ...
 
-    async def all(
+    async def all(  # type: ignore[override]
         self,
         *,
         client: Any | None = None,
@@ -738,6 +842,24 @@ class {model_name}Manager(QueryManager[{model_name}]):
     return queryset_class + manager_class
 
 
+def _collect_transitive_models(models: list[type[Model]]) -> set[type[Model]]:
+    """Return all Model classes reachable via FK fields from the given roots."""
+    visited: set[type[Model]] = set()
+
+    def _traverse(model_class: type[Model]) -> None:
+        if model_class in visited:
+            return
+        visited.add(model_class)
+        for _, (python_type, _) in _get_field_info(model_class).items():
+            if isinstance(python_type, type) and issubclass(python_type, Model):
+                _traverse(python_type)
+
+    for model in models:
+        _traverse(model)
+
+    return visited
+
+
 def _build_stub(file_path: Path, models: list[type[Model]]) -> str:
     """Build .pyi stub content for a source file that contains Model classes.
 
@@ -762,8 +884,9 @@ def _build_stub(file_path: Path, models: list[type[Model]]) -> str:
         "# Auto-generated by oxyde generate-stubs",
         "# DO NOT EDIT - This file will be overwritten",
         "",
-        "from typing import Any, ClassVar, Literal",
+        "from typing import Any, ClassVar, Literal, Self, overload",
         "from datetime import datetime, date, time",
+        "from datetime import datetime as _Datetime, date as _Date, time as _Time",
         "from decimal import Decimal",
         "from uuid import UUID",
         "",
@@ -774,6 +897,19 @@ def _build_stub(file_path: Path, models: list[type[Model]]) -> str:
 
     if user_imports:
         parts.extend(user_imports)
+        parts.append("")
+
+    # Add imports for models reachable via nested FKs that aren't defined in this file.
+    # user_imports covers direct FK models (they're imported in the source), but deeper relations
+    # (A → B → C) have no import in the source file.
+    local_models = set(models)
+    external_models = sorted(
+        _collect_transitive_models(models) - local_models,
+        key=lambda m: (m.__module__, m.__name__),
+    )
+    if external_models:
+        for m in external_models:
+            parts.append(f"from {m.__module__} import {m.__name__}")
         parts.append("")
 
     for model in models:

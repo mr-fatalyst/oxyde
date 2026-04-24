@@ -23,7 +23,7 @@ Example:
 from __future__ import annotations
 
 from collections.abc import Coroutine, Iterable
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, overload
 
 from oxyde.exceptions import IntegrityError, ManagerError, NotFoundError
 from oxyde.models.serializers import _derive_create_data
@@ -46,69 +46,122 @@ class QueryManager(Generic[TModel]):
     def __init__(self, model_class: type[TModel]) -> None:
         self.model_class = model_class
 
-    def _query(self) -> Query:
+    def _query(self) -> Query[TModel]:
         """Create a new Query for this model."""
         return Query(self.model_class)
 
     # --- Query building methods (return Query) ---
 
-    def query(self) -> Query:
+    def query(self) -> Query[TModel]:
         """Return a Query builder for this model."""
         return self._query()
 
-    def filter(self, *args: Any, **kwargs: Any) -> Query:
+    def filter(self, *args: Any, **kwargs: Any) -> Query[TModel]:
         """Filter by Q-expressions or field lookups."""
         return self._query().filter(*args, **kwargs)
 
-    def exclude(self, *args: Any, **kwargs: Any) -> Query:
+    def exclude(self, *args: Any, **kwargs: Any) -> Query[TModel]:
         """Exclude rows matching conditions (NOT filter)."""
         return self._query().exclude(*args, **kwargs)
 
-    def values(self, *fields: str) -> Query:
+    def values(self, *fields: str) -> Query[TModel]:
         """Return dicts instead of models."""
         return self._query().values(*fields)
 
-    def values_list(self, *fields: str, flat: bool = False) -> Query:
+    def values_list(self, *fields: str, flat: bool = False) -> Query[TModel]:
         """Return tuples/lists instead of models."""
         return self._query().values_list(*fields, flat=flat)
 
-    def distinct(self, distinct: bool = True) -> Query:
+    def distinct(self, distinct: bool = True) -> Query[TModel]:
         """Add DISTINCT to query."""
         return self._query().distinct(distinct)
 
-    def join(self, *paths: str) -> Query:
+    def join(self, *paths: str) -> Query[TModel]:
         """Eager load relations via JOIN."""
         return self._query().join(*paths)
 
-    def prefetch(self, *paths: str) -> Query:
+    def prefetch(self, *paths: str) -> Query[TModel]:
         """Prefetch relations in separate queries."""
         return self._query().prefetch(*paths)
 
-    def for_update(self) -> Query:
+    def for_update(self) -> Query[TModel]:
         """Add FOR UPDATE lock."""
         return self._query().for_update()
 
-    def for_share(self) -> Query:
+    def for_share(self) -> Query[TModel]:
         """Add FOR SHARE lock."""
         return self._query().for_share()
 
-    def order_by(self, *fields: str) -> Query:
+    def order_by(self, *fields: str) -> Query[TModel]:
         """Order results by fields. Prefix with '-' for descending."""
         return self._query().order_by(*fields)
 
-    def limit(self, value: int) -> Query:
+    def limit(self, value: int) -> Query[TModel]:
         """Limit number of results."""
         return self._query().limit(value)
 
-    def offset(self, value: int) -> Query:
+    def offset(self, value: int) -> Query[TModel]:
         """Skip first N results."""
         return self._query().offset(value)
 
-    def annotate(self, **annotations: Any) -> Query:
+    def annotate(self, **annotations: Any) -> Query[TModel]:
         """Add aggregate annotations."""
         return self._query().annotate(**annotations)
 
     # --- Execution methods (delegate to Query) ---
+
+    @overload
+    def all(
+        self,
+        *,
+        using: str | None = ...,
+        client: SupportsExecute | None = ...,
+        mode: Literal["models"],
+    ) -> Coroutine[Any, Any, list[TModel]]: ...
+
+    @overload
+    def all(
+        self,
+        *,
+        using: str | None = ...,
+        client: SupportsExecute | None = ...,
+    ) -> Coroutine[Any, Any, list[TModel]]: ...
+
+    @overload
+    def all(
+        self,
+        *,
+        using: str | None = ...,
+        client: SupportsExecute | None = ...,
+        mode: Literal["msgpack"],
+    ) -> Coroutine[Any, Any, bytes]: ...
+
+    @overload
+    def all(
+        self,
+        *,
+        using: str | None = ...,
+        client: SupportsExecute | None = ...,
+        mode: Literal["dict"],
+    ) -> Coroutine[Any, Any, list[dict[str, Any]]]: ...
+
+    @overload
+    def all(
+        self,
+        *,
+        using: str | None = ...,
+        client: SupportsExecute | None = ...,
+        mode: Literal["list"],
+    ) -> Coroutine[Any, Any, list[tuple[Any, ...]]]: ...
+
+    @overload
+    def all(
+        self,
+        *,
+        using: str | None = ...,
+        client: SupportsExecute | None = ...,
+        mode: str,
+    ) -> Coroutine[Any, Any, bytes | list[Any]]: ...
 
     def all(
         self,
@@ -138,7 +191,7 @@ class QueryManager(Generic[TModel]):
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Model | None:
+    ) -> TModel | None:
         """Return first result or None."""
         return await self._query().first(using=using, client=client)
 
@@ -147,7 +200,7 @@ class QueryManager(Generic[TModel]):
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Model | None:
+    ) -> TModel | None:
         """Return last result or None."""
         return await self._query().last(using=using, client=client)
 
@@ -157,7 +210,7 @@ class QueryManager(Generic[TModel]):
         using: str | None = None,
         client: SupportsExecute | None = None,
         **filters: Any,
-    ) -> Model:
+    ) -> TModel:
         """Return exactly one result. Raises NotFoundError/MultipleObjectsReturned."""
         q = self._query()
         if filters:
@@ -170,7 +223,7 @@ class QueryManager(Generic[TModel]):
         using: str | None = None,
         client: SupportsExecute | None = None,
         **filters: Any,
-    ) -> Model | None:
+    ) -> TModel | None:
         """Return one result or None. Raises MultipleObjectsReturned if many."""
         q = self._query()
         if filters:
@@ -184,7 +237,7 @@ class QueryManager(Generic[TModel]):
         using: str | None = None,
         client: SupportsExecute | None = None,
         **filters: Any,
-    ) -> tuple[Model, bool]:
+    ) -> tuple[TModel, bool]:
         """Get existing object or create a new one.
 
         Args:
@@ -276,7 +329,7 @@ class QueryManager(Generic[TModel]):
         client: SupportsExecute | None = None,
         _skip_hooks: bool = False,
         **data: Any,
-    ) -> Model:
+    ) -> TModel:
         """Create a new record in the database."""
         return await self._query().create(
             instance=instance,
@@ -293,7 +346,7 @@ class QueryManager(Generic[TModel]):
         using: str | None = None,
         client: SupportsExecute | None = None,
         batch_size: int | None = None,
-    ) -> list[Model]:
+    ) -> list[TModel]:
         """Bulk insert multiple objects efficiently."""
         return await self._query().bulk_create(
             objects,
@@ -304,7 +357,7 @@ class QueryManager(Generic[TModel]):
 
     async def bulk_update(
         self,
-        objects: Iterable[Model],
+        objects: Iterable[TModel],
         fields: Iterable[str],
         *,
         using: str | None = None,
@@ -325,7 +378,7 @@ class QueryManager(Generic[TModel]):
         using: str | None = None,
         client: SupportsExecute | None = None,
         **filters: Any,
-    ) -> tuple[Model, bool]:
+    ) -> tuple[TModel, bool]:
         """Get existing object and update it, or create it if it does not exist.
 
         Args:

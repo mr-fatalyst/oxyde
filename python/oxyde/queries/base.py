@@ -186,11 +186,14 @@ def _resolve_pool_name(
             return client._database.name
         else:
             # Unknown client type, try to get name attribute
-            if hasattr(client, "name"):
-                return str(client.name)
-            elif hasattr(client, "_database") and hasattr(client._database, "name"):
-                return str(client._database.name)
-            else:
+            name = getattr(client, "name", None)
+            if name is not None:
+                return str(name)
+            db = getattr(client, "_database", None)
+            if db is not None:
+                db_name = getattr(db, "name", None)
+                if db_name is not None:
+                    return str(db_name)
                 ctype = type(client).__name__
                 raise ManagerError(f"Cannot determine pool name from client: {ctype}")
 

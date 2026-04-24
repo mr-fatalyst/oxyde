@@ -54,7 +54,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic.fields import FieldInfo, PydanticUndefined
+from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 
 
 class OxydeFieldInfo(FieldInfo):  # type: ignore[misc]
