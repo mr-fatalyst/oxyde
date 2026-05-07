@@ -9,6 +9,7 @@ import pytest
 
 from oxyde import Field, Model
 from oxyde.migrations.context import MigrationContext
+from oxyde.migrations.extract import extract_current_schema
 from oxyde.migrations.generator import _operation_to_python
 from oxyde.migrations.replay import SchemaState
 from oxyde.models.registry import registered_tables
@@ -112,6 +113,33 @@ class TestSchemaExtraction:
 
         assert len(IndexedTable._db_meta.indexes) == 1
         assert IndexedTable._db_meta.indexes[0].name == "idx_full_name"
+
+    def test_extract_partial_index_where_in_snapshot(self):
+        """Table-level partial index predicates must survive schema extraction."""
+        from oxyde.models.decorators import Index
+
+        class User(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str
+            deleted_at: datetime | None = Field(default=None)
+
+            class Meta:
+                is_table = True
+                table_name = "users"
+                indexes = [
+                    Index(
+                        fields=["email"],
+                        name="idx_users_active_email",
+                        unique=True,
+                        where="  deleted_at IS NULL  ",
+                    ),
+                ]
+
+        assert User._db_meta.indexes[0].where == "deleted_at IS NULL"
+
+        snapshot = extract_current_schema(dialect="postgres")
+        [index] = snapshot["tables"]["users"]["indexes"]
+        assert index["where"] == "deleted_at IS NULL"
 
     def test_extract_unique_together(self):
         """Test extracting unique_together constraints."""

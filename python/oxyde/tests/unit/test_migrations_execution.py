@@ -566,6 +566,7 @@ class TestDropOpsMinimalPayloadRegression:
 
 ALL_DIALECTS = ["postgres", "mysql", "sqlite"]
 NON_SQLITE = ["postgres", "mysql"]
+PARTIAL_INDEX_DIALECTS = ["postgres", "sqlite"]
 
 
 def _field(name: str, **overrides) -> dict:
@@ -658,6 +659,37 @@ class TestOpMatrix:
         )
         sqls = _render(ctx, dialect)
         assert any("CREATE" in s.upper() and "INDEX" in s.upper() and "idx_users_email" in s for s in sqls)
+
+    @pytest.mark.parametrize("dialect", PARTIAL_INDEX_DIALECTS)
+    def test_create_partial_index(self, dialect):
+        ctx = MigrationContext(mode="collect", dialect=dialect)
+        ctx.create_index(
+            "users",
+            {
+                "name": "idx_users_active_email",
+                "fields": ["email"],
+                "unique": True,
+                "method": None,
+                "where": "  deleted_at IS NULL  ",
+            },
+        )
+        sqls = _render(ctx, dialect)
+        assert any("WHERE deleted_at IS NULL" in s for s in sqls)
+
+    def test_create_partial_index_mysql_rejected(self):
+        ctx = MigrationContext(mode="collect", dialect="mysql")
+        ctx.create_index(
+            "users",
+            {
+                "name": "idx_users_active_email",
+                "fields": ["email"],
+                "unique": True,
+                "method": None,
+                "where": "deleted_at IS NULL",
+            },
+        )
+        with pytest.raises(Exception, match="partial indexes"):
+            _render(ctx, "mysql")
 
     @pytest.mark.parametrize("dialect", ALL_DIALECTS)
     def test_drop_index(self, dialect):

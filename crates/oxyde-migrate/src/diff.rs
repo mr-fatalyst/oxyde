@@ -248,23 +248,41 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
                 }
             }
 
+            // Find dropped and changed indexes
+            for old_idx in &old_table.indexes {
+                match new_table
+                    .indexes
+                    .iter()
+                    .find(|idx| idx.name == old_idx.name)
+                {
+                    Some(new_idx) if !new_idx.semantically_eq(old_idx) => {
+                        ops.push(MigrationOp::DropIndex {
+                            table: name.clone(),
+                            name: old_idx.name.clone(),
+                            index_def: Some(old_idx.clone()),
+                        });
+                        ops.push(MigrationOp::CreateIndex {
+                            table: name.clone(),
+                            index: new_idx.clone(),
+                        });
+                    }
+                    None => {
+                        ops.push(MigrationOp::DropIndex {
+                            table: name.clone(),
+                            name: old_idx.name.clone(),
+                            index_def: Some(old_idx.clone()),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+
             // Find added indexes
             for new_idx in &new_table.indexes {
                 if !old_table.indexes.iter().any(|idx| idx.name == new_idx.name) {
                     ops.push(MigrationOp::CreateIndex {
                         table: name.clone(),
                         index: new_idx.clone(),
-                    });
-                }
-            }
-
-            // Find dropped indexes
-            for old_idx in &old_table.indexes {
-                if !new_table.indexes.iter().any(|idx| idx.name == old_idx.name) {
-                    ops.push(MigrationOp::DropIndex {
-                        table: name.clone(),
-                        name: old_idx.name.clone(),
-                        index_def: Some(old_idx.clone()),
                     });
                 }
             }

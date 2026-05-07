@@ -249,6 +249,9 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
                         "fields": list(index.fields),
                         "unique": index.unique,
                         "method": index.method,
+                        "where": index.where.strip() or None
+                        if isinstance(index.where, str)
+                        else index.where,
                     }
                 )
 

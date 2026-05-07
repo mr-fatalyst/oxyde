@@ -85,6 +85,8 @@ class Index:
         self.method = method
         self.name = name
         self.unique = unique
+        if where is not None:
+            where = where.strip() or None
         self.where = where
 
 
