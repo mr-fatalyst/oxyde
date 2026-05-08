@@ -30,6 +30,7 @@ from oxyde.models.registry import clear_registry
 
 ALL_DIALECTS = ["postgres", "mysql", "sqlite"]
 NON_SQLITE = ["postgres", "mysql"]
+PARTIAL_INDEX_DIALECTS = ["postgres", "sqlite"]
 
 
 def _snapshot_from_models(models: list[type[Model]], dialect: str) -> dict:
@@ -250,6 +251,45 @@ class TestIndexPipeline:
             "CREATE" in s.upper() and "idx_users_email" in s for s in up_sql
         )
         assert any("idx_users_email" in s for s in down_sql)
+
+    @pytest.mark.parametrize("dialect", PARTIAL_INDEX_DIALECTS)
+    def test_create_partial_index_preserves_where(self, tmp_path, dialect):
+        from oxyde import Index
+
+        class UserV1(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str
+            deleted_at: str | None = Field(default=None)
+
+            class Meta:
+                is_table = True
+                table_name = "users"
+
+        class UserV2(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str
+            deleted_at: str | None = Field(default=None)
+
+            class Meta:
+                is_table = True
+                table_name = "users"
+                indexes = [
+                    Index(
+                        fields=["email"],
+                        name="idx_users_active_email",
+                        unique=True,
+                        where="  deleted_at IS NULL  ",
+                    )
+                ]
+
+        ops, up_sql, down_sql = _run_pipeline(
+            [UserV1], [UserV2], dialect, tmp_path, "add_active_email_index"
+        )
+
+        create_ops = [op for op in ops if op["type"] == "create_index"]
+        assert create_ops[0]["index"]["where"] == "deleted_at IS NULL"
+        assert any("WHERE deleted_at IS NULL" in s for s in up_sql)
+        assert any("idx_users_active_email" in s for s in down_sql)
 
     @pytest.mark.parametrize("dialect", ALL_DIALECTS)
     def test_drop_index(self, tmp_path, dialect):

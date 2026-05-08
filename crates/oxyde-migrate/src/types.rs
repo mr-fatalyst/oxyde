@@ -1,6 +1,6 @@
 //! Core data types for the migration system.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -32,6 +32,46 @@ pub enum MigrateError {
 }
 
 pub type Result<T> = std::result::Result<T, MigrateError>;
+
+fn normalize_optional_sql_fragment(value: Option<String>) -> Option<String> {
+    value
+        .map(|fragment| fragment.trim().to_string())
+        .filter(|fragment| !fragment.is_empty())
+}
+
+fn is_none_or_blank(value: &Option<String>) -> bool {
+    value
+        .as_deref()
+        .map(str::trim)
+        .map_or(true, |fragment| fragment.is_empty())
+}
+
+fn serialize_normalized_optional_sql_fragment<S>(
+    value: &Option<String>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value
+        .as_deref()
+        .map(str::trim)
+        .filter(|fragment| !fragment.is_empty())
+    {
+        Some(fragment) => serializer.serialize_some(fragment),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_normalized_optional_sql_fragment<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    Ok(normalize_optional_sql_fragment(value))
+}
 
 /// Field definition in schema
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -66,6 +106,31 @@ pub struct IndexDef {
     pub fields: Vec<String>,
     pub unique: bool,
     pub method: Option<String>,
+    #[serde(
+        default,
+        rename = "where",
+        skip_serializing_if = "is_none_or_blank",
+        serialize_with = "serialize_normalized_optional_sql_fragment",
+        deserialize_with = "deserialize_normalized_optional_sql_fragment"
+    )]
+    pub where_clause: Option<String>,
+}
+
+impl IndexDef {
+    pub fn normalized_where_clause(&self) -> Option<&str> {
+        self.where_clause
+            .as_deref()
+            .map(str::trim)
+            .filter(|fragment| !fragment.is_empty())
+    }
+
+    pub fn semantically_eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.fields == other.fields
+            && self.unique == other.unique
+            && self.method == other.method
+            && self.normalized_where_clause() == other.normalized_where_clause()
+    }
 }
 
 /// Foreign key definition

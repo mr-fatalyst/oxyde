@@ -256,7 +256,7 @@ fn mysql_column_def(field: &FieldDef) -> String {
 }
 
 /// Build CREATE INDEX SQL for an index on a table.
-fn build_create_index(table: &str, index: &IndexDef, dialect: Dialect) -> String {
+fn build_create_index(table: &str, index: &IndexDef, dialect: Dialect) -> Result<String> {
     let mut stmt = SeaIndex::create();
     stmt.name(&index.name).table(Alias::new(table));
 
@@ -275,7 +275,19 @@ fn build_create_index(table: &str, index: &IndexDef, dialect: Dialect) -> String
         }
     }
 
-    build_sql!(stmt, dialect)
+    let mut sql = build_sql!(stmt, dialect);
+
+    if let Some(predicate) = index.normalized_where_clause() {
+        if dialect == Dialect::Mysql {
+            return Err(MigrateError::MigrationError(
+                "MySQL does not support partial indexes with WHERE predicates".to_string(),
+            ));
+        }
+        sql.push_str(" WHERE ");
+        sql.push_str(predicate);
+    }
+
+    Ok(sql)
 }
 
 // ── SQLite table rebuild ────────────────────────────────────────────────────
@@ -353,7 +365,7 @@ fn sqlite_table_rebuild(
 
     // Recreate indexes
     for index in indexes {
-        stmts.push(build_create_index(table, index, Dialect::Sqlite));
+        stmts.push(build_create_index(table, index, Dialect::Sqlite)?);
     }
 
     stmts.push("PRAGMA foreign_keys=ON".to_string());
@@ -393,7 +405,7 @@ impl MigrationOp {
 
                 // Indexes (all dialects)
                 for index in &table.indexes {
-                    sql.push(build_create_index(&table.name, index, dialect));
+                    sql.push(build_create_index(&table.name, index, dialect)?);
                 }
 
                 // PG/MySQL: FK and CHECK as separate ALTER TABLE statements
@@ -574,7 +586,7 @@ impl MigrationOp {
             },
 
             MigrationOp::CreateIndex { table, index } => {
-                Ok(vec![build_create_index(table, index, dialect)])
+                Ok(vec![build_create_index(table, index, dialect)?])
             }
 
             MigrationOp::DropIndex {

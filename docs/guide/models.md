@@ -144,6 +144,8 @@ class Event(Model):
 
 ### Partial Index
 
+Partial indexes are supported by PostgreSQL and SQLite migrations.
+
 ```python
 class User(Model):
     email: str

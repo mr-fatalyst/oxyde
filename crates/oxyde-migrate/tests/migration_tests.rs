@@ -47,6 +47,7 @@ fn sample_table() -> TableDef {
             fields: vec!["email".into()],
             unique: true,
             method: Some("btree".into()),
+            where_clause: None,
         }],
         foreign_keys: vec![],
         checks: vec![],
@@ -312,6 +313,7 @@ fn test_dialect_specific_sql() {
         fields: vec!["name".into()],
         unique: false,
         method: None,
+        where_clause: None,
     };
     let drop_idx_mysql = MigrationOp::DropIndex {
         table: "users".into(),
@@ -462,6 +464,7 @@ fn test_sqlite_alter_column_with_schema_generates_rebuild() {
         fields: vec!["name".into()],
         unique: false,
         method: None,
+        where_clause: None,
     }];
 
     let result = MigrationOp::AlterColumn {
@@ -843,6 +846,7 @@ fn test_compute_diff_detects_index_changes() {
         fields: vec!["name".into()],
         unique: false,
         method: None,
+        where_clause: None,
     });
     new.add_table(table);
 
@@ -857,6 +861,55 @@ fn test_compute_diff_detects_index_changes() {
 
     assert!(create_idx, "Should detect new index");
     assert!(drop_idx, "Should detect dropped index");
+}
+
+#[test]
+fn test_compute_diff_detects_partial_index_predicate_change() {
+    let mut old = Snapshot::new();
+    old.add_table(sample_table());
+
+    let mut new = Snapshot::new();
+    let mut table = sample_table();
+    table.indexes[0].where_clause = Some("deleted_at IS NULL".into());
+    new.add_table(table);
+
+    let ops = compute_diff(&old, &new).unwrap();
+
+    assert!(
+        matches!(ops.first(), Some(MigrationOp::DropIndex { name, .. }) if name == "users_email_idx")
+    );
+    assert!(
+        matches!(
+            ops.get(1),
+            Some(MigrationOp::CreateIndex { index, .. })
+                if index.name == "users_email_idx"
+                    && index.where_clause.as_deref() == Some("deleted_at IS NULL")
+        ),
+        "predicate changes should rebuild the index, got {:?}",
+        ops
+    );
+}
+
+#[test]
+fn test_compute_diff_ignores_partial_index_predicate_whitespace() {
+    let mut old = Snapshot::new();
+    old.add_table(sample_table());
+
+    let mut new = Snapshot::new();
+    let mut table = sample_table();
+    table.indexes[0].where_clause = Some("  deleted_at IS NULL  ".into());
+    new.add_table(table);
+
+    let mut old_table = old.tables.get_mut("users").unwrap().clone();
+    old_table.indexes[0].where_clause = Some("deleted_at IS NULL".into());
+    old.tables.insert("users".into(), old_table);
+
+    let ops = compute_diff(&old, &new).unwrap();
+
+    assert!(
+        ops.is_empty(),
+        "whitespace-only predicate changes should not diff"
+    );
 }
 
 #[test]
@@ -882,6 +935,7 @@ fn test_create_drop_index_sql() {
             fields: vec!["email".into()],
             unique: true,
             method: Some("btree".into()),
+            where_clause: None,
         },
     }
     .to_sql(Dialect::Postgres)
@@ -901,6 +955,7 @@ fn test_create_drop_index_sql() {
             fields: vec!["email".into()],
             unique: true,
             method: None,
+            where_clause: None,
         }),
     }
     .to_sql(Dialect::Postgres)
@@ -909,6 +964,71 @@ fn test_create_drop_index_sql() {
     assert_eq!(sql.len(), 1);
     assert!(sql[0].contains("DROP INDEX"));
     assert!(sql[0].contains("users_email_idx"));
+}
+
+#[test]
+fn test_partial_index_sql() {
+    let index = IndexDef {
+        name: "users_active_email_idx".into(),
+        fields: vec!["email".into()],
+        unique: true,
+        method: Some("btree".into()),
+        where_clause: Some("deleted_at IS NULL".into()),
+    };
+
+    for dialect in [Dialect::Postgres, Dialect::Sqlite] {
+        let sql = MigrationOp::CreateIndex {
+            table: "users".into(),
+            index: index.clone(),
+        }
+        .to_sql(dialect)
+        .unwrap();
+
+        assert_eq!(sql.len(), 1);
+        assert!(sql[0].contains("WHERE deleted_at IS NULL"));
+    }
+
+    let err = MigrationOp::CreateIndex {
+        table: "users".into(),
+        index,
+    }
+    .to_sql(Dialect::Mysql)
+    .unwrap_err();
+
+    assert!(err
+        .to_string()
+        .contains("MySQL does not support partial indexes"));
+}
+
+#[test]
+fn test_partial_index_json_roundtrip_trims_predicate() {
+    let snapshot = Snapshot::from_json(
+        r#"{
+            "version": 1,
+            "tables": {
+                "users": {
+                    "name": "users",
+                    "fields": [],
+                    "indexes": [{
+                        "name": "users_active_email_idx",
+                        "fields": ["email"],
+                        "unique": true,
+                        "method": "btree",
+                        "where": "  deleted_at IS NULL  "
+                    }],
+                    "foreign_keys": [],
+                    "checks": [],
+                    "comment": null
+                }
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let json = snapshot.to_json().unwrap();
+
+    assert!(json.contains(r#""where": "deleted_at IS NULL""#));
+    assert!(!json.contains("  deleted_at IS NULL  "));
 }
 
 #[test]
