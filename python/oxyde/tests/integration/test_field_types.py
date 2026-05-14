@@ -6,18 +6,17 @@ Python -> msgpack IR -> Rust -> SQL -> DB -> Rust convert -> msgpack -> Python -
 from __future__ import annotations
 
 import uuid
-
-import pytest
-import pytest_asyncio
-
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID
 
+import pytest
+import pytest_asyncio
+
+from oxyde.queries import F
 from oxyde.queries.raw import execute_raw
 
 from .conftest import AllTypes, BytesModel, NullableTypes, TdModel
-
 
 # ── Models for this file are defined in conftest.py ────────────────────
 # AllTypes, NullableTypes, BytesModel, TdModel
@@ -245,6 +244,51 @@ class TestDecimalRoundTrip:
         obj = await AllTypes.objects.create(decimal_val=d, using=db.name)
         fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
         assert fetched.decimal_val == d
+
+
+class TestDecimalFArithmetic:
+    """Regression: F() arithmetic with Decimal literals must execute on the DB.
+
+    Before the value_type fix, Decimal literals on the RHS of F() arithmetic
+    were bound as String, which caused Postgres to fail with `numeric + text`
+    and produced wrong results on other dialects.
+    """
+
+    @pytest.mark.asyncio
+    async def test_add_decimal_literal(self, db):
+        obj = await AllTypes.objects.create(
+            decimal_val=Decimal("100.00"), using=db.name
+        )
+        affected = await AllTypes.objects.filter(id=obj.id).update(
+            decimal_val=F("decimal_val") + Decimal("2.50"), using=db.name
+        )
+        assert affected == 1
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.decimal_val == Decimal("102.50")
+
+    @pytest.mark.asyncio
+    async def test_multiply_decimal_literal(self, db):
+        obj = await AllTypes.objects.create(
+            decimal_val=Decimal("10.00"), using=db.name
+        )
+        await AllTypes.objects.filter(id=obj.id).update(
+            decimal_val=F("decimal_val") * Decimal("1.10"), using=db.name
+        )
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.decimal_val == Decimal("11.00")
+
+    @pytest.mark.asyncio
+    async def test_nested_decimal_arithmetic(self, db):
+        obj = await AllTypes.objects.create(
+            decimal_val=Decimal("100.00"), using=db.name
+        )
+        # (col + 1.00) * 1.10 → (100 + 1) * 1.1 = 111.10
+        await AllTypes.objects.filter(id=obj.id).update(
+            decimal_val=(F("decimal_val") + Decimal("1.00")) * Decimal("1.10"),
+            using=db.name,
+        )
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.decimal_val == Decimal("111.10")
 
 
 class TestJsonRoundTrip:

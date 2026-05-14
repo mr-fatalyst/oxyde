@@ -176,6 +176,64 @@ class TestCoerceExpression:
         assert coerced._expr["value"] == 42
 
 
+class TestCoerceExpressionValueType:
+    """Test that _coerce_expression attaches value_type from TYPE_REGISTRY.
+
+    The value_type tag lets the Rust side recover typed bindings for values
+    that serialize to a string via msgpack (Decimal, UUID, datetime, date, time).
+    Without it, the Rust side has no way to know that "2.50" was a Decimal.
+    """
+
+    def test_decimal_gets_value_type(self):
+        from decimal import Decimal
+
+        coerced = _coerce_expression(Decimal("2.50"))
+        assert coerced._expr.get("value_type") == "decimal"
+
+    def test_uuid_gets_value_type(self):
+        from uuid import UUID
+
+        coerced = _coerce_expression(UUID("550e8400-e29b-41d4-a716-446655440000"))
+        assert coerced._expr.get("value_type") == "uuid"
+
+    def test_datetime_gets_value_type(self):
+        from datetime import datetime
+
+        coerced = _coerce_expression(datetime(2024, 1, 15, 12, 30, 0))
+        assert coerced._expr.get("value_type") == "datetime"
+
+    def test_date_gets_value_type(self):
+        from datetime import date
+
+        coerced = _coerce_expression(date(2024, 1, 15))
+        assert coerced._expr.get("value_type") == "date"
+
+    def test_time_gets_value_type(self):
+        from datetime import time
+
+        coerced = _coerce_expression(time(12, 30, 0))
+        assert coerced._expr.get("value_type") == "time"
+
+    def test_int_gets_value_type(self):
+        """Native msgpack types still tagged — IR stays self-describing."""
+        coerced = _coerce_expression(42)
+        assert coerced._expr.get("value_type") == "int"
+
+    def test_unknown_type_no_value_type(self):
+        """Types outside TYPE_REGISTRY are not tagged (backward-compat)."""
+
+        class Custom:
+            pass
+
+        coerced = _coerce_expression(Custom())
+        assert "value_type" not in coerced._expr
+
+    def test_none_no_value_type(self):
+        """None has no entry in TYPE_REGISTRY."""
+        coerced = _coerce_expression(None)
+        assert "value_type" not in coerced._expr
+
+
 class TestSerializeValueForIR:
     """Test _serialize_value_for_ir function."""
 

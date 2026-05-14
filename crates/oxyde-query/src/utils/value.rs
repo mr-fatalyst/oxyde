@@ -285,7 +285,11 @@ pub fn parse_expression(node: &rmpv::Value) -> Result<SimpleExpr> {
         "value" => {
             let val = map_get(node, "value")
                 .ok_or_else(|| QueryError::InvalidQuery("Value node missing 'value'".into()))?;
-            Ok(Expr::val(rmpv_to_value(val)).into())
+            // Optional per-literal type hint, set by Python when the originating
+            // type is in TYPE_REGISTRY. Recovers Decimal/UUID/datetime/etc. that
+            // msgpack-encode as strings.
+            let value_type = map_get_str(node, "value_type");
+            Ok(Expr::val(rmpv_to_value_typed(val, value_type)).into())
         }
         "column" => {
             let name = map_get_str(node, "name")
@@ -788,5 +792,104 @@ mod tests {
             matches!(result, Value::ChronoDateTimeUtc(Some(_))),
             "datetime hint with tz string should fall back to UTC parsing, got {result:?}"
         );
+    }
+
+    // ── parse_expression: value_type hint on literal nodes ──────────────
+
+    /// Build a `{"type": "value", "value": <val>, "value_type": <hint>}` rmpv map.
+    /// If `value_type` is None, the key is omitted (legacy IR shape).
+    fn build_value_node(value: rmpv::Value, value_type: Option<&str>) -> rmpv::Value {
+        let mut pairs = vec![
+            (
+                rmpv::Value::String("type".into()),
+                rmpv::Value::String("value".into()),
+            ),
+            (rmpv::Value::String("value".into()), value),
+        ];
+        if let Some(t) = value_type {
+            pairs.push((
+                rmpv::Value::String("value_type".into()),
+                rmpv::Value::String(t.into()),
+            ));
+        }
+        rmpv::Value::Map(pairs)
+    }
+
+    #[test]
+    fn test_parse_expression_value_with_decimal_hint() {
+        let node = build_value_node(rmpv::Value::String("2.50".into()), Some("decimal"));
+        let expr = parse_expression(&node).unwrap();
+        match expr {
+            SimpleExpr::Value(Value::Decimal(Some(d))) => {
+                assert_eq!(*d, Decimal::from_str("2.50").unwrap());
+            }
+            other => panic!("expected Value::Decimal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expression_value_without_hint_stays_string() {
+        // Backward compat: legacy IR (no value_type) binds Decimal-looking
+        // strings as String, matching today's behavior.
+        let node = build_value_node(rmpv::Value::String("2.50".into()), None);
+        let expr = parse_expression(&node).unwrap();
+        match expr {
+            SimpleExpr::Value(Value::String(Some(s))) => {
+                assert_eq!(s.as_ref(), "2.50");
+            }
+            other => panic!("expected Value::String for legacy IR, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expression_value_with_uuid_hint() {
+        let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
+        let node = build_value_node(rmpv::Value::String(uuid_str.into()), Some("uuid"));
+        let expr = parse_expression(&node).unwrap();
+        match expr {
+            SimpleExpr::Value(Value::Uuid(Some(u))) => {
+                assert_eq!(u.to_string(), uuid_str);
+            }
+            other => panic!("expected Value::Uuid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expression_op_with_decimal_inside() {
+        // Nested: (column "price") + (value "2.50" with decimal hint)
+        // The literal deep inside the op tree must still bind as Decimal.
+        let lhs = rmpv::Value::Map(vec![
+            (
+                rmpv::Value::String("type".into()),
+                rmpv::Value::String("column".into()),
+            ),
+            (
+                rmpv::Value::String("name".into()),
+                rmpv::Value::String("price".into()),
+            ),
+        ]);
+        let rhs = build_value_node(rmpv::Value::String("2.50".into()), Some("decimal"));
+        let op_node = rmpv::Value::Map(vec![
+            (
+                rmpv::Value::String("type".into()),
+                rmpv::Value::String("op".into()),
+            ),
+            (
+                rmpv::Value::String("op".into()),
+                rmpv::Value::String("add".into()),
+            ),
+            (rmpv::Value::String("lhs".into()), lhs),
+            (rmpv::Value::String("rhs".into()), rhs),
+        ]);
+        let expr = parse_expression(&op_node).unwrap();
+        let SimpleExpr::Binary(_, _, rhs_box) = expr else {
+            panic!("expected SimpleExpr::Binary, got {expr:?}");
+        };
+        match *rhs_box {
+            SimpleExpr::Value(Value::Decimal(Some(d))) => {
+                assert_eq!(*d, Decimal::from_str("2.50").unwrap());
+            }
+            other => panic!("expected nested Value::Decimal on RHS, got {other:?}"),
+        }
     }
 }
