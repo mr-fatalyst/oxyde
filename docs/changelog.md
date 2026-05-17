@@ -4,6 +4,28 @@ All notable changes to Oxyde are documented here.
 
 ---
 
+## 0.7.1 - 2026-05-17
+
+**Rust core: 0.6.2** (`core-v0.6.2`)
+
+### Bug Fixes
+
+- **`Decimal` mis-bound in `F()` arithmetic** — expressions like `F("price") + Decimal("1.5")` produced a parameter type mismatch in the generated SQL. `Decimal` literals inside `F()` expressions are now bound as `rust_decimal::Decimal` directly in the `oxyde-query` codec, with no intermediate string serialization. (#32)
+- **mypy errors on user models** — in several scenarios mypy complained about `Model.objects` and field attributes on subclasses of `Model`. Annotations in `models/base.py` and `models/field.py` have been corrected; an e2e typecheck test was added (including an `xfail` case for `mixed_module` to track the remaining edge case). (#13)
+
+### Migrations
+
+- **Partial index predicates were lost during migrations** — `Index(..., condition=...)` (partial indexes on PostgreSQL/SQLite) was not preserved through diff and replay: migrations recreated the index without its `WHERE` clause. The `condition` is now propagated through `extract` → IR → diff → SQL and is correctly compared during change detection. (#30, #31)
+- **FK cycles in `compute_diff`** — topological sorting either crashed or produced an incorrect order for self-referencing and mutually-referencing tables. The cycle detection has been reworked: genuine cycles (without a nullable break) are now rejected with a clear error, while resolvable cases are sorted correctly. Integration tests were added for typical schemas (self-FK, A↔B, triangle). (#28)
+
+### Internal
+
+- Added an e2e test suite that runs mypy against generated stubs and user-side code (`tests/typecheck/test_typecheck_e2e.py`).
+- Migration test coverage extended with FK-cycle and partial-index cases.
+- **Rust core bumped to 0.6.2** (`core-v0.6.2`).
+
+---
+
 ## 0.7.0 - 2026-04-21
 
 **Rust core: 0.6.1** (`core-v0.6.1`)
