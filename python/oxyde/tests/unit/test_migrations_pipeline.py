@@ -64,17 +64,13 @@ def _run_pipeline(
 
     up_ctx = MigrationContext(mode="collect", dialect=dialect)
     module.upgrade(up_ctx)
-    up_sql = migration_to_sql(
-        json.dumps(up_ctx.get_collected_operations()), dialect
-    )
+    up_sql = migration_to_sql(json.dumps(up_ctx.get_collected_operations()), dialect)
 
     down_ctx = MigrationContext(mode="collect", dialect=dialect)
     module.downgrade(down_ctx)
     down_ops = down_ctx.get_collected_operations()
     # downgrade may contain a TODO comment instead of ops — only render if non-empty
-    down_sql = (
-        migration_to_sql(json.dumps(down_ops), dialect) if down_ops else []
-    )
+    down_sql = migration_to_sql(json.dumps(down_ops), dialect) if down_ops else []
 
     return ops, up_sql, down_sql
 
@@ -211,13 +207,9 @@ class TestDropForeignKeyPipeline:
         )
 
         assert any(op["type"] == "drop_foreign_key" for op in ops)
-        assert any(
-            "DROP" in s.upper() and "fk_books_author_id" in s for s in up_sql
-        )
+        assert any("DROP" in s.upper() and "fk_books_author_id" in s for s in up_sql)
         # Reverse must re-add the FK, not just mention its name
-        assert any(
-            "ADD" in s.upper() and "fk_books_author_id" in s for s in down_sql
-        )
+        assert any("ADD" in s.upper() and "fk_books_author_id" in s for s in down_sql)
 
 
 class TestIndexPipeline:
@@ -247,9 +239,7 @@ class TestIndexPipeline:
         )
 
         assert any(op["type"] == "create_index" for op in ops)
-        assert any(
-            "CREATE" in s.upper() and "idx_users_email" in s for s in up_sql
-        )
+        assert any("CREATE" in s.upper() and "idx_users_email" in s for s in up_sql)
         assert any("idx_users_email" in s for s in down_sql)
 
     @pytest.mark.parametrize("dialect", PARTIAL_INDEX_DIALECTS)
@@ -291,6 +281,49 @@ class TestIndexPipeline:
         assert any("WHERE deleted_at IS NULL" in s for s in up_sql)
         assert any("idx_users_active_email" in s for s in down_sql)
 
+    def test_create_nulls_not_distinct_index(self, tmp_path):
+        from oxyde import Index
+
+        class UserV1(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str | None = Field(default=None)
+
+            class Meta:
+                is_table = True
+                table_name = "users"
+
+        class UserV2(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str | None = Field(default=None)
+
+            class Meta:
+                is_table = True
+                table_name = "users"
+                indexes = [
+                    Index(
+                        fields=["email"],
+                        name="idx_users_email_nulls_not_distinct",
+                        unique=True,
+                        nulls_not_distinct=True,
+                    )
+                ]
+
+        ops, up_sql, down_sql = _run_pipeline(
+            [UserV1],
+            [UserV2],
+            "postgres",
+            tmp_path,
+            "add_email_nulls_not_distinct_index",
+        )
+
+        create_ops = [op for op in ops if op["type"] == "create_index"]
+        assert create_ops[0]["index"]["nulls_not_distinct"] is True
+        assert any("NULLS NOT DISTINCT" in s for s in up_sql)
+        assert any(
+            "DROP" in s.upper() and "idx_users_email_nulls_not_distinct" in s
+            for s in down_sql
+        )
+
     @pytest.mark.parametrize("dialect", ALL_DIALECTS)
     def test_drop_index(self, tmp_path, dialect):
         from oxyde import Index
@@ -319,9 +352,7 @@ class TestIndexPipeline:
         assert any(op["type"] == "drop_index" for op in ops)
         assert any("DROP" in s.upper() and "idx_users_email" in s for s in up_sql)
         # Reverse re-creates index
-        assert any(
-            "CREATE" in s.upper() and "idx_users_email" in s for s in down_sql
-        )
+        assert any("CREATE" in s.upper() and "idx_users_email" in s for s in down_sql)
 
 
 class TestCyclicForeignKeys:
@@ -400,14 +431,10 @@ class TestCyclicForeignKeys:
         )
 
         add_columns = [op for op in ops if op["type"] == "add_column"]
-        assert len(add_columns) == 1, (
-            f"expected exactly one AddColumn, got {ops}"
-        )
+        assert len(add_columns) == 1, f"expected exactly one AddColumn, got {ops}"
         assert add_columns[0]["table"] == "companies"
         assert add_columns[0]["field"]["name"] == "name"
-        assert any(
-            "ADD" in s.upper() and "name" in s.lower() for s in up_sql
-        )
+        assert any("ADD" in s.upper() and "name" in s.lower() for s in up_sql)
 
     @pytest.mark.parametrize("dialect", ALL_DIALECTS)
     def test_create_table_referencing_cyclic_subset(self, tmp_path, dialect):

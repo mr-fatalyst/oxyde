@@ -46,6 +46,10 @@ fn is_none_or_blank(value: &Option<String>) -> bool {
         .map_or(true, |fragment| fragment.is_empty())
 }
 
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 fn serialize_normalized_optional_sql_fragment<S>(
     value: &Option<String>,
     serializer: S,
@@ -106,6 +110,8 @@ pub struct IndexDef {
     pub fields: Vec<String>,
     pub unique: bool,
     pub method: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub nulls_not_distinct: bool,
     #[serde(
         default,
         rename = "where",
@@ -129,6 +135,7 @@ impl IndexDef {
             && self.fields == other.fields
             && self.unique == other.unique
             && self.method == other.method
+            && self.nulls_not_distinct == other.nulls_not_distinct
             && self.normalized_where_clause() == other.normalized_where_clause()
     }
 }

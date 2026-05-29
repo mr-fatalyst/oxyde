@@ -47,6 +47,7 @@ fn sample_table() -> TableDef {
             fields: vec!["email".into()],
             unique: true,
             method: Some("btree".into()),
+            nulls_not_distinct: false,
             where_clause: None,
         }],
         foreign_keys: vec![],
@@ -313,6 +314,7 @@ fn test_dialect_specific_sql() {
         fields: vec!["name".into()],
         unique: false,
         method: None,
+        nulls_not_distinct: false,
         where_clause: None,
     };
     let drop_idx_mysql = MigrationOp::DropIndex {
@@ -464,6 +466,7 @@ fn test_sqlite_alter_column_with_schema_generates_rebuild() {
         fields: vec!["name".into()],
         unique: false,
         method: None,
+        nulls_not_distinct: false,
         where_clause: None,
     }];
 
@@ -846,6 +849,7 @@ fn test_compute_diff_detects_index_changes() {
         fields: vec!["name".into()],
         unique: false,
         method: None,
+        nulls_not_distinct: false,
         where_clause: None,
     });
     new.add_table(table);
@@ -913,6 +917,32 @@ fn test_compute_diff_ignores_partial_index_predicate_whitespace() {
 }
 
 #[test]
+fn test_compute_diff_detects_nulls_not_distinct_change() {
+    let mut old = Snapshot::new();
+    old.add_table(sample_table());
+
+    let mut new = Snapshot::new();
+    let mut table = sample_table();
+    table.indexes[0].nulls_not_distinct = true;
+    new.add_table(table);
+
+    let ops = compute_diff(&old, &new).unwrap();
+
+    assert!(
+        matches!(ops.first(), Some(MigrationOp::DropIndex { name, .. }) if name == "users_email_idx")
+    );
+    assert!(
+        matches!(
+            ops.get(1),
+            Some(MigrationOp::CreateIndex { index, .. })
+                if index.name == "users_email_idx" && index.nulls_not_distinct
+        ),
+        "NULLS NOT DISTINCT changes should rebuild the index, got {:?}",
+        ops
+    );
+}
+
+#[test]
 fn test_drop_table_sql() {
     let sql = MigrationOp::DropTable {
         name: "users".into(),
@@ -935,6 +965,7 @@ fn test_create_drop_index_sql() {
             fields: vec!["email".into()],
             unique: true,
             method: Some("btree".into()),
+            nulls_not_distinct: false,
             where_clause: None,
         },
     }
@@ -955,6 +986,7 @@ fn test_create_drop_index_sql() {
             fields: vec!["email".into()],
             unique: true,
             method: None,
+            nulls_not_distinct: false,
             where_clause: None,
         }),
     }
@@ -973,6 +1005,7 @@ fn test_partial_index_sql() {
         fields: vec!["email".into()],
         unique: true,
         method: Some("btree".into()),
+        nulls_not_distinct: false,
         where_clause: Some("deleted_at IS NULL".into()),
     };
 
@@ -998,6 +1031,67 @@ fn test_partial_index_sql() {
     assert!(err
         .to_string()
         .contains("MySQL does not support partial indexes"));
+}
+
+#[test]
+fn test_nulls_not_distinct_index_sql() {
+    let index = IndexDef {
+        name: "users_email_nulls_not_distinct_idx".into(),
+        fields: vec!["email".into()],
+        unique: true,
+        method: Some("btree".into()),
+        nulls_not_distinct: true,
+        where_clause: Some("deleted_at IS NULL".into()),
+    };
+
+    let sql = MigrationOp::CreateIndex {
+        table: "users".into(),
+        index,
+    }
+    .to_sql(Dialect::Postgres)
+    .unwrap();
+
+    assert_eq!(sql.len(), 1);
+    assert!(sql[0].contains("CREATE UNIQUE INDEX"));
+    assert!(sql[0].contains("NULLS NOT DISTINCT"));
+    assert!(sql[0].contains("WHERE deleted_at IS NULL"));
+    assert!(
+        sql[0].find("NULLS NOT DISTINCT") < sql[0].find("WHERE deleted_at IS NULL"),
+        "NULLS NOT DISTINCT should render before WHERE: {}",
+        sql[0]
+    );
+}
+
+#[test]
+fn test_nulls_not_distinct_index_rejected_when_unsupported_or_non_unique() {
+    let index = IndexDef {
+        name: "users_email_nulls_not_distinct_idx".into(),
+        fields: vec!["email".into()],
+        unique: true,
+        method: None,
+        nulls_not_distinct: true,
+        where_clause: None,
+    };
+
+    for dialect in [Dialect::Mysql, Dialect::Sqlite] {
+        let err = MigrationOp::CreateIndex {
+            table: "users".into(),
+            index: index.clone(),
+        }
+        .to_sql(dialect)
+        .unwrap_err();
+        assert!(err.to_string().contains("NULLS NOT DISTINCT"));
+    }
+
+    let mut non_unique = index;
+    non_unique.unique = false;
+    let err = MigrationOp::CreateIndex {
+        table: "users".into(),
+        index: non_unique,
+    }
+    .to_sql(Dialect::Postgres)
+    .unwrap_err();
+    assert!(err.to_string().contains("requires a UNIQUE index"));
 }
 
 #[test]
@@ -1029,6 +1123,37 @@ fn test_partial_index_json_roundtrip_trims_predicate() {
 
     assert!(json.contains(r#""where": "deleted_at IS NULL""#));
     assert!(!json.contains("  deleted_at IS NULL  "));
+}
+
+#[test]
+fn test_nulls_not_distinct_json_roundtrip_defaults_to_false() {
+    let snapshot = Snapshot::from_json(
+        r#"{
+            "version": 1,
+            "tables": {
+                "users": {
+                    "name": "users",
+                    "fields": [],
+                    "indexes": [{
+                        "name": "users_email_idx",
+                        "fields": ["email"],
+                        "unique": true,
+                        "method": "btree"
+                    }],
+                    "foreign_keys": [],
+                    "checks": [],
+                    "comment": null
+                }
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let table = snapshot.tables.get("users").unwrap();
+    assert!(!table.indexes[0].nulls_not_distinct);
+
+    let json = snapshot.to_json().unwrap();
+    assert!(!json.contains("nulls_not_distinct"));
 }
 
 #[test]

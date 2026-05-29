@@ -243,17 +243,18 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
                 if not index_name and index.fields:
                     index_name = f"{meta.table_name}_{'_'.join(index.fields)}_idx"
 
-                indexes.append(
-                    {
-                        "name": index_name,
-                        "fields": list(index.fields),
-                        "unique": index.unique,
-                        "method": index.method,
-                        "where": index.where.strip() or None
-                        if isinstance(index.where, str)
-                        else index.where,
-                    }
-                )
+                index_dict = {
+                    "name": index_name,
+                    "fields": list(index.fields),
+                    "unique": index.unique,
+                    "method": index.method,
+                    "where": index.where.strip() or None
+                    if isinstance(index.where, str)
+                    else index.where,
+                }
+                if getattr(index, "nulls_not_distinct", False):
+                    index_dict["nulls_not_distinct"] = True
+                indexes.append(index_dict)
 
         # Extract foreign keys from field metadata
         foreign_keys = []
