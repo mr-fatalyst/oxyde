@@ -66,6 +66,50 @@ fn test_snapshot_serialization_roundtrip() {
 }
 
 #[test]
+fn test_check_constraint_expression_change_generates_drop_and_add() {
+    let mut old = Snapshot::new();
+    let mut old_table = sample_table();
+    old_table.checks.push(CheckDef {
+        name: "age_positive".into(),
+        expression: "age >= 0".into(),
+    });
+    old.add_table(old_table);
+
+    let mut new = Snapshot::new();
+    let mut new_table = sample_table();
+    new_table.checks.push(CheckDef {
+        name: "age_positive".into(),
+        expression: "age > 0".into(),
+    });
+    new.add_table(new_table);
+
+    let ops = compute_diff(&old, &new).unwrap();
+    assert_eq!(ops.len(), 2);
+
+    match &ops[0] {
+        MigrationOp::DropCheck {
+            table,
+            name,
+            check_def,
+        } => {
+            assert_eq!(table, "users");
+            assert_eq!(name, "age_positive");
+            assert_eq!(check_def.as_ref().unwrap().expression, "age >= 0");
+        }
+        op => panic!("expected DropCheck, got {:?}", op),
+    }
+
+    match &ops[1] {
+        MigrationOp::AddCheck { table, check } => {
+            assert_eq!(table, "users");
+            assert_eq!(check.name, "age_positive");
+            assert_eq!(check.expression, "age > 0");
+        }
+        op => panic!("expected AddCheck, got {:?}", op),
+    }
+}
+
+#[test]
 fn test_migration_create_table_generates_sql() {
     let sql = MigrationOp::CreateTable {
         table: sample_table(),
