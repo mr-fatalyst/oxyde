@@ -316,23 +316,37 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
                 }
             }
 
+            // Find dropped and changed check constraints
+            for old_check in &old_table.checks {
+                match new_table.checks.iter().find(|c| c.name == old_check.name) {
+                    Some(new_check) if new_check.expression != old_check.expression => {
+                        ops.push(MigrationOp::DropCheck {
+                            table: name.clone(),
+                            name: old_check.name.clone(),
+                            check_def: Some(old_check.clone()),
+                        });
+                        ops.push(MigrationOp::AddCheck {
+                            table: name.clone(),
+                            check: new_check.clone(),
+                        });
+                    }
+                    None => {
+                        ops.push(MigrationOp::DropCheck {
+                            table: name.clone(),
+                            name: old_check.name.clone(),
+                            check_def: Some(old_check.clone()),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+
             // Find added check constraints
             for new_check in &new_table.checks {
                 if !old_table.checks.iter().any(|c| c.name == new_check.name) {
                     ops.push(MigrationOp::AddCheck {
                         table: name.clone(),
                         check: new_check.clone(),
-                    });
-                }
-            }
-
-            // Find dropped check constraints
-            for old_check in &old_table.checks {
-                if !new_table.checks.iter().any(|c| c.name == old_check.name) {
-                    ops.push(MigrationOp::DropCheck {
-                        table: name.clone(),
-                        name: old_check.name.clone(),
-                        check_def: Some(old_check.clone()),
                     });
                 }
             }

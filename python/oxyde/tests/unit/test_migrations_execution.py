@@ -910,6 +910,27 @@ class TestMigrationInvariants:
         migration_to_sql(ops_json, dialect)
 
     @pytest.mark.parametrize("dialect", NON_SQLITE)
+    def test_roundtrip_change_check_expression(self, dialect):
+        old = _base_snapshot()
+        old["tables"]["users"]["checks"].append(
+            {"name": "chk_users_age", "expression": "age >= 0"}
+        )
+        new = _base_snapshot()
+        new["tables"]["users"]["checks"].append(
+            {"name": "chk_users_age", "expression": "age > 0"}
+        )
+
+        ops_json = migration_compute_diff(json.dumps(old), json.dumps(new))
+        ops = json.loads(ops_json)
+
+        assert [op["type"] for op in ops] == ["drop_check", "add_check"]
+        assert ops[0]["name"] == "chk_users_age"
+        assert ops[0]["check_def"]["expression"] == "age >= 0"
+        assert ops[1]["check"]["name"] == "chk_users_age"
+        assert ops[1]["check"]["expression"] == "age > 0"
+        migration_to_sql(ops_json, dialect)
+
+    @pytest.mark.parametrize("dialect", NON_SQLITE)
     def test_roundtrip_drop_check(self, dialect):
         old = _base_snapshot()
         old["tables"]["users"]["checks"].append(
