@@ -1,0 +1,9 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+ALTER TABLE "users_old" RENAME TO "users";
+
+ALTER TABLE "users" RENAME COLUMN "login" TO "username";
+
+ALTER TABLE "users" RENAME COLUMN "addr" TO "address"

@@ -1,0 +1,11 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+DROP TABLE "obsolete";
+
+ALTER TABLE "users" ADD COLUMN "nickname" VARCHAR(255);
+
+ALTER TABLE "users" ADD COLUMN "score" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE "users" DROP COLUMN "legacy_flag"

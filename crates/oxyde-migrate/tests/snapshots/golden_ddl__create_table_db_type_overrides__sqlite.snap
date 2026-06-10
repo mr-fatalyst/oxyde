@@ -1,0 +1,5 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE TABLE "db_type_overrides" ( "c_serial" INTEGER NOT NULL, "c_bigserial" INTEGER NOT NULL, "c_jsonb" JSONB NOT NULL, "c_timestamptz" TIMESTAMPTZ NOT NULL, "c_numeric" NUMERIC(10,2) NOT NULL, "c_varchar" VARCHAR(100) NOT NULL, "c_char36" CHAR(36) NOT NULL, "c_money" MONEY NOT NULL )

@@ -1,0 +1,17 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE TABLE `post` ( `id` BIGINT PRIMARY KEY AUTO_INCREMENT, `title` VARCHAR(255) NOT NULL, `author_id` BIGINT NOT NULL, `editor_id` BIGINT, `reviewer_id` BIGINT, `owner_id` BIGINT );
+
+CREATE INDEX `ix_post_title` ON `post` (`title`);
+
+ALTER TABLE `post` ADD CONSTRAINT `fk_post_author` FOREIGN KEY (`author_id`) REFERENCES `author` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE `post` ADD CONSTRAINT `fk_post_editor` FOREIGN KEY (`editor_id`) REFERENCES `author` (`id`) ON DELETE SET NULL ON UPDATE NO ACTION;
+
+ALTER TABLE `post` ADD CONSTRAINT `fk_post_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `author` (`id`) ON DELETE RESTRICT ON UPDATE SET DEFAULT;
+
+ALTER TABLE `post` ADD CONSTRAINT `fk_post_owner` FOREIGN KEY (`owner_id`) REFERENCES `author` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+ALTER TABLE post ADD CONSTRAINT chk_post_title_len CHECK (LENGTH(title) > 0)

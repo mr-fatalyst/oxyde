@@ -1,0 +1,5 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE TABLE "kitchen_sink" ( "col_int" INTEGER NOT NULL, "col_str" VARCHAR(255) NOT NULL, "col_str_100" VARCHAR(100) NOT NULL, "col_float" REAL NOT NULL, "col_bool" INTEGER NOT NULL, "col_bytes" BLOB NOT NULL, "col_datetime" TEXT NOT NULL, "col_date" TEXT NOT NULL, "col_time" TEXT NOT NULL, "col_timedelta" BIGINT NOT NULL, "col_uuid" TEXT NOT NULL, "col_decimal" TEXT NOT NULL, "col_decimal_10_2" TEXT NOT NULL, "col_json" TEXT NOT NULL, "col_unknown" TEXT NOT NULL, "arr_int" TEXT NOT NULL, "arr_str" TEXT NOT NULL, "arr_uuid" TEXT NOT NULL, "arr_decimal" TEXT NOT NULL, "col_nullable" VARCHAR(255), "col_unique" VARCHAR(255) NOT NULL UNIQUE, "def_str" VARCHAR(255) NOT NULL DEFAULT 'hello', "def_int" INTEGER NOT NULL DEFAULT 42, "def_float" REAL NOT NULL DEFAULT 1.5, "def_bool" INTEGER NOT NULL DEFAULT TRUE, "def_now" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP )

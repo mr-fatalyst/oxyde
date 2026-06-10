@@ -1,0 +1,17 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+PRAGMA foreign_keys=OFF;
+
+CREATE TABLE "_new_users" ( "id" INTEGER PRIMARY KEY AUTOINCREMENT, "name" VARCHAR(255) NOT NULL, "age" VARCHAR(50) NOT NULL, FOREIGN KEY ("org_id") REFERENCES "org" ("id") ON DELETE CASCADE ON UPDATE NO ACTION, CHECK (age >= 0) );
+
+INSERT INTO "_new_users" (id, name, age) SELECT id, name, age FROM "users";
+
+DROP TABLE "users";
+
+CREATE INDEX "ix_users_name" ON "users" ("name");
+
+PRAGMA foreign_keys=ON;
+
+ALTER TABLE "_new_users" RENAME TO "users"

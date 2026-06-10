@@ -13,3 +13,6 @@ thiserror.workspace = true
 sea-query = "0.31"
 oxyde-codec = { path = "../oxyde-codec" }
 oxyde-driver = { path = "../oxyde-driver" }
+
+[dev-dependencies]
+insta = "1"

@@ -1,0 +1,11 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE TABLE `t_pk_int_auto` ( `id` BIGINT PRIMARY KEY AUTO_INCREMENT, `name` VARCHAR(255) NOT NULL );
+
+CREATE TABLE `t_pk_int_plain` ( `id` BIGINT PRIMARY KEY, `name` VARCHAR(255) NOT NULL );
+
+CREATE TABLE `t_pk_uuid` ( `id` CHAR(36) PRIMARY KEY, `name` VARCHAR(255) NOT NULL );
+
+CREATE TABLE `t_pk_str` ( `code` VARCHAR(32) PRIMARY KEY, `name` VARCHAR(255) NOT NULL )

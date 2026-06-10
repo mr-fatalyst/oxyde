@@ -1,0 +1,13 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE INDEX `ix_users_name` ON `users` (`name`);
+
+CREATE UNIQUE INDEX `ux_users_email_tenant` ON `users` (`email`, `tenant_id`);
+
+CREATE INDEX `ix_users_tags_gin` ON `users` (`tags`);
+
+CREATE INDEX `ix_users_email_hash` ON `users` (`email`);
+
+DROP INDEX `ix_users_old` ON `users`

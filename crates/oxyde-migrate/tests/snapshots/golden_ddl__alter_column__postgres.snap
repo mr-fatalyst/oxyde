@@ -1,0 +1,15 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+ALTER TABLE "users" ALTER COLUMN "age" TYPE VARCHAR(50);
+
+ALTER TABLE "users" ALTER COLUMN "bio" DROP NOT NULL;
+
+ALTER TABLE "users" ALTER COLUMN "status" SET DEFAULT 'active';
+
+ALTER TABLE "users" ALTER COLUMN "rank" DROP DEFAULT;
+
+ALTER TABLE "users" ADD CONSTRAINT "users_email_key" UNIQUE ("email");
+
+ALTER TABLE "users" DROP CONSTRAINT "users_phone_key"

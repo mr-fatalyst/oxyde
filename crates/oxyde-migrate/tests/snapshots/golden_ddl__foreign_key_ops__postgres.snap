@@ -1,0 +1,7 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+ALTER TABLE "post" ADD CONSTRAINT "fk_post_author" FOREIGN KEY ("author_id") REFERENCES "author" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+ALTER TABLE "post" DROP CONSTRAINT "fk_post_editor"

@@ -1,0 +1,15 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+ALTER TABLE `users` MODIFY COLUMN `age` VARCHAR(50) NOT NULL;
+
+ALTER TABLE `users` MODIFY COLUMN `bio` VARCHAR(255);
+
+ALTER TABLE `users` MODIFY COLUMN `status` VARCHAR(255) NOT NULL DEFAULT 'active';
+
+ALTER TABLE `users` MODIFY COLUMN `rank` BIGINT NOT NULL;
+
+ALTER TABLE `users` MODIFY COLUMN `email` VARCHAR(255) NOT NULL UNIQUE;
+
+ALTER TABLE `users` MODIFY COLUMN `phone` VARCHAR(255) NOT NULL

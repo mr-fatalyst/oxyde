@@ -1,0 +1,5 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE UNIQUE INDEX "ix_users_active_email" ON "users" ("email") WHERE deleted_at IS NULL

@@ -210,8 +210,6 @@ __marimo__/
 **/*.rs.bk
 
 # Oxyde specific
-migrations/*.oxmig
-snapshots/
 *.db
 *.sqlite
 *.sqlite3

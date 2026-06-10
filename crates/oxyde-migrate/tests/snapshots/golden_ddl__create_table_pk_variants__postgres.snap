@@ -1,0 +1,11 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE TABLE "t_pk_int_auto" ( "id" BIGSERIAL PRIMARY KEY, "name" VARCHAR(255) NOT NULL );
+
+CREATE TABLE "t_pk_int_plain" ( "id" BIGSERIAL PRIMARY KEY, "name" VARCHAR(255) NOT NULL );
+
+CREATE TABLE "t_pk_uuid" ( "id" UUID PRIMARY KEY, "name" VARCHAR(255) NOT NULL );
+
+CREATE TABLE "t_pk_str" ( "code" VARCHAR(32) PRIMARY KEY, "name" VARCHAR(255) NOT NULL )
