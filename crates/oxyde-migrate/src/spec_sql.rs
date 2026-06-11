@@ -1,10 +1,9 @@
 //! `ColumnTypeSpec`-driven SQL type resolution.
 //!
-//! Successor of `sql.rs`'s string-driven `resolve_field_type` /
-//! `python_type_to_sql` / `translate_db_type`. During этап 1 of the
-//! type-mapping refactor both paths coexist; the differential test below
-//! proves byte-equality against the legacy resolver for every type the
-//! golden DDL suite covers.
+//! The single DDL type resolver: semantic kind from `ColumnTypeSpec`,
+//! verbatim user DDL from `FieldDef.db_type` (translated only for the
+//! SERIAL family). Byte-equality with the historical output is pinned by
+//! the golden DDL suite.
 //!
 //! Like the legacy path, this resolver produces the SQL type **string**
 //! (rendered via `ColumnDef::custom`), not a `sea_query::ColumnType`
@@ -130,147 +129,117 @@ fn canonical_type(spec: &ColumnTypeSpec, dialect: Dialect, is_pk: bool) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sql::resolve_field_type;
-    use crate::types::FieldDef;
-
-    fn field(python_type: &str) -> FieldDef {
-        FieldDef {
-            name: "col".into(),
-            python_type: python_type.into(),
-            db_type: None,
-            nullable: false,
-            primary_key: false,
-            unique: false,
-            default: None,
-            auto_increment: false,
-            max_length: None,
-            max_digits: None,
-            decimal_places: None,
-        }
-    }
 
     fn spec_string(length: Option<u32>) -> ColumnTypeSpec {
         ColumnTypeSpec::String { length }
     }
 
-    /// Differential check: while both resolvers are alive, the new one must
-    /// produce byte-identical SQL type strings for every fixture the golden
-    /// DDL suite covers, across all dialects.
+    /// Canonical renderings, pinned directly (the golden DDL suite pins the
+    /// full statements; this covers the resolver in isolation).
     #[test]
-    fn matches_legacy_resolver() {
+    fn canonical_scalar_types() {
         use ColumnTypeSpec as S;
-
-        // (legacy FieldDef, equivalent spec)
-        let mut cases: Vec<(FieldDef, ColumnTypeSpec)> = vec![
-            (field("int"), S::BigInteger),
-            (field("str"), spec_string(None)),
+        let cases: Vec<(ColumnTypeSpec, [&str; 3])> = vec![
+            // (spec, [postgres, mysql, sqlite])
+            (S::BigInteger, ["INTEGER", "BIGINT", "INTEGER"]),
+            (S::Double, ["DOUBLE PRECISION", "DOUBLE", "REAL"]),
+            (S::Boolean, ["BOOLEAN", "TINYINT", "INTEGER"]),
             (
-                {
-                    let mut f = field("str");
-                    f.max_length = Some(100);
-                    f
-                },
-                spec_string(Some(100)),
+                spec_string(None),
+                ["VARCHAR(255)", "VARCHAR(255)", "VARCHAR(255)"],
             ),
-            (field("float"), S::Double),
-            (field("bool"), S::Boolean),
-            (field("bytes"), S::Blob),
-            (field("datetime"), S::DateTime),
-            (field("date"), S::Date),
-            (field("time"), S::Time),
-            (field("timedelta"), S::Timedelta),
-            (field("uuid"), S::Uuid),
             (
-                field("decimal"),
+                spec_string(Some(100)),
+                ["VARCHAR(100)", "VARCHAR(100)", "VARCHAR(100)"],
+            ),
+            (S::Blob, ["BYTEA", "LONGBLOB", "BLOB"]),
+            (S::DateTime, ["TIMESTAMP", "DATETIME(6)", "TEXT"]),
+            (S::DateTimeUtc, ["TIMESTAMPTZ", "DATETIME(6)", "TEXT"]),
+            (S::Date, ["DATE", "DATE", "TEXT"]),
+            (S::Time, ["TIME", "TIME(6)", "TEXT"]),
+            (S::Timedelta, ["BIGINT", "BIGINT", "BIGINT"]),
+            (S::Uuid, ["UUID", "CHAR(36)", "TEXT"]),
+            (
                 S::Decimal {
                     precision: None,
                     scale: None,
                 },
+                ["NUMERIC", "DECIMAL", "TEXT"],
             ),
             (
-                {
-                    let mut f = field("decimal");
-                    f.max_digits = Some(10);
-                    f.decimal_places = Some(2);
-                    f
-                },
                 S::Decimal {
                     precision: Some(10),
                     scale: Some(2),
                 },
+                ["NUMERIC(10,2)", "DECIMAL(10,2)", "TEXT"],
             ),
-            (field("json"), S::Json),
-            (field("custom_thing"), S::Unknown),
-            (
-                field("int[]"),
-                S::Array {
-                    item: Box::new(S::BigInteger),
-                },
-            ),
-            (
-                field("str[]"),
-                S::Array {
-                    item: Box::new(spec_string(None)),
-                },
-            ),
-            (
-                field("uuid[]"),
-                S::Array {
-                    item: Box::new(S::Uuid),
-                },
-            ),
-            (
-                field("decimal[]"),
-                S::Array {
-                    item: Box::new(S::Decimal {
-                        precision: None,
-                        scale: None,
-                    }),
-                },
-            ),
+            (S::Json, ["JSONB", "JSON", "TEXT"]),
+            (S::JsonBinary, ["JSONB", "JSON", "TEXT"]),
+            (S::Unknown, ["TEXT", "TEXT", "TEXT"]),
         ];
-
-        // db_type overrides from the golden suite (incl. unknown MONEY)
-        for db_type in [
-            "SERIAL",
-            "BIGSERIAL",
-            "JSONB",
-            "TIMESTAMPTZ",
-            "NUMERIC(10,2)",
-            "VARCHAR(100)",
-            "CHAR(36)",
-            "MONEY",
-        ] {
-            let mut f = field("int");
-            f.db_type = Some(db_type.to_string());
-            // kind is irrelevant when db_type wins; Unknown is what Python
-            // would send for MONEY, BigInteger for SERIAL — both must agree.
-            cases.push((f, S::Unknown));
-        }
-
-        for dialect in [Dialect::Postgres, Dialect::Mysql, Dialect::Sqlite] {
-            for (f, spec) in &cases {
-                for is_pk in [false, true] {
-                    // Conscious deviation from legacy: an int-array PK used to
-                    // render `BIGSERIAL[]` (is_pk leaked into the element type)
-                    // — invalid SQL that PG rejects, so no working setup can
-                    // depend on it. The new resolver never marks array
-                    // elements as PK; skip that pathological combination here.
-                    if is_pk && matches!(spec, S::Array { .. }) {
-                        continue;
-                    }
-                    let mut f = f.clone();
-                    f.primary_key = is_pk;
-                    let legacy = resolve_field_type(&f, dialect);
-                    let new = resolve_spec_type(spec, f.db_type.as_deref(), dialect, is_pk);
-                    assert_eq!(
-                        new, legacy,
-                        "divergence: python_type={} db_type={:?} dialect={dialect:?} is_pk={is_pk}",
-                        f.python_type, f.db_type
-                    );
-                }
+        let dialects = [Dialect::Postgres, Dialect::Mysql, Dialect::Sqlite];
+        for (spec, expected) in &cases {
+            for (dialect, want) in dialects.iter().zip(expected) {
+                assert_eq!(
+                    &resolve_spec_type(spec, None, *dialect, false),
+                    want,
+                    "spec={spec:?} dialect={dialect:?}"
+                );
             }
         }
+    }
+
+    #[test]
+    fn int_pk_is_serial_only_on_postgres() {
+        assert_eq!(
+            resolve_spec_type(&ColumnTypeSpec::BigInteger, None, Dialect::Postgres, true),
+            "BIGSERIAL"
+        );
+        assert_eq!(
+            resolve_spec_type(&ColumnTypeSpec::BigInteger, None, Dialect::Mysql, true),
+            "BIGINT"
+        );
+        assert_eq!(
+            resolve_spec_type(&ColumnTypeSpec::BigInteger, None, Dialect::Sqlite, true),
+            "INTEGER"
+        );
+    }
+
+    #[test]
+    fn arrays_render_per_dialect() {
+        let arr = ColumnTypeSpec::Array {
+            item: Box::new(ColumnTypeSpec::Uuid),
+        };
+        assert_eq!(
+            resolve_spec_type(&arr, None, Dialect::Postgres, false),
+            "UUID[]"
+        );
+        assert_eq!(resolve_spec_type(&arr, None, Dialect::Mysql, false), "JSON");
+        assert_eq!(
+            resolve_spec_type(&arr, None, Dialect::Sqlite, false),
+            "TEXT"
+        );
+    }
+
+    #[test]
+    fn user_db_type_wins_verbatim_with_serial_translation() {
+        let spec = ColumnTypeSpec::Unknown;
+        assert_eq!(
+            resolve_spec_type(&spec, Some("MONEY"), Dialect::Mysql, false),
+            "MONEY"
+        );
+        assert_eq!(
+            resolve_spec_type(&spec, Some("SERIAL"), Dialect::Sqlite, false),
+            "INTEGER"
+        );
+        assert_eq!(
+            resolve_spec_type(&spec, Some("BIGSERIAL"), Dialect::Mysql, false),
+            "BIGINT"
+        );
+        assert_eq!(
+            resolve_spec_type(&spec, Some("SERIAL"), Dialect::Postgres, false),
+            "SERIAL"
+        );
     }
 
     #[test]

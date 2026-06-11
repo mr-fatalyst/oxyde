@@ -25,9 +25,17 @@
 //! # or non-interactively: INSTA_UPDATE=always cargo test -p oxyde-migrate --test golden_ddl
 //! ```
 
+use oxyde_codec::ColumnTypeSpec as S;
 use oxyde_migrate::{
     CheckDef, Dialect, FieldDef, ForeignKeyDef, IndexDef, Migration, MigrationOp, TableDef,
 };
+
+/// Shorthand: array spec with the given element.
+fn arr(item: S) -> S {
+    S::Array {
+        item: Box::new(item),
+    }
+}
 
 const ALL_DIALECTS: &[Dialect] = &[Dialect::Postgres, Dialect::Mysql, Dialect::Sqlite];
 const PG_MYSQL: &[Dialect] = &[Dialect::Postgres, Dialect::Mysql];
@@ -43,10 +51,10 @@ fn dialect_name(dialect: Dialect) -> &'static str {
 
 // ── Fixture builders ───────────────────────────────────────────────────────
 
-fn field(name: &str, python_type: &str) -> FieldDef {
+fn field(name: &str, column_type: S) -> FieldDef {
     FieldDef {
         name: name.into(),
-        python_type: python_type.into(),
+        column_type,
         db_type: None,
         nullable: false,
         primary_key: false,
@@ -97,11 +105,20 @@ impl FieldDefExt for FieldDef {
     }
     fn max_len(mut self, n: u32) -> Self {
         self.max_length = Some(n);
+        if matches!(self.column_type, S::String { .. }) {
+            self.column_type = S::String { length: Some(n) };
+        }
         self
     }
     fn decimal(mut self, digits: u32, places: u32) -> Self {
         self.max_digits = Some(digits);
         self.decimal_places = Some(places);
+        if matches!(self.column_type, S::Decimal { .. }) {
+            self.column_type = S::Decimal {
+                precision: Some(digits),
+                scale: Some(places),
+            };
+        }
         self
     }
 }
@@ -183,35 +200,54 @@ fn create_table_kitchen_sink() {
             "kitchen_sink",
             vec![
                 // Scalars — one column per python_type branch
-                field("col_int", "int"),
-                field("col_str", "str"),
-                field("col_str_100", "str").max_len(100),
-                field("col_float", "float"),
-                field("col_bool", "bool"),
-                field("col_bytes", "bytes"),
-                field("col_datetime", "datetime"),
-                field("col_date", "date"),
-                field("col_time", "time"),
-                field("col_timedelta", "timedelta"),
-                field("col_uuid", "uuid"),
-                field("col_decimal", "decimal"),
-                field("col_decimal_10_2", "decimal").decimal(10, 2),
-                field("col_json", "json"),
-                field("col_unknown", "custom_thing"),
+                field("col_int", S::BigInteger),
+                field("col_str", S::String { length: None }),
+                field("col_str_100", S::String { length: None }).max_len(100),
+                field("col_float", S::Double),
+                field("col_bool", S::Boolean),
+                field("col_bytes", S::Blob),
+                field("col_datetime", S::DateTime),
+                field("col_date", S::Date),
+                field("col_time", S::Time),
+                field("col_timedelta", S::Timedelta),
+                field("col_uuid", S::Uuid),
+                field(
+                    "col_decimal",
+                    S::Decimal {
+                        precision: None,
+                        scale: None,
+                    },
+                ),
+                field(
+                    "col_decimal_10_2",
+                    S::Decimal {
+                        precision: None,
+                        scale: None,
+                    },
+                )
+                .decimal(10, 2),
+                field("col_json", S::Json),
+                field("col_unknown", S::Unknown),
                 // Arrays
-                field("arr_int", "int[]"),
-                field("arr_str", "str[]"),
-                field("arr_uuid", "uuid[]"),
-                field("arr_decimal", "decimal[]"),
+                field("arr_int", arr(S::BigInteger)),
+                field("arr_str", arr(S::String { length: None })),
+                field("arr_uuid", arr(S::Uuid)),
+                field(
+                    "arr_decimal",
+                    arr(S::Decimal {
+                        precision: None,
+                        scale: None,
+                    }),
+                ),
                 // Nullability / uniqueness
-                field("col_nullable", "str").nullable(),
-                field("col_unique", "str").unique(),
+                field("col_nullable", S::String { length: None }).nullable(),
+                field("col_unique", S::String { length: None }).unique(),
                 // Defaults (raw SQL fragments)
-                field("def_str", "str").default_sql("'hello'"),
-                field("def_int", "int").default_sql("42"),
-                field("def_float", "float").default_sql("1.5"),
-                field("def_bool", "bool").default_sql("TRUE"),
-                field("def_now", "datetime").default_sql("CURRENT_TIMESTAMP"),
+                field("def_str", S::String { length: None }).default_sql("'hello'"),
+                field("def_int", S::BigInteger).default_sql("42"),
+                field("def_float", S::Double).default_sql("1.5"),
+                field("def_bool", S::Boolean).default_sql("TRUE"),
+                field("def_now", S::DateTime).default_sql("CURRENT_TIMESTAMP"),
             ],
         ),
     }];
@@ -226,25 +262,37 @@ fn create_table_pk_variants() {
         MigrationOp::CreateTable {
             table: table(
                 "t_pk_int_auto",
-                vec![field("id", "int").pk().auto_inc(), field("name", "str")],
+                vec![
+                    field("id", S::BigInteger).pk().auto_inc(),
+                    field("name", S::String { length: None }),
+                ],
             ),
         },
         MigrationOp::CreateTable {
             table: table(
                 "t_pk_int_plain",
-                vec![field("id", "int").pk(), field("name", "str")],
+                vec![
+                    field("id", S::BigInteger).pk(),
+                    field("name", S::String { length: None }),
+                ],
             ),
         },
         MigrationOp::CreateTable {
             table: table(
                 "t_pk_uuid",
-                vec![field("id", "uuid").pk(), field("name", "str")],
+                vec![
+                    field("id", S::Uuid).pk(),
+                    field("name", S::String { length: None }),
+                ],
             ),
         },
         MigrationOp::CreateTable {
             table: table(
                 "t_pk_str",
-                vec![field("code", "str").pk().max_len(32), field("name", "str")],
+                vec![
+                    field("code", S::String { length: None }).pk().max_len(32),
+                    field("name", S::String { length: None }),
+                ],
             ),
         },
     ];
@@ -259,14 +307,21 @@ fn create_table_db_type_overrides() {
         table: table(
             "db_type_overrides",
             vec![
-                field("c_serial", "int").db_type("SERIAL"),
-                field("c_bigserial", "int").db_type("BIGSERIAL"),
-                field("c_jsonb", "json").db_type("JSONB"),
-                field("c_timestamptz", "datetime").db_type("TIMESTAMPTZ"),
-                field("c_numeric", "decimal").db_type("NUMERIC(10,2)"),
-                field("c_varchar", "str").db_type("VARCHAR(100)"),
-                field("c_char36", "uuid").db_type("CHAR(36)"),
-                field("c_money", "float").db_type("MONEY"),
+                field("c_serial", S::BigInteger).db_type("SERIAL"),
+                field("c_bigserial", S::BigInteger).db_type("BIGSERIAL"),
+                field("c_jsonb", S::Json).db_type("JSONB"),
+                field("c_timestamptz", S::DateTime).db_type("TIMESTAMPTZ"),
+                field(
+                    "c_numeric",
+                    S::Decimal {
+                        precision: None,
+                        scale: None,
+                    },
+                )
+                .db_type("NUMERIC(10,2)"),
+                field("c_varchar", S::String { length: None }).db_type("VARCHAR(100)"),
+                field("c_char36", S::Uuid).db_type("CHAR(36)"),
+                field("c_money", S::Double).db_type("MONEY"),
             ],
         ),
     }];
@@ -280,12 +335,12 @@ fn create_table_with_fk() {
     let mut post = table(
         "post",
         vec![
-            field("id", "int").pk().auto_inc(),
-            field("title", "str"),
-            field("author_id", "int"),
-            field("editor_id", "int").nullable(),
-            field("reviewer_id", "int").nullable(),
-            field("owner_id", "int").nullable(),
+            field("id", S::BigInteger).pk().auto_inc(),
+            field("title", S::String { length: None }),
+            field("author_id", S::BigInteger),
+            field("editor_id", S::BigInteger).nullable(),
+            field("reviewer_id", S::BigInteger).nullable(),
+            field("owner_id", S::BigInteger).nullable(),
         ],
     );
     post.indexes = vec![index("ix_post_title", &["title"])];
@@ -336,11 +391,11 @@ fn add_drop_column_table() {
     let ops = [
         MigrationOp::AddColumn {
             table: "users".into(),
-            field: field("nickname", "str").nullable(),
+            field: field("nickname", S::String { length: None }).nullable(),
         },
         MigrationOp::AddColumn {
             table: "users".into(),
-            field: field("score", "int").default_sql("0"),
+            field: field("score", S::BigInteger).default_sql("0"),
         },
         MigrationOp::DropColumn {
             table: "users".into(),
@@ -363,8 +418,8 @@ fn alter_column() {
         // type change: int → str(50)
         MigrationOp::AlterColumn {
             table: "users".into(),
-            old_field: field("age", "int"),
-            new_field: field("age", "str").max_len(50),
+            old_field: field("age", S::BigInteger),
+            new_field: field("age", S::String { length: None }).max_len(50),
             table_fields: None,
             table_indexes: None,
             table_foreign_keys: None,
@@ -373,8 +428,8 @@ fn alter_column() {
         // NOT NULL → NULL
         MigrationOp::AlterColumn {
             table: "users".into(),
-            old_field: field("bio", "str"),
-            new_field: field("bio", "str").nullable(),
+            old_field: field("bio", S::String { length: None }),
+            new_field: field("bio", S::String { length: None }).nullable(),
             table_fields: None,
             table_indexes: None,
             table_foreign_keys: None,
@@ -383,8 +438,8 @@ fn alter_column() {
         // set default
         MigrationOp::AlterColumn {
             table: "users".into(),
-            old_field: field("status", "str"),
-            new_field: field("status", "str").default_sql("'active'"),
+            old_field: field("status", S::String { length: None }),
+            new_field: field("status", S::String { length: None }).default_sql("'active'"),
             table_fields: None,
             table_indexes: None,
             table_foreign_keys: None,
@@ -393,8 +448,8 @@ fn alter_column() {
         // drop default
         MigrationOp::AlterColumn {
             table: "users".into(),
-            old_field: field("rank", "int").default_sql("0"),
-            new_field: field("rank", "int"),
+            old_field: field("rank", S::BigInteger).default_sql("0"),
+            new_field: field("rank", S::BigInteger),
             table_fields: None,
             table_indexes: None,
             table_foreign_keys: None,
@@ -403,8 +458,8 @@ fn alter_column() {
         // add unique
         MigrationOp::AlterColumn {
             table: "users".into(),
-            old_field: field("email", "str"),
-            new_field: field("email", "str").unique(),
+            old_field: field("email", S::String { length: None }),
+            new_field: field("email", S::String { length: None }).unique(),
             table_fields: None,
             table_indexes: None,
             table_foreign_keys: None,
@@ -413,8 +468,8 @@ fn alter_column() {
         // drop unique
         MigrationOp::AlterColumn {
             table: "users".into(),
-            old_field: field("phone", "str").unique(),
-            new_field: field("phone", "str"),
+            old_field: field("phone", S::String { length: None }).unique(),
+            new_field: field("phone", S::String { length: None }),
             table_fields: None,
             table_indexes: None,
             table_foreign_keys: None,
@@ -430,12 +485,12 @@ fn alter_column() {
 fn alter_column_sqlite_rebuild() {
     let ops = [MigrationOp::AlterColumn {
         table: "users".into(),
-        old_field: field("age", "int"),
-        new_field: field("age", "str").max_len(50),
+        old_field: field("age", S::BigInteger),
+        new_field: field("age", S::String { length: None }).max_len(50),
         table_fields: Some(vec![
-            field("id", "int").pk().auto_inc(),
-            field("name", "str"),
-            field("age", "int"),
+            field("id", S::BigInteger).pk().auto_inc(),
+            field("name", S::String { length: None }),
+            field("age", S::BigInteger),
         ]),
         table_indexes: Some(vec![index("ix_users_name", &["name"])]),
         table_foreign_keys: Some(vec![fk(
@@ -577,7 +632,11 @@ fn rename_ops() {
             table: "users".into(),
             old_name: "login".into(),
             new_name: "username".into(),
-            field_def: Some(field("login", "str").max_len(64).unique()),
+            field_def: Some(
+                field("login", S::String { length: None })
+                    .max_len(64)
+                    .unique(),
+            ),
         },
         // MySQL fallback path without field_def (emits a warning comment)
         MigrationOp::RenameColumn {

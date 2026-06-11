@@ -2,6 +2,7 @@
 //!
 //! Tests for public API: MigrationOp::to_sql(), compute_diff(), Snapshot.
 
+use oxyde_codec::ColumnTypeSpec;
 use oxyde_migrate::{
     compute_diff, CheckDef, Dialect, FieldDef, ForeignKeyDef, IndexDef, MigrationOp, Snapshot,
     TableDef,
@@ -10,7 +11,7 @@ use oxyde_migrate::{
 fn sample_field(name: &str) -> FieldDef {
     FieldDef {
         name: name.to_string(),
-        python_type: "str".into(),
+        column_type: ColumnTypeSpec::String { length: None },
         db_type: None,
         nullable: false,
         primary_key: false,
@@ -29,7 +30,7 @@ fn sample_table() -> TableDef {
         fields: vec![
             FieldDef {
                 name: "id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: true,
@@ -129,7 +130,7 @@ fn test_sqlite_create_table_with_fk_inline() {
         fields: vec![
             FieldDef {
                 name: "id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: true,
@@ -142,7 +143,7 @@ fn test_sqlite_create_table_with_fk_inline() {
             },
             FieldDef {
                 name: "author_id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: false,
@@ -211,7 +212,7 @@ fn test_postgres_create_table_with_fk_as_alter() {
         name: "posts".into(),
         fields: vec![FieldDef {
             name: "id".into(),
-            python_type: "int".into(),
+            column_type: ColumnTypeSpec::BigInteger,
             db_type: None,
             nullable: false,
             primary_key: true,
@@ -317,7 +318,7 @@ fn test_dialect_specific_sql() {
     // Test SQLite AUTOINCREMENT
     let pk_field = FieldDef {
         name: "id".into(),
-        python_type: "int".into(),
+        column_type: ColumnTypeSpec::BigInteger,
         db_type: None,
         nullable: false,
         primary_key: true,
@@ -395,7 +396,7 @@ fn test_compute_diff_detects_new_table_and_column() {
 fn test_sqlite_alter_column_returns_error_without_schema() {
     let old_field = FieldDef {
         name: "age".into(),
-        python_type: "int".into(),
+        column_type: ColumnTypeSpec::BigInteger,
         db_type: None,
         nullable: true,
         primary_key: false,
@@ -408,7 +409,7 @@ fn test_sqlite_alter_column_returns_error_without_schema() {
     };
     let new_field = FieldDef {
         name: "age".into(),
-        python_type: "str".into(), // type change
+        column_type: ColumnTypeSpec::String { length: None }, // type change
         db_type: None,
         nullable: true,
         primary_key: false,
@@ -447,7 +448,7 @@ fn test_sqlite_alter_column_returns_error_without_schema() {
 fn test_sqlite_alter_column_with_schema_generates_rebuild() {
     let old_field = FieldDef {
         name: "age".into(),
-        python_type: "int".into(),
+        column_type: ColumnTypeSpec::BigInteger,
         db_type: None,
         nullable: true,
         primary_key: false,
@@ -460,7 +461,7 @@ fn test_sqlite_alter_column_with_schema_generates_rebuild() {
     };
     let new_field = FieldDef {
         name: "age".into(),
-        python_type: "str".into(), // type change
+        column_type: ColumnTypeSpec::String { length: None }, // type change
         db_type: None,
         nullable: false, // nullable change
         primary_key: false,
@@ -476,7 +477,7 @@ fn test_sqlite_alter_column_with_schema_generates_rebuild() {
     let table_fields = vec![
         FieldDef {
             name: "id".into(),
-            python_type: "int".into(),
+            column_type: ColumnTypeSpec::BigInteger,
             db_type: None,
             nullable: false,
             primary_key: true,
@@ -490,7 +491,7 @@ fn test_sqlite_alter_column_with_schema_generates_rebuild() {
         old_field.clone(),
         FieldDef {
             name: "name".into(),
-            python_type: "str".into(),
+            column_type: ColumnTypeSpec::String { length: None },
             db_type: None,
             nullable: false,
             primary_key: false,
@@ -575,7 +576,7 @@ fn test_sqlite_alter_column_with_schema_generates_rebuild() {
 fn test_rename_column_mysql_with_field_def() {
     let field_def = FieldDef {
         name: "old_name".into(),
-        python_type: "str".into(),
+        column_type: ColumnTypeSpec::String { length: None },
         db_type: Some("VARCHAR(255)".into()),
         nullable: false,
         primary_key: false,
@@ -661,7 +662,7 @@ fn test_compute_diff_detects_alter_column() {
         fields: vec![
             FieldDef {
                 name: "id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: true,
@@ -674,7 +675,7 @@ fn test_compute_diff_detects_alter_column() {
             },
             FieldDef {
                 name: "email".into(),
-                python_type: "str".into(),
+                column_type: ColumnTypeSpec::String { length: None },
                 db_type: Some("VARCHAR(100)".into()),
                 nullable: false,
                 primary_key: false,
@@ -700,7 +701,7 @@ fn test_compute_diff_detects_alter_column() {
         fields: vec![
             FieldDef {
                 name: "id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: true,
@@ -713,7 +714,7 @@ fn test_compute_diff_detects_alter_column() {
             },
             FieldDef {
                 name: "email".into(),
-                python_type: "str".into(),
+                column_type: ColumnTypeSpec::String { length: None },
                 db_type: Some("VARCHAR(255)".into()), // Changed db_type
                 nullable: true,                       // Changed nullable
                 primary_key: false,
@@ -759,7 +760,7 @@ fn test_postgres_alter_column_unique_constraint() {
     // Test adding unique constraint
     let old_field = FieldDef {
         name: "email".into(),
-        python_type: "str".into(),
+        column_type: ColumnTypeSpec::String { length: None },
         db_type: None,
         nullable: false,
         primary_key: false,
@@ -772,7 +773,7 @@ fn test_postgres_alter_column_unique_constraint() {
     };
     let new_field = FieldDef {
         name: "email".into(),
-        python_type: "str".into(),
+        column_type: ColumnTypeSpec::String { length: None },
         db_type: None,
         nullable: false,
         primary_key: false,
@@ -1095,7 +1096,7 @@ fn test_array_field_preserves_constraints() {
         fields: vec![
             FieldDef {
                 name: "id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: true,
@@ -1108,7 +1109,9 @@ fn test_array_field_preserves_constraints() {
             },
             FieldDef {
                 name: "tags".into(),
-                python_type: "str[]".into(),
+                column_type: ColumnTypeSpec::Array {
+                    item: Box::new(ColumnTypeSpec::String { length: Some(100) }),
+                },
                 db_type: None,
                 nullable: false,
                 primary_key: false,
@@ -1121,7 +1124,12 @@ fn test_array_field_preserves_constraints() {
             },
             FieldDef {
                 name: "prices".into(),
-                python_type: "decimal[]".into(),
+                column_type: ColumnTypeSpec::Array {
+                    item: Box::new(ColumnTypeSpec::Decimal {
+                        precision: Some(10),
+                        scale: Some(2),
+                    }),
+                },
                 db_type: None,
                 nullable: false,
                 primary_key: false,
@@ -1199,7 +1207,7 @@ fn test_compute_diff_emits_create_tables_in_topological_order() {
             name: name.to_string(),
             fields: vec![FieldDef {
                 name: "id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: true,
@@ -1252,7 +1260,7 @@ fn test_compute_diff_rejects_cyclic_foreign_keys() {
             name: name.to_string(),
             fields: vec![FieldDef {
                 name: "id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: true,
@@ -1310,7 +1318,7 @@ fn test_compute_diff_emits_drop_tables_in_reverse_topological_order() {
             name: name.to_string(),
             fields: vec![FieldDef {
                 name: "id".into(),
-                python_type: "int".into(),
+                column_type: ColumnTypeSpec::BigInteger,
                 db_type: None,
                 nullable: false,
                 primary_key: true,
@@ -1354,7 +1362,7 @@ fn test_compute_diff_emits_drop_tables_in_reverse_topological_order() {
 fn cyclic_table(name: &str, fk_refs: &[(&str, &str)]) -> TableDef {
     let mut fields = vec![FieldDef {
         name: "id".into(),
-        python_type: "int".into(),
+        column_type: ColumnTypeSpec::BigInteger,
         db_type: None,
         nullable: false,
         primary_key: true,
@@ -1369,7 +1377,7 @@ fn cyclic_table(name: &str, fk_refs: &[(&str, &str)]) -> TableDef {
     for (col, ref_table) in fk_refs {
         fields.push(FieldDef {
             name: (*col).to_string(),
-            python_type: "int".into(),
+            column_type: ColumnTypeSpec::BigInteger,
             db_type: None,
             nullable: true,
             primary_key: false,

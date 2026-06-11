@@ -516,7 +516,7 @@ class TestDropOpsMinimalPayloadRegression:
                     "fields": [
                         {
                             "name": "id",
-                            "python_type": "int",
+                            "column_type": {"kind": "big_integer"},
                             "db_type": None,
                             "nullable": False,
                             "primary_key": True,
@@ -570,10 +570,17 @@ PARTIAL_INDEX_DIALECTS = ["postgres", "sqlite"]
 
 
 def _field(name: str, **overrides) -> dict:
-    """Build a minimal field dict with sensible defaults."""
+    """Build a minimal field dict in the wire form (column_type spec).
+
+    Accepts python_type="..." as readable shorthand, translated through the
+    same legacy-name mapping the production reader uses.
+    """
+    from oxyde.core.column_types import spec_from_legacy_name
+
+    python_type = overrides.pop("python_type", "str")
     base = {
         "name": name,
-        "python_type": "str",
+        "column_type": spec_from_legacy_name(python_type),
         "db_type": None,
         "nullable": False,
         "primary_key": False,

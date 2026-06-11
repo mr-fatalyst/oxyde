@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic.fields import PydanticUndefined
 
+from oxyde.core.column_types import compute_column_type
 from oxyde.models.base import Model
 from oxyde.models.registry import iter_tables, registered_tables
 
@@ -123,26 +124,6 @@ def _serialize_default(value: Any, dialect: str) -> str | None:
     return str_val
 
 
-def _get_python_type_name(python_type: type) -> str:
-    """Get canonical name for Python type.
-
-    Delegates to get_ir_type (single source of truth for type name mapping).
-    Handles simple types, generics (dict, list[T]), and Optional.
-
-    Args:
-        python_type: Python type (int, str, dict, list[int], etc.)
-
-    Returns:
-        Canonical type name string
-    """
-    from oxyde.core.ir_types import get_ir_type
-
-    ir_type = get_ir_type(python_type)
-    if ir_type:
-        return ir_type
-    return getattr(python_type, "__name__", "text").lower()
-
-
 def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
     """Extract current schema from registered models.
 
@@ -215,13 +196,20 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
                 # Serialize Python value to SQL
                 default_val = _serialize_default(field_meta.default, dialect)
 
-            # Get python type name for cross-dialect type generation
-            python_type_name = _get_python_type_name(python_type_for_sql)
+            # Compute the ColumnTypeSpec via the single mapping point;
+            # unknown annotations collapse to "unknown" (TEXT DDL, native bind)
+            column_type = compute_column_type(
+                python_type_for_sql,
+                field_meta.db_type,
+                max_length=field_meta.max_length,
+                max_digits=field_meta.max_digits,
+                decimal_places=field_meta.decimal_places,
+            ) or {"kind": "unknown"}
 
             field_dict: dict[str, Any] = {
                 "name": field_meta.db_column,
-                "python_type": python_type_name,
-                "db_type": field_meta.db_type,  # explicit user override
+                "column_type": column_type,
+                "db_type": field_meta.db_type,  # explicit user override (verbatim DDL)
                 "nullable": field_meta.nullable,
                 "primary_key": field_meta.primary_key,
                 "unique": field_meta.unique,

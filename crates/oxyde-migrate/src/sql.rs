@@ -1,9 +1,9 @@
 //! SQL generation using sea-query DDL builders.
 //!
-//! Type mapping (`python_type_to_sql`, `translate_db_type`, `resolve_field_type`) is
-//! hand-written — sea-query doesn't know about Python types. DDL structure
-//! (CREATE/ALTER/DROP TABLE, indexes, foreign keys) uses sea-query for
-//! dialect-specific syntax and identifier quoting.
+//! Type mapping is spec-driven (`spec_sql::resolve_spec_type`): semantic kind
+//! from `ColumnTypeSpec`, verbatim user DDL from `FieldDef.db_type`. DDL
+//! structure (CREATE/ALTER/DROP TABLE, indexes, foreign keys) uses sea-query
+//! for dialect-specific syntax and identifier quoting.
 
 use sea_query::{
     Alias, ColumnDef as SeaColumnDef, Expr, ForeignKey as SeaForeignKey,
@@ -25,140 +25,16 @@ macro_rules! build_sql {
     };
 }
 
-// ── Type mapping ────────────────────────────────────────────────────────────
-
-/// Generate SQL type from Python type name for a given dialect.
-///
-/// Used when `db_type` is not explicitly specified by the user.
-pub(crate) fn python_type_to_sql(python_type: &str, dialect: Dialect, is_pk: bool) -> String {
-    // Handle array types: "int[]", "str[]", "uuid[]", etc.
-    if let Some(inner) = python_type.strip_suffix("[]") {
-        let inner_sql = python_type_to_sql(inner, dialect, false);
-        return match dialect {
-            Dialect::Postgres => format!("{}[]", inner_sql),
-            // MySQL/SQLite: no native arrays, use JSON
-            Dialect::Mysql => "JSON".to_string(),
-            Dialect::Sqlite => "TEXT".to_string(),
-        };
-    }
-
-    match dialect {
-        Dialect::Sqlite => match python_type {
-            "int" => "INTEGER".to_string(),
-            "str" => "TEXT".to_string(),
-            "float" => "REAL".to_string(),
-            "bool" => "INTEGER".to_string(),
-            "bytes" => "BLOB".to_string(),
-            "datetime" => "TEXT".to_string(),
-            "date" => "TEXT".to_string(),
-            "time" => "TEXT".to_string(),
-            "timedelta" => "BIGINT".to_string(),
-            "uuid" => "TEXT".to_string(),
-            "decimal" => "TEXT".to_string(),
-            "json" => "TEXT".to_string(),
-            _ => "TEXT".to_string(),
-        },
-        Dialect::Postgres => match python_type {
-            "int" if is_pk => "BIGSERIAL".to_string(),
-            "int" => "INTEGER".to_string(),
-            "str" => "TEXT".to_string(),
-            "float" => "DOUBLE PRECISION".to_string(),
-            "bool" => "BOOLEAN".to_string(),
-            "bytes" => "BYTEA".to_string(),
-            "datetime" => "TIMESTAMP".to_string(),
-            "date" => "DATE".to_string(),
-            "time" => "TIME".to_string(),
-            "timedelta" => "BIGINT".to_string(),
-            "uuid" => "UUID".to_string(),
-            "decimal" => "NUMERIC".to_string(),
-            "json" => "JSONB".to_string(),
-            _ => "TEXT".to_string(),
-        },
-        Dialect::Mysql => match python_type {
-            "int" if is_pk => "BIGINT".to_string(),
-            "int" => "BIGINT".to_string(),
-            "str" => "TEXT".to_string(),
-            "float" => "DOUBLE".to_string(),
-            "bool" => "TINYINT".to_string(),
-            "bytes" => "LONGBLOB".to_string(),
-            "datetime" => "DATETIME(6)".to_string(),
-            "date" => "DATE".to_string(),
-            "time" => "TIME(6)".to_string(),
-            "timedelta" => "BIGINT".to_string(),
-            "uuid" => "CHAR(36)".to_string(),
-            "decimal" => "DECIMAL".to_string(),
-            "json" => "JSON".to_string(),
-            _ => "TEXT".to_string(),
-        },
-    }
-}
-
-/// Translate database-specific types for cross-platform compatibility.
-///
-/// E.g., SERIAL/BIGSERIAL (PostgreSQL) → INT/BIGINT (MySQL) → INTEGER (SQLite)
-pub(crate) fn translate_db_type(db_type: &str, dialect: Dialect) -> String {
-    let db_type_upper = db_type.to_uppercase();
-
-    match dialect {
-        Dialect::Sqlite => match db_type_upper.as_str() {
-            "SERIAL" | "BIGSERIAL" => "INTEGER".to_string(),
-            _ => db_type.to_string(),
-        },
-        Dialect::Mysql => match db_type_upper.as_str() {
-            "SERIAL" => "INT".to_string(),
-            "BIGSERIAL" => "BIGINT".to_string(),
-            _ => db_type.to_string(),
-        },
-        Dialect::Postgres => db_type.to_string(),
-    }
-}
-
-/// Resolve the SQL type for a field based on dialect.
-///
-/// Priority:
-/// 1. If `db_type` is set (user explicit) → translate for dialect
-/// 2. Generate from `python_type` for dialect
-pub(crate) fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
-    if let Some(db_type) = &field.db_type {
-        return translate_db_type(db_type, dialect);
-    }
-    if let Some(inner) = field.python_type.strip_suffix("[]") {
-        let inner_sql = resolve_scalar_type(inner, field, dialect);
-        return match dialect {
-            Dialect::Postgres => format!("{inner_sql}[]"),
-            Dialect::Mysql => "JSON".to_string(),
-            Dialect::Sqlite => "TEXT".to_string(),
-        };
-    }
-    resolve_scalar_type(&field.python_type, field, dialect)
-}
-
-/// Resolve SQL type for a scalar python_type, using field constraints (max_length, etc.).
-fn resolve_scalar_type(python_type: &str, field: &FieldDef, dialect: Dialect) -> String {
-    // str → VARCHAR(N) on all dialects (SQLite ignores length but DDL is consistent)
-    if python_type == "str" {
-        let len = field.max_length.unwrap_or(255);
-        return format!("VARCHAR({})", len);
-    }
-    // decimal → DECIMAL(M,D) when constraints are specified
-    if python_type == "decimal" {
-        if let Some(digits) = field.max_digits {
-            let places = field.decimal_places.unwrap_or(0);
-            return match dialect {
-                Dialect::Mysql => format!("DECIMAL({},{})", digits, places),
-                Dialect::Postgres => format!("NUMERIC({},{})", digits, places),
-                Dialect::Sqlite => "TEXT".to_string(),
-            };
-        }
-    }
-    python_type_to_sql(python_type, dialect, field.primary_key)
-}
-
 // ── sea-query helpers ───────────────────────────────────────────────────────
 
 /// Convert `FieldDef` to sea-query `ColumnDef` with dialect-appropriate type and constraints.
 fn field_to_column_def(field: &FieldDef, dialect: Dialect) -> SeaColumnDef {
-    let sql_type = resolve_field_type(field, dialect);
+    let sql_type = crate::spec_sql::resolve_spec_type(
+        &field.column_type,
+        field.db_type.as_deref(),
+        dialect,
+        field.primary_key,
+    );
     let mut col = SeaColumnDef::new(Alias::new(&field.name));
     col.custom(Alias::new(sql_type));
 
@@ -233,7 +109,12 @@ fn build_fk_stmt(table: &str, fk: &ForeignKeyDef) -> sea_query::ForeignKeyCreate
 ///
 /// Used by both `RenameColumn` (CHANGE) and `AlterColumn` (MODIFY COLUMN).
 fn mysql_column_def(field: &FieldDef) -> String {
-    let sql_type = resolve_field_type(field, Dialect::Mysql);
+    let sql_type = crate::spec_sql::resolve_spec_type(
+        &field.column_type,
+        field.db_type.as_deref(),
+        Dialect::Mysql,
+        field.primary_key,
+    );
     let mut col_def = format!("`{}` {}", field.name, sql_type);
 
     if field.primary_key {
@@ -499,8 +380,18 @@ impl MigrationOp {
             } => match dialect {
                 Dialect::Postgres => {
                     let mut stmts = Vec::new();
-                    let old_sql_type = resolve_field_type(old_field, dialect);
-                    let new_sql_type = resolve_field_type(new_field, dialect);
+                    let old_sql_type = crate::spec_sql::resolve_spec_type(
+                        &old_field.column_type,
+                        old_field.db_type.as_deref(),
+                        dialect,
+                        old_field.primary_key,
+                    );
+                    let new_sql_type = crate::spec_sql::resolve_spec_type(
+                        &new_field.column_type,
+                        new_field.db_type.as_deref(),
+                        dialect,
+                        new_field.primary_key,
+                    );
 
                     if old_sql_type != new_sql_type {
                         stmts.push(format!(

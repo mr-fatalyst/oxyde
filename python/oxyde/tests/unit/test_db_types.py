@@ -159,8 +159,8 @@ COL_TYPE_CASES = [
     ("db_int_arr", {"kind": "array", "item": {"kind": "big_integer"}}),
     ("db_text_arr", {"kind": "array", "item": {"kind": "text"}}),
     # Annotated inner arrays (inferred from python_type)
-    ("ann_str_list", {"kind": "array", "item": {"kind": "string"}}),
-    ("ann_decimal_list", {"kind": "array", "item": {"kind": "decimal"}}),
+    ("ann_str_list", {"kind": "array", "item": {"kind": "string", "length": 100}}),
+    ("ann_decimal_list", {"kind": "array", "item": {"kind": "decimal", "precision": 10, "scale": 2}}),
 ]
 
 

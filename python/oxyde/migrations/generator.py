@@ -121,9 +121,8 @@ def _operation_to_python(op: dict[str, Any], indent: str = "    ") -> str:
             changes = {}
 
             # Compare fields and build changes dict
-            if old_field.get("python_type") != new_field.get("python_type"):
-                changes["type"] = new_field["python_type"]
-                changes["python_type"] = new_field.get("python_type")
+            if old_field.get("column_type") != new_field.get("column_type"):
+                changes["column_type"] = new_field.get("column_type")
             if old_field.get("db_type") != new_field.get("db_type"):
                 changes["db_type"] = new_field.get("db_type")
             if old_field.get("nullable") != new_field.get("nullable"):

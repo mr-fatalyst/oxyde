@@ -163,11 +163,17 @@ def _spec_from_annotation(
     if origin is dict:
         return {"kind": "json"}
 
-    # list[T] -> array of T
+    # list[T] -> array of T; constraints apply to the element
+    # (legacy parity: max_length on a list field meant VARCHAR(n)[] elements)
     if origin is list:
         args = get_args(python_type)
         if args:
-            item = _spec_from_annotation(args[0])
+            item = _spec_from_annotation(
+                args[0],
+                max_length=max_length,
+                max_digits=max_digits,
+                decimal_places=decimal_places,
+            )
             if item:
                 return {"kind": "array", "item": item}
         return None
@@ -216,4 +222,65 @@ def _split_type_params(upper: str) -> tuple[str, list[int]]:
     return base.strip(), params
 
 
-__all__ = ["ColumnSpec", "compute_column_type", "spec_for_literal"]
+# Legacy migration-file type names ("int", "str", "decimal", "custom_thing",
+# "int[]") → spec kind. Used only by the legacy reader in migrations
+# (to_snapshot normalization); becomes a hard error in 1.0.
+_LEGACY_NAME_KINDS: dict[str, str] = {
+    "int": "big_integer",
+    "str": "string",
+    "float": "double",
+    "bool": "boolean",
+    "bytes": "blob",
+    "datetime": "date_time",
+    "date": "date",
+    "time": "time",
+    "timedelta": "timedelta",
+    "uuid": "uuid",
+    "decimal": "decimal",
+    "json": "json",
+}
+
+
+def spec_from_legacy_name(
+    name: str,
+    *,
+    max_length: int | None = None,
+    max_digits: int | None = None,
+    decimal_places: int | None = None,
+) -> ColumnSpec:
+    """Spec from a legacy migration-file type name.
+
+    Unknown names (custom annotation classes) collapse to ``unknown`` —
+    they always rendered as TEXT and bound natively. Never returns None:
+    ``FieldDef.column_type`` is required on the Rust side.
+    """
+    if name.endswith("[]"):
+        item = spec_from_legacy_name(
+            name[:-2],
+            max_length=max_length,
+            max_digits=max_digits,
+            decimal_places=decimal_places,
+        )
+        return {"kind": "array", "item": item}
+
+    kind = _LEGACY_NAME_KINDS.get(name)
+    if kind is None:
+        return {"kind": "unknown"}
+
+    spec: ColumnSpec = {"kind": kind}
+    if kind == "string" and max_length is not None:
+        spec["length"] = max_length
+    elif kind == "decimal":
+        if max_digits is not None:
+            spec["precision"] = max_digits
+        if decimal_places is not None:
+            spec["scale"] = decimal_places
+    return spec
+
+
+__all__ = [
+    "ColumnSpec",
+    "compute_column_type",
+    "spec_for_literal",
+    "spec_from_legacy_name",
+]

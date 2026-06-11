@@ -214,12 +214,9 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
             for new_field in &new_table.fields {
                 if let Some(old_field) = old_table.fields.iter().find(|f| f.name == new_field.name)
                 {
-                    // Check if type changed using python_type or db_type
-                    let type_changed = if old_field.python_type != new_field.python_type {
-                        true
-                    } else {
-                        old_field.db_type != new_field.db_type
-                    };
+                    // Check if type changed using column_type or db_type
+                    let type_changed = old_field.column_type != new_field.column_type
+                        || old_field.db_type != new_field.db_type;
 
                     let nullable_changed = old_field.nullable != new_field.nullable;
                     let default_changed = old_field.default != new_field.default;

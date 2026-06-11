@@ -1,5 +1,6 @@
 //! Core data types for the migration system.
 
+use oxyde_codec::ColumnTypeSpec;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -77,8 +78,11 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FieldDef {
     pub name: String,
-    /// Python type name for cross-dialect type generation (e.g., "int", "str", "bytes")
-    pub python_type: String,
+    /// Semantic column type for cross-dialect DDL generation and binding.
+    /// Python computes it once (`compute_column_type`); legacy migration
+    /// files are normalized to this form on the Python side before reaching
+    /// Rust — there is no string-typed fallback here.
+    pub column_type: ColumnTypeSpec,
     /// Explicit db_type from user (e.g., "JSONB", "VARCHAR(255)")
     #[serde(default)]
     pub db_type: Option<String>,

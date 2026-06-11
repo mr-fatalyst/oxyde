@@ -69,9 +69,6 @@ mod spec_sql;
 mod sql;
 mod types;
 
-#[cfg(test)]
-mod tests;
-
 // Public re-exports (API не меняется)
 pub use diff::{compute_diff, Migration};
 pub use op::MigrationOp;

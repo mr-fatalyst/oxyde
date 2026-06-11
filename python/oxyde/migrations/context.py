@@ -222,7 +222,7 @@ class MigrationContext:
             # Fallback: create minimal field definition
             old_field = {
                 "name": field_name,
-                "python_type": changes.get("type", "str"),
+                "column_type": changes.get("column_type", {"kind": "unknown"}),
                 "db_type": None,
                 "nullable": True,
                 "primary_key": False,
@@ -233,10 +233,16 @@ class MigrationContext:
 
         # Build new_field by applying changes to old_field
         new_field = dict(old_field)
+        if "column_type" in changes:
+            new_field["column_type"] = changes["column_type"]
+        # Legacy keys from old migration files — drop stale column_type so
+        # normalization re-derives it from the legacy name
         if "type" in changes:
             new_field["python_type"] = changes["type"]
+            new_field.pop("column_type", None)
         if "python_type" in changes:
             new_field["python_type"] = changes["python_type"]
+            new_field.pop("column_type", None)
         if "db_type" in changes:
             new_field["db_type"] = changes["db_type"]
         if "nullable" in changes:
@@ -430,6 +436,12 @@ class MigrationContext:
         Args:
             op: Operation dictionary
         """
+        # Normalize legacy field dicts (python_type form) — Rust requires
+        # column_type. Single legacy funnel for the execute path.
+        from oxyde.migrations.utils import normalize_op_fields
+
+        op = normalize_op_fields(op)
+
         # Convert operation to SQL using Rust
         operations_json = json.dumps([op])
         sql_statements = migration_to_sql(operations_json, self._dialect)

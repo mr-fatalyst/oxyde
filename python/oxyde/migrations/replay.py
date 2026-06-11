@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any
 
 from oxyde.migrations.context import MigrationContext
-from oxyde.migrations.utils import load_migration_module
+from oxyde.migrations.utils import (
+    load_migration_module,
+    normalize_field_dict,
+    op_uses_legacy_fields,
+)
 
 
 class SchemaState:
@@ -82,10 +87,15 @@ class SchemaState:
                 for field in self.tables[table_name]["fields"]:
                     if field["name"] == column_name:
                         # Map changes keys to field keys
+                        if "column_type" in changes:
+                            field["column_type"] = changes["column_type"]
+                        # Legacy keys from old migration files
                         if "type" in changes:
                             field["python_type"] = changes["type"]
+                            field.pop("column_type", None)
                         if "python_type" in changes:
                             field["python_type"] = changes["python_type"]
+                            field.pop("column_type", None)
                         if "db_type" in changes:
                             field["db_type"] = changes["db_type"]
                         if "nullable" in changes:
@@ -156,12 +166,24 @@ class SchemaState:
     def to_snapshot(self) -> dict[str, Any]:
         """Convert to Rust-compatible snapshot format.
 
+        Normalizes legacy field dicts (python_type form from old migration
+        files) into the ColumnTypeSpec form Rust requires. This is the single
+        legacy-reading point; it becomes a hard error in 1.0.
+
         Returns:
             Snapshot dictionary compatible with Rust Snapshot structure
         """
+        tables: dict[str, Any] = {}
+        for name, table in self.tables.items():
+            table = dict(table)
+            table["fields"] = [normalize_field_dict(f) for f in table["fields"]]
+            # Copy mutable collections: a snapshot must not alias live state
+            for key in ("indexes", "foreign_keys", "checks"):
+                table[key] = [dict(item) for item in table.get(key, [])]
+            tables[name] = table
         return {
             "version": 1,
-            "tables": self.tables,
+            "tables": tables,
         }
 
 
@@ -264,7 +286,16 @@ def replay_migrations(migrations_dir: str = "migrations") -> dict[str, Any]:
             module.upgrade(ctx)
 
             # Apply collected operations to virtual schema
-            for op in ctx.get_collected_operations():
+            operations = ctx.get_collected_operations()
+            if any(op_uses_legacy_fields(op) for op in operations):
+                warnings.warn(
+                    f"Migration file '{file.name}' uses the legacy field format "
+                    "(python_type). Support will be removed in oxyde 1.0 — "
+                    "run `oxyde migrations squash` to convert.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
+            for op in operations:
                 state.apply_operation(op)
 
     return state.to_snapshot()

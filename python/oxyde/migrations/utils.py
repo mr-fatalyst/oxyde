@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -73,3 +74,67 @@ def parse_query_result(result_bytes: bytes) -> list[dict[str, Any]]:
         return result
 
     return []
+
+
+# ── Legacy field-format normalization ────────────────────────────────────
+
+
+def normalize_field_dict(field: dict) -> dict:
+    """Ensure a FieldDef dict carries ``column_type`` (ColumnTypeSpec).
+
+    Legacy migration files store ``python_type`` names; Rust requires
+    ``column_type``. Derivation uses the same single mapping module as live
+    models. Support for the legacy form is deprecated and will become an
+    error in 1.0 (run ``oxyde migrations squash`` to convert).
+    """
+    if "column_type" in field:
+        return field
+
+    from oxyde.core.column_types import compute_column_type, spec_from_legacy_name
+
+    db_type = field.get("db_type")
+    spec = None
+    if db_type:
+        # db_type wins for the semantic kind, same as compute_column_type
+        spec = compute_column_type(None, db_type)
+    if spec is None:
+        spec = spec_from_legacy_name(
+            str(field.get("python_type", "")),
+            max_length=field.get("max_length"),
+            max_digits=field.get("max_digits"),
+            decimal_places=field.get("decimal_places"),
+        )
+    normalized = dict(field)
+    normalized["column_type"] = spec
+    return normalized
+
+
+def op_uses_legacy_fields(op: dict) -> bool:
+    """True if the operation carries any field dict in the legacy form."""
+    return any("column_type" not in f for f in _iter_field_dicts(op))
+
+
+def normalize_op_fields(op: dict) -> dict:
+    """Normalize every FieldDef dict inside a migration operation."""
+    op = dict(op)
+    table = op.get("table")
+    if isinstance(table, dict) and "fields" in table:
+        table = dict(table)
+        table["fields"] = [normalize_field_dict(f) for f in table["fields"]]
+        op["table"] = table
+    for key in ("field", "field_def", "old_field", "new_field"):
+        if isinstance(op.get(key), dict):
+            op[key] = normalize_field_dict(op[key])
+    if isinstance(op.get("table_fields"), list):
+        op["table_fields"] = [normalize_field_dict(f) for f in op["table_fields"]]
+    return op
+
+
+def _iter_field_dicts(op: dict) -> Iterator[dict]:
+    table = op.get("table")
+    if isinstance(table, dict):
+        yield from table.get("fields", [])
+    for key in ("field", "field_def", "old_field", "new_field"):
+        if isinstance(op.get(key), dict):
+            yield op[key]
+    yield from op.get("table_fields") or []
