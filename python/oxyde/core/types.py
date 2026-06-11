@@ -1,13 +1,12 @@
 """Unified type registry for the Oxyde ORM.
 
 TYPE_REGISTRY maps Python types to their ORM-level descriptors:
-    - ir_name: type hint string for Rust IR decoding
     - category: lookup category for query filters
     - serialize: value → msgpack-safe value
 
-All type-aware logic (IR mapping, lookup categories, value serialization)
-delegates to this single registry. Uses exact type() lookup — no issubclass
-ordering issues (bool vs int).
+Column type classification lives in `core/column_types.py`
+(`compute_column_type`); this registry covers the remaining roles.
+Uses exact type() lookup — no issubclass ordering issues (bool vs int).
 """
 
 from __future__ import annotations
@@ -24,27 +23,24 @@ from uuid import UUID
 class TypeDescriptor:
     """Describes how a Python type maps to ORM operations."""
 
-    ir_name: str  # "uuid", "int", "datetime" — for Rust IR decoding
     category: str  # "string", "numeric", "datetime", "bool", "generic"
     serialize: Callable[[Any], Any]  # value → msgpack-safe value
 
 
 TYPE_REGISTRY: dict[type, TypeDescriptor] = {
-    bool: TypeDescriptor("bool", "bool", lambda v: v),
-    int: TypeDescriptor("int", "numeric", lambda v: v),
-    float: TypeDescriptor("float", "numeric", lambda v: v),
-    str: TypeDescriptor("str", "string", lambda v: v),
-    bytes: TypeDescriptor("bytes", "generic", lambda v: v),
-    bytearray: TypeDescriptor("bytes", "generic", bytes),
-    datetime: TypeDescriptor("datetime", "datetime", lambda v: v.isoformat()),
-    date: TypeDescriptor("date", "datetime", lambda v: v.isoformat()),
-    time: TypeDescriptor("time", "datetime", lambda v: v.isoformat()),
-    timedelta: TypeDescriptor(
-        "timedelta", "generic", lambda v: int(v.total_seconds() * 1_000_000)
-    ),
-    UUID: TypeDescriptor("uuid", "generic", str),
-    Decimal: TypeDescriptor("decimal", "numeric", str),
-    dict: TypeDescriptor("json", "generic", lambda v: v),
+    bool: TypeDescriptor("bool", lambda v: v),
+    int: TypeDescriptor("numeric", lambda v: v),
+    float: TypeDescriptor("numeric", lambda v: v),
+    str: TypeDescriptor("string", lambda v: v),
+    bytes: TypeDescriptor("generic", lambda v: v),
+    bytearray: TypeDescriptor("generic", bytes),
+    datetime: TypeDescriptor("datetime", lambda v: v.isoformat()),
+    date: TypeDescriptor("datetime", lambda v: v.isoformat()),
+    time: TypeDescriptor("datetime", lambda v: v.isoformat()),
+    timedelta: TypeDescriptor("generic", lambda v: int(v.total_seconds() * 1_000_000)),
+    UUID: TypeDescriptor("generic", str),
+    Decimal: TypeDescriptor("numeric", str),
+    dict: TypeDescriptor("generic", lambda v: v),
 }
 
 

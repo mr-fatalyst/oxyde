@@ -1,15 +1,12 @@
 //! `ColumnTypeSpec`-driven value binding: `rmpv::Value` + spec → `sea_query::Value`.
 //!
-//! This is the successor of `value.rs`'s string-classified path
-//! (`rmpv_to_value_typed` + `classify_type`). During этап 1 of the
-//! type-mapping refactor both paths coexist; the test matrix below is the
-//! ported behavioral spec from `value.rs`. Semantics are intentionally
-//! byte-equal to the legacy path — every deviation must be a conscious,
-//! documented decision.
+//! The single binding path. The test matrix below is the behavioral spec
+//! (typed nulls, datetime heuristics, fallbacks) — any change to it is a
+//! conscious, documented decision.
 //!
 //! Dialect note: binding itself is dialect-independent; per-dialect value
 //! adaptation (e.g. arrays → JSON on MySQL/SQLite) happens in the driver's
-//! bind layer, same as for the legacy path.
+//! bind layer.
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use oxyde_codec::ColumnTypeSpec;
@@ -17,6 +14,12 @@ use rust_decimal::Decimal;
 use sea_query::value::ArrayType;
 use sea_query::Value;
 use uuid::Uuid;
+
+/// Convert an rmpv value without a column spec (raw SQL parameters).
+/// Identical to `bind_value(value, &ColumnTypeSpec::Unknown)`.
+pub fn rmpv_to_value(value: &rmpv::Value) -> Value {
+    bind_value(value, &ColumnTypeSpec::Unknown)
+}
 
 /// Convert an rmpv value to a sea_query Value using the column type spec.
 pub fn bind_value(value: &rmpv::Value, spec: &ColumnTypeSpec) -> Value {
@@ -546,52 +549,6 @@ mod tests {
         match bind_value(&s("hello"), &ColumnTypeSpec::Unknown) {
             Value::String(Some(v)) => assert_eq!(v.as_ref(), "hello"),
             other => panic!("expected String, got {other:?}"),
-        }
-    }
-
-    /// Differential check against the legacy path: for every (value, legacy
-    /// hint, spec) triple the two paths must agree while both are alive.
-    #[test]
-    fn matches_legacy_path() {
-        use crate::utils::value::rmpv_to_value_typed;
-
-        let triples: Vec<(rmpv::Value, Option<&str>, ColumnTypeSpec)> = vec![
-            (s(UUID_STR), Some("uuid"), ColumnTypeSpec::Uuid),
-            (s("99.99"), Some("decimal"), decimal_spec()),
-            (
-                s("2024-01-15T10:30:00"),
-                Some("datetime"),
-                ColumnTypeSpec::DateTime,
-            ),
-            (
-                s("2024-01-15T10:30:00+03:00"),
-                Some("TIMESTAMPTZ"),
-                ColumnTypeSpec::DateTimeUtc,
-            ),
-            (s("2024-01-15T12:30:00Z"), Some("str"), string_spec()),
-            (s("2024-01-15T12:30:00Z"), None, ColumnTypeSpec::Unknown),
-            (rmpv::Value::Nil, Some("int"), ColumnTypeSpec::BigInteger),
-            (rmpv::Value::Nil, Some("NUMERIC(10,2)"), decimal_spec()),
-            (rmpv::Value::Nil, None, ColumnTypeSpec::Unknown),
-            (
-                rmpv::Value::Array(vec![rmpv::Value::Integer(1.into())]),
-                Some("int[]"),
-                array_of(ColumnTypeSpec::BigInteger),
-            ),
-            (
-                rmpv::Value::Integer(42.into()),
-                None,
-                ColumnTypeSpec::Unknown,
-            ),
-        ];
-
-        for (value, hint, spec) in triples {
-            let legacy = rmpv_to_value_typed(&value, hint);
-            let new = bind_value(&value, &spec);
-            assert_eq!(
-                new, legacy,
-                "divergence for value={value:?} hint={hint:?} spec={spec:?}"
-            );
         }
     }
 }
