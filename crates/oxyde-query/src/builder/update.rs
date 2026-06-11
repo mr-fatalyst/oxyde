@@ -47,7 +47,7 @@ pub fn build_update(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
     }
 
     // Add RETURNING clause for Postgres/SQLite
-    if ir.returning.unwrap_or(false) && matches!(dialect, Dialect::Postgres | Dialect::Sqlite) {
+    if crate::emits_returning(ir, dialect) {
         query.returning_all();
     }
 

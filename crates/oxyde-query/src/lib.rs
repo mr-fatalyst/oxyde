@@ -75,6 +75,18 @@ impl Dialect {
     }
 }
 
+/// Whether the generated statement carries a full `RETURNING *` clause —
+/// i.e. the caller asked for rows back (`ir.returning`) and the dialect
+/// supports RETURNING (MySQL does not).
+///
+/// Execution routing must use this predicate, not the SQL text: identifiers
+/// may legally contain the word RETURNING, and INSERTs may later carry a
+/// pk-only `RETURNING "id"` clause that does not mean "return full rows".
+#[must_use]
+pub fn emits_returning(ir: &QueryIR, dialect: Dialect) -> bool {
+    ir.returning.unwrap_or(false) && matches!(dialect, Dialect::Postgres | Dialect::Sqlite)
+}
+
 /// Build SQL from QueryIR
 ///
 /// This is the main entry point for SQL generation. It dispatches to the
@@ -623,6 +635,79 @@ mod tests {
             sql.contains("SUM(DISTINCT"),
             "should have SUM(DISTINCT: {sql}"
         );
+    }
+
+    #[test]
+    fn test_emits_returning_dialect_matrix() {
+        let mut ir = QueryIR {
+            op: Operation::Insert,
+            table: "users".into(),
+            values: Some(HashMap::from([("name".into(), rmpv_str("a"))])),
+            returning: Some(true),
+            ..Default::default()
+        };
+        assert!(emits_returning(&ir, Dialect::Postgres));
+        assert!(emits_returning(&ir, Dialect::Sqlite));
+        assert!(
+            !emits_returning(&ir, Dialect::Mysql),
+            "MySQL has no RETURNING"
+        );
+
+        ir.returning = Some(false);
+        assert!(!emits_returning(&ir, Dialect::Postgres));
+
+        ir.returning = None;
+        assert!(!emits_returning(&ir, Dialect::Postgres));
+    }
+
+    /// Guard against predicate/builder desync: for every mutation op and
+    /// dialect, the built SQL contains RETURNING iff the predicate says so.
+    ///
+    /// NOTE: when pk-only `RETURNING "id"` moves into the insert builder
+    /// (SQLite-fallback removal PR), the INSERT case here must be updated
+    /// consciously — that is the point of this test.
+    #[test]
+    fn test_emits_returning_matches_builder_output() {
+        let ops: Vec<QueryIR> = vec![
+            QueryIR {
+                op: Operation::Insert,
+                table: "t".into(),
+                values: Some(HashMap::from([("name".into(), rmpv_str("a"))])),
+                ..Default::default()
+            },
+            QueryIR {
+                op: Operation::Update,
+                table: "t".into(),
+                values: Some(HashMap::from([("name".into(), rmpv_str("a"))])),
+                filter_tree: Some(filter_cond("id", "=", rmpv_int(1))),
+                ..Default::default()
+            },
+            QueryIR {
+                op: Operation::Delete,
+                table: "t".into(),
+                filter_tree: Some(filter_cond("id", "=", rmpv_int(1))),
+                ..Default::default()
+            },
+        ];
+
+        for base in ops {
+            for returning in [None, Some(false), Some(true)] {
+                for dialect in [Dialect::Postgres, Dialect::Sqlite, Dialect::Mysql] {
+                    let mut ir = base.clone();
+                    ir.returning = returning;
+                    let (sql, _) = build_sql(&ir, dialect).unwrap();
+                    assert_eq!(
+                        emits_returning(&ir, dialect),
+                        sql.contains("RETURNING"),
+                        "predicate/builder desync: op={:?} returning={:?} dialect={:?} sql={}",
+                        ir.op,
+                        returning,
+                        dialect,
+                        sql
+                    );
+                }
+            }
+        }
     }
 
     #[test]

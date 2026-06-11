@@ -15,7 +15,7 @@ use oxyde_driver::{
     explain_query, pool_backend as driver_pool_backend, ExplainFormat, ExplainOptions,
     RelationInfo,
 };
-use oxyde_query::{build_sql, Dialect};
+use oxyde_query::{build_sql, emits_returning, Dialect};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString, PyTuple};
@@ -25,10 +25,6 @@ fn is_profiling_enabled() -> bool {
     std::env::var("OXYDE_PROFILE")
         .map(|v| v == "1")
         .unwrap_or(false)
-}
-
-fn should_use_returning_path(returning: Option<bool>, sql: &str) -> bool {
-    returning.unwrap_or(false) && sql.contains("RETURNING")
 }
 
 /// Execute a query: deserialize IR → validate → build SQL → execute → msgpack bytes → Coroutine[bytes].
@@ -101,9 +97,10 @@ pub(crate) fn execute<'py>(
             }
             oxyde_codec::Operation::Insert => {
                 // Single insert with RETURNING * returns full rows (Postgres/SQLite).
-                // MySQL doesn't support RETURNING the query builder omits it,
-                // so we fall through to execute_insert_returning which uses last_insert_id().
-                if should_use_returning_path(ir.returning, &sql) {
+                // MySQL doesn't support RETURNING — the builder omits it, so we
+                // fall through to execute_insert_returning (last_insert_id()).
+                // Routing is decided by IR intent + dialect, never by SQL text.
+                if emits_returning(&ir, dialect) {
                     execute_mutation_returning(&pool_name, &sql, &params, ir.col_types.as_ref())
                         .await
                         .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
@@ -124,10 +121,10 @@ pub(crate) fn execute<'py>(
                     "UPDATE"
                 };
 
-                // Use mutation returning only when SQL actually contains RETURNING
+                // Use mutation returning only when the builder emitted RETURNING
                 // (Postgres/SQLite). MySQL never gets RETURNING in SQL, so fall
                 // through to execute_statement to preserve affected-row count.
-                if should_use_returning_path(ir.returning, &sql) {
+                if emits_returning(&ir, dialect) {
                     let exec_start = Instant::now();
                     let result = execute_mutation_returning(
                         &pool_name,
@@ -232,7 +229,7 @@ pub(crate) fn execute_in_transaction<'py>(
                 result
             }
             oxyde_codec::Operation::Insert => {
-                if should_use_returning_path(ir.returning, &sql) {
+                if emits_returning(&ir, dialect) {
                     execute_mutation_returning_in_transaction(
                         tx_id,
                         &sql,
@@ -252,7 +249,7 @@ pub(crate) fn execute_in_transaction<'py>(
                 }
             }
             oxyde_codec::Operation::Update | oxyde_codec::Operation::Delete => {
-                if should_use_returning_path(ir.returning, &sql) {
+                if emits_returning(&ir, dialect) {
                     execute_mutation_returning_in_transaction(
                         tx_id,
                         &sql,
@@ -273,25 +270,6 @@ pub(crate) fn execute_in_transaction<'py>(
 
         Ok(results)
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::should_use_returning_path;
-
-    #[test]
-    fn returning_path_requires_flag_and_sql_clause() {
-        assert!(should_use_returning_path(
-            Some(true),
-            "INSERT ... RETURNING *"
-        ));
-        assert!(!should_use_returning_path(Some(true), "INSERT ..."));
-        assert!(!should_use_returning_path(
-            Some(false),
-            "INSERT ... RETURNING *"
-        ));
-        assert!(!should_use_returning_path(None, "INSERT ... RETURNING *"));
-    }
 }
 
 /// Render SQL from IR without executing (requires pool for dialect detection) → Coroutine[(str, list)].

@@ -87,7 +87,7 @@ pub fn build_bulk_update(
         query.and_where(expr);
     }
 
-    if ir.returning.unwrap_or(false) && matches!(dialect, Dialect::Postgres | Dialect::Sqlite) {
+    if crate::emits_returning(ir, dialect) {
         query.returning_all();
     }
 
