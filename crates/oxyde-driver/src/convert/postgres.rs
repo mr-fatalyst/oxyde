@@ -1,8 +1,11 @@
 //! PostgreSQL CellEncoder implementation.
 //!
-//! Encodes PostgreSQL row cells directly to msgpack bytes.
+//! Encodes PostgreSQL row cells directly to msgpack bytes, dispatched by
+//! `ColumnTypeSpec`. Error-handling per arm (nil vs string-fallback) is
+//! ported verbatim from the legacy string-hint implementation.
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+use oxyde_codec::ColumnTypeSpec;
 use rust_decimal::Decimal;
 use sqlx::{postgres::PgRow, Row};
 use uuid::Uuid;
@@ -14,9 +17,14 @@ pub struct PgEncoder;
 impl CellEncoder for PgEncoder {
     type Row = PgRow;
 
-    fn try_encode_by_ir_type(buf: &mut Vec<u8>, row: &PgRow, idx: usize, ir_type: &str) -> bool {
-        match ir_type {
-            "int" => {
+    fn try_encode_by_spec(
+        buf: &mut Vec<u8>,
+        row: &PgRow,
+        idx: usize,
+        spec: &ColumnTypeSpec,
+    ) -> bool {
+        match spec {
+            ColumnTypeSpec::BigInteger => {
                 match row.try_get::<Option<i64>, _>(idx) {
                     Ok(Some(v)) => write_i64(buf, v),
                     Ok(None) => write_nil(buf),
@@ -28,7 +36,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "str" => {
+            ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => {
                 match row.try_get::<Option<String>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -36,7 +44,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "float" => {
+            ColumnTypeSpec::Double => {
                 match row.try_get::<Option<f64>, _>(idx) {
                     Ok(Some(v)) => write_f64(buf, v),
                     Ok(None) => write_nil(buf),
@@ -44,7 +52,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "bool" => {
+            ColumnTypeSpec::Boolean => {
                 match row.try_get::<Option<bool>, _>(idx) {
                     Ok(Some(v)) => write_bool(buf, v),
                     Ok(None) => write_nil(buf),
@@ -52,7 +60,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "bytes" => {
+            ColumnTypeSpec::Blob => {
                 match row.try_get::<Option<Vec<u8>>, _>(idx) {
                     Ok(Some(v)) => write_bin(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -60,7 +68,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "datetime" => {
+            ColumnTypeSpec::DateTime => {
                 match row.try_get::<Option<DateTime<Utc>>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v.to_rfc3339()),
                     Ok(None) => write_nil(buf),
@@ -74,7 +82,15 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "date" => {
+            ColumnTypeSpec::DateTimeUtc => {
+                match row.try_get::<Option<DateTime<Utc>>, _>(idx) {
+                    Ok(Some(v)) => write_str(buf, &v.to_rfc3339()),
+                    Ok(None) => write_nil(buf),
+                    Err(_) => fallback_str(buf, row, idx),
+                }
+                true
+            }
+            ColumnTypeSpec::Date => {
                 match row.try_get::<Option<NaiveDate>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v.format("%Y-%m-%d").to_string()),
                     Ok(None) => write_nil(buf),
@@ -82,7 +98,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "time" => {
+            ColumnTypeSpec::Time => {
                 match row.try_get::<Option<NaiveTime>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v.format("%H:%M:%S%.f").to_string()),
                     Ok(None) => write_nil(buf),
@@ -90,7 +106,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "uuid" => {
+            ColumnTypeSpec::Uuid => {
                 match row.try_get::<Option<Uuid>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v.to_string()),
                     Ok(None) => write_nil(buf),
@@ -98,7 +114,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "decimal" => {
+            ColumnTypeSpec::Decimal { .. } => {
                 match row.try_get::<Option<Decimal>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v.to_string()),
                     Ok(None) => write_nil(buf),
@@ -106,7 +122,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "timedelta" => {
+            ColumnTypeSpec::Timedelta => {
                 match row.try_get::<Option<i64>, _>(idx) {
                     Ok(Some(v)) => write_f64(buf, v as f64 / 1_000_000.0),
                     Ok(None) => write_nil(buf),
@@ -114,7 +130,7 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            "json" => {
+            ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary => {
                 match row.try_get::<Option<serde_json::Value>, _>(idx) {
                     Ok(Some(v)) => write_json_value(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -122,11 +138,11 @@ impl CellEncoder for PgEncoder {
                 }
                 true
             }
-            ir_type if ir_type.ends_with("[]") => {
-                encode_pg_array(buf, row, idx, &ir_type[..ir_type.len() - 2]);
+            ColumnTypeSpec::Array { item } => {
+                encode_pg_array(buf, row, idx, item);
                 true
             }
-            _ => false,
+            ColumnTypeSpec::Unknown => false,
         }
     }
 
@@ -221,70 +237,70 @@ fn fallback_str(buf: &mut Vec<u8>, row: &PgRow, idx: usize) {
     }
 }
 
-/// Encode a native PostgreSQL array column to msgpack array.
-/// Normalizes inner type to lowercase for case-insensitive matching
-/// (handles both IR names like "int" and SQL names like "BIGINT").
-/// Uses `Vec<Option<T>>` to correctly handle NULL elements within arrays.
-fn encode_pg_array(buf: &mut Vec<u8>, row: &PgRow, idx: usize, inner_raw: &str) {
-    let lowered = inner_raw.to_ascii_lowercase();
-    // Strip precision suffix: "varchar(100)" → "varchar", "numeric(10,2)" → "numeric"
-    let inner = lowered.split('(').next().unwrap_or(&lowered);
-    match inner {
-        "int" | "integer" | "bigint" | "smallint" | "tinyint" | "serial" | "bigserial"
-        | "smallserial" | "int2" | "int4" | "int8" | "timedelta" | "interval" => {
+/// Encode a native PostgreSQL array column to a msgpack array, dispatched by
+/// the element spec. Uses `Vec<Option<T>>` to handle NULL elements.
+///
+/// Legacy note: timedelta/interval array elements were always read as plain
+/// i64 (BigInt group), unlike scalar timedelta (µs → f64) — preserved as is.
+fn encode_pg_array(buf: &mut Vec<u8>, row: &PgRow, idx: usize, item: &ColumnTypeSpec) {
+    match item {
+        ColumnTypeSpec::BigInteger | ColumnTypeSpec::Timedelta => {
             // Try i64 first (BIGINT[]), fall back to i32 (INTEGER[]/SMALLINT[])
             if !try_encode_pg_array_opt::<i64>(buf, row, idx, write_i64) {
                 encode_pg_array_opt::<i32>(buf, row, idx, |b, v| write_i64(b, i64::from(v)));
             }
         }
-        "float" | "double" | "real" | "float4" | "float8" | "double precision" => {
+        ColumnTypeSpec::Double => {
             encode_pg_array_opt::<f64>(buf, row, idx, write_f64);
         }
-        "bool" | "boolean" => {
+        ColumnTypeSpec::Boolean => {
             encode_pg_array_opt::<bool>(buf, row, idx, write_bool);
         }
-        "str" | "text" | "varchar" | "char" => {
+        ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => {
             encode_pg_array_ref::<String>(buf, row, idx, |b, v| write_str(b, v));
         }
-        "uuid" => {
+        ColumnTypeSpec::Uuid => {
             encode_pg_array_ref::<Uuid>(buf, row, idx, |b, v| {
                 write_str(b, &v.to_string());
             });
         }
-        "decimal" | "numeric" => {
+        ColumnTypeSpec::Decimal { .. } => {
             encode_pg_array_ref::<Decimal>(buf, row, idx, |b, v| {
                 write_str(b, &v.to_string());
             });
         }
-        "datetime" | "timestamp" => {
+        ColumnTypeSpec::DateTime => {
             encode_pg_array_ref::<NaiveDateTime>(buf, row, idx, |b, v| {
                 write_str(b, &v.format("%Y-%m-%dT%H:%M:%S%.f").to_string());
             });
         }
-        "timestamptz" => {
+        ColumnTypeSpec::DateTimeUtc => {
             encode_pg_array_ref::<DateTime<Utc>>(buf, row, idx, |b, v| {
                 write_str(b, &v.to_rfc3339());
             });
         }
-        "date" => {
+        ColumnTypeSpec::Date => {
             encode_pg_array_ref::<NaiveDate>(buf, row, idx, |b, v| {
                 write_str(b, &v.format("%Y-%m-%d").to_string());
             });
         }
-        "time" | "timetz" => {
+        ColumnTypeSpec::Time => {
             encode_pg_array_ref::<NaiveTime>(buf, row, idx, |b, v| {
                 write_str(b, &v.format("%H:%M:%S%.f").to_string());
             });
         }
-        "json" | "jsonb" => {
+        ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary => {
             encode_pg_array_ref::<serde_json::Value>(buf, row, idx, write_json_value);
         }
-        // Unknown inner type — try as JSON array fallback
-        _ => match row.try_get::<Option<serde_json::Value>, _>(idx) {
-            Ok(Some(v)) => write_json_value(buf, &v),
-            Ok(None) => write_nil(buf),
-            Err(_) => fallback_str(buf, row, idx),
-        },
+        // Unknown / nested / bytea element types — JSON array fallback.
+        // (Legacy had no bytea[] arm either; preserved as is.)
+        ColumnTypeSpec::Unknown | ColumnTypeSpec::Array { .. } | ColumnTypeSpec::Blob => {
+            match row.try_get::<Option<serde_json::Value>, _>(idx) {
+                Ok(Some(v)) => write_json_value(buf, &v),
+                Ok(None) => write_nil(buf),
+                Err(_) => fallback_str(buf, row, idx),
+            }
+        }
     }
 }
 

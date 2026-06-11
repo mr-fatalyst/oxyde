@@ -65,6 +65,7 @@
 
 mod diff;
 mod op;
+mod spec_sql;
 mod sql;
 mod types;
 
@@ -74,4 +75,5 @@ mod tests;
 // Public re-exports (API не меняется)
 pub use diff::{compute_diff, Migration};
 pub use op::MigrationOp;
+pub use spec_sql::resolve_spec_type;
 pub use types::*;

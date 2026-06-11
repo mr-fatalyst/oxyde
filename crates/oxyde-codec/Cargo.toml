@@ -10,3 +10,6 @@ anyhow.workspace = true
 thiserror.workspace = true
 rmp-serde = "1.1"
 rmpv = { version = "1", features = ["with-serde"] }
+
+[dev-dependencies]
+serde_json.workspace = true

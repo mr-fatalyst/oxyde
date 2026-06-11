@@ -1,8 +1,11 @@
 //! MySQL CellEncoder implementation.
 //!
-//! Encodes MySQL row cells directly to msgpack bytes.
+//! Encodes MySQL row cells directly to msgpack bytes, dispatched by
+//! `ColumnTypeSpec`. Error-handling per arm is ported verbatim from the
+//! legacy string-hint implementation.
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use oxyde_codec::ColumnTypeSpec;
 use rust_decimal::Decimal;
 use sqlx::{mysql::MySqlRow, Row};
 
@@ -13,9 +16,14 @@ pub struct MySqlEncoder;
 impl CellEncoder for MySqlEncoder {
     type Row = MySqlRow;
 
-    fn try_encode_by_ir_type(buf: &mut Vec<u8>, row: &MySqlRow, idx: usize, ir_type: &str) -> bool {
-        match ir_type {
-            "int" => {
+    fn try_encode_by_spec(
+        buf: &mut Vec<u8>,
+        row: &MySqlRow,
+        idx: usize,
+        spec: &ColumnTypeSpec,
+    ) -> bool {
+        match spec {
+            ColumnTypeSpec::BigInteger => {
                 match row.try_get::<Option<i64>, _>(idx) {
                     Ok(Some(v)) => write_i64(buf, v),
                     Ok(None) => write_nil(buf),
@@ -23,7 +31,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "str" => {
+            ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => {
                 match row.try_get::<Option<String>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -31,7 +39,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "float" => {
+            ColumnTypeSpec::Double => {
                 match row.try_get::<Option<f64>, _>(idx) {
                     Ok(Some(v)) => write_f64(buf, v),
                     Ok(None) => write_nil(buf),
@@ -39,7 +47,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "bool" => {
+            ColumnTypeSpec::Boolean => {
                 match row.try_get::<Option<bool>, _>(idx) {
                     Ok(Some(v)) => write_bool(buf, v),
                     Ok(None) => write_nil(buf),
@@ -47,7 +55,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "bytes" => {
+            ColumnTypeSpec::Blob => {
                 match row.try_get::<Option<Vec<u8>>, _>(idx) {
                     Ok(Some(v)) => write_bin(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -55,7 +63,8 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "datetime" => {
+            // MySQL stores both naive and aware datetimes as DATETIME(6)
+            ColumnTypeSpec::DateTime | ColumnTypeSpec::DateTimeUtc => {
                 match row.try_get::<Option<NaiveDateTime>, _>(idx) {
                     Ok(Some(v)) => {
                         write_str(buf, &v.format("%Y-%m-%dT%H:%M:%S%.f").to_string());
@@ -65,7 +74,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "date" => {
+            ColumnTypeSpec::Date => {
                 match row.try_get::<Option<NaiveDate>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v.format("%Y-%m-%d").to_string()),
                     Ok(None) => write_nil(buf),
@@ -73,7 +82,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "time" => {
+            ColumnTypeSpec::Time => {
                 match row.try_get::<Option<NaiveTime>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v.format("%H:%M:%S%.f").to_string()),
                     Ok(None) => write_nil(buf),
@@ -81,7 +90,8 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "uuid" => {
+            // UUID stored as CHAR(36) — read as text
+            ColumnTypeSpec::Uuid => {
                 match row.try_get::<Option<String>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -89,7 +99,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "decimal" => {
+            ColumnTypeSpec::Decimal { .. } => {
                 match row.try_get::<Option<Decimal>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v.to_string()),
                     Ok(None) => write_nil(buf),
@@ -97,7 +107,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "timedelta" => {
+            ColumnTypeSpec::Timedelta => {
                 match row.try_get::<Option<i64>, _>(idx) {
                     Ok(Some(v)) => write_f64(buf, v as f64 / 1_000_000.0),
                     Ok(None) => write_nil(buf),
@@ -105,7 +115,8 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            "json" => {
+            // Arrays are stored as JSON in MySQL — element type is irrelevant
+            ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary | ColumnTypeSpec::Array { .. } => {
                 match row.try_get::<Option<serde_json::Value>, _>(idx) {
                     Ok(Some(v)) => write_json_value(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -113,16 +124,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            // Arrays stored as JSON in MySQL
-            ir_type if ir_type.ends_with("[]") => {
-                match row.try_get::<Option<serde_json::Value>, _>(idx) {
-                    Ok(Some(v)) => write_json_value(buf, &v),
-                    Ok(None) => write_nil(buf),
-                    Err(_) => fallback_str(buf, row, idx),
-                }
-                true
-            }
-            _ => false,
+            ColumnTypeSpec::Unknown => false,
         }
     }
 

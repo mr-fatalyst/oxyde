@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 
+use oxyde_codec::ColumnTypeSpec;
 use sqlx::{Column, Database, Row};
 
 /// Column metadata for encoding.
@@ -14,7 +15,12 @@ use sqlx::{Column, Database, Row};
 pub struct ColumnMeta {
     pub name: String,
     pub db_type: String,
+    /// Legacy string type hint (IR name or uppercased db_type). Parsed into
+    /// a `ColumnTypeSpec` via `legacy_ir_name_to_spec`; removed in этап 3.
     pub ir_type: Option<String>,
+    /// Typed column spec. Populated once QueryIR carries `column_types`
+    /// (этап 2); until then derived from `ir_type` on the fly.
+    pub spec: Option<ColumnTypeSpec>,
 }
 
 /// Backend-specific cell encoder.
@@ -40,28 +46,119 @@ pub trait CellEncoder {
                 ColumnMeta {
                     db_type: Column::type_info(c).to_string().to_uppercase(),
                     ir_type,
+                    spec: None,
                     name,
                 }
             })
             .collect()
     }
 
-    /// Try to encode a cell using the IR type hint.
-    /// Returns `true` if the type was recognized and encoded.
-    fn try_encode_by_ir_type(buf: &mut Vec<u8>, row: &Self::Row, idx: usize, ir_type: &str)
-        -> bool;
+    /// Try to encode a cell using the typed column spec.
+    /// Returns `true` if the spec was recognized and encoded;
+    /// `false` (for `Unknown`) falls through to the db_type path.
+    fn try_encode_by_spec(
+        buf: &mut Vec<u8>,
+        row: &Self::Row,
+        idx: usize,
+        spec: &ColumnTypeSpec,
+    ) -> bool;
+
+    /// Legacy string-hint path: parse the IR name / SQL type name into a
+    /// spec and delegate. Single implementation for all backends; the
+    /// parser (and this method) disappear in этап 3.
+    fn try_encode_by_ir_type(
+        buf: &mut Vec<u8>,
+        row: &Self::Row,
+        idx: usize,
+        ir_type: &str,
+    ) -> bool {
+        match legacy_ir_name_to_spec(ir_type) {
+            Some(spec) => Self::try_encode_by_spec(buf, row, idx, &spec),
+            None => false,
+        }
+    }
 
     /// Encode a cell using the database column type (fallback).
     fn encode_by_db_type(buf: &mut Vec<u8>, row: &Self::Row, idx: usize, db_type: &str);
 
-    /// Encode a single cell, trying IR type first, then DB type.
+    /// Encode a single cell: spec → legacy string hint → DB type.
     fn encode_cell(buf: &mut Vec<u8>, row: &Self::Row, idx: usize, col: &ColumnMeta) {
+        if let Some(spec) = &col.spec {
+            if Self::try_encode_by_spec(buf, row, idx, spec) {
+                return;
+            }
+        }
         if let Some(ir_type) = &col.ir_type {
             if Self::try_encode_by_ir_type(buf, row, idx, ir_type) {
                 return;
             }
         }
         Self::encode_by_db_type(buf, row, idx, &col.db_type);
+    }
+}
+
+/// Parse a legacy string type hint into a `ColumnTypeSpec`.
+///
+/// Top-level scalars accept only exact lowercase IR names — uppercased SQL
+/// names intentionally fall through to the db_type path, mirroring the old
+/// per-backend match arms. Array element names are matched liberally
+/// (lowercased, precision-stripped), mirroring the old `encode_pg_array`.
+/// Dies in этап 3 together with string hints.
+pub(crate) fn legacy_ir_name_to_spec(ir_type: &str) -> Option<ColumnTypeSpec> {
+    if let Some(inner) = ir_type.strip_suffix("[]") {
+        // Unclassifiable element types still produced an encode attempt in
+        // the legacy path (JSON fallback) — represent them as Unknown.
+        let item = legacy_array_element_to_spec(inner).unwrap_or(ColumnTypeSpec::Unknown);
+        return Some(ColumnTypeSpec::Array {
+            item: Box::new(item),
+        });
+    }
+    match ir_type {
+        "int" => Some(ColumnTypeSpec::BigInteger),
+        "str" => Some(ColumnTypeSpec::Text),
+        "float" => Some(ColumnTypeSpec::Double),
+        "bool" => Some(ColumnTypeSpec::Boolean),
+        "bytes" => Some(ColumnTypeSpec::Blob),
+        "datetime" => Some(ColumnTypeSpec::DateTime),
+        "date" => Some(ColumnTypeSpec::Date),
+        "time" => Some(ColumnTypeSpec::Time),
+        "timedelta" => Some(ColumnTypeSpec::Timedelta),
+        "uuid" => Some(ColumnTypeSpec::Uuid),
+        "decimal" => Some(ColumnTypeSpec::Decimal {
+            precision: None,
+            scale: None,
+        }),
+        "json" => Some(ColumnTypeSpec::Json),
+        _ => None,
+    }
+}
+
+/// Liberal element-name matching for legacy array hints
+/// (mirrors the deleted `encode_pg_array` name table).
+fn legacy_array_element_to_spec(raw: &str) -> Option<ColumnTypeSpec> {
+    let lowered = raw.to_ascii_lowercase();
+    let base = lowered.split('(').next().unwrap_or(&lowered);
+    match base {
+        "int" | "integer" | "bigint" | "smallint" | "tinyint" | "serial" | "bigserial"
+        | "smallserial" | "int2" | "int4" | "int8" => Some(ColumnTypeSpec::BigInteger),
+        "timedelta" | "interval" => Some(ColumnTypeSpec::Timedelta),
+        "float" | "double" | "real" | "float4" | "float8" | "double precision" => {
+            Some(ColumnTypeSpec::Double)
+        }
+        "bool" | "boolean" => Some(ColumnTypeSpec::Boolean),
+        "str" | "text" | "varchar" | "char" => Some(ColumnTypeSpec::Text),
+        "uuid" => Some(ColumnTypeSpec::Uuid),
+        "decimal" | "numeric" => Some(ColumnTypeSpec::Decimal {
+            precision: None,
+            scale: None,
+        }),
+        "datetime" | "timestamp" => Some(ColumnTypeSpec::DateTime),
+        "timestamptz" => Some(ColumnTypeSpec::DateTimeUtc),
+        "date" => Some(ColumnTypeSpec::Date),
+        "time" | "timetz" => Some(ColumnTypeSpec::Time),
+        "json" | "jsonb" => Some(ColumnTypeSpec::Json),
+        "bytes" | "bytea" | "blob" => Some(ColumnTypeSpec::Blob),
+        _ => None,
     }
 }
 

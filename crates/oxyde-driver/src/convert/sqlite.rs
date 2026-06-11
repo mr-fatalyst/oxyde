@@ -1,7 +1,10 @@
 //! SQLite CellEncoder implementation.
 //!
-//! Encodes SQLite row cells directly to msgpack bytes.
+//! Encodes SQLite row cells directly to msgpack bytes, dispatched by
+//! `ColumnTypeSpec`. Error-handling per arm is ported verbatim from the
+//! legacy string-hint implementation.
 
+use oxyde_codec::ColumnTypeSpec;
 use sqlx::{sqlite::SqliteRow, Row};
 
 use super::encoder::*;
@@ -11,14 +14,14 @@ pub struct SqliteEncoder;
 impl CellEncoder for SqliteEncoder {
     type Row = SqliteRow;
 
-    fn try_encode_by_ir_type(
+    fn try_encode_by_spec(
         buf: &mut Vec<u8>,
         row: &SqliteRow,
         idx: usize,
-        ir_type: &str,
+        spec: &ColumnTypeSpec,
     ) -> bool {
-        match ir_type {
-            "int" => {
+        match spec {
+            ColumnTypeSpec::BigInteger => {
                 match row.try_get::<Option<i64>, _>(idx) {
                     Ok(Some(v)) => write_i64(buf, v),
                     Ok(None) => write_nil(buf),
@@ -26,7 +29,15 @@ impl CellEncoder for SqliteEncoder {
                 }
                 true
             }
-            "str" => {
+            // datetime, date, time, decimal, uuid — stored as TEXT in SQLite
+            ColumnTypeSpec::Text
+            | ColumnTypeSpec::String { .. }
+            | ColumnTypeSpec::DateTime
+            | ColumnTypeSpec::DateTimeUtc
+            | ColumnTypeSpec::Date
+            | ColumnTypeSpec::Time
+            | ColumnTypeSpec::Decimal { .. }
+            | ColumnTypeSpec::Uuid => {
                 match row.try_get::<Option<String>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -34,7 +45,7 @@ impl CellEncoder for SqliteEncoder {
                 }
                 true
             }
-            "float" => {
+            ColumnTypeSpec::Double => {
                 match row.try_get::<Option<f64>, _>(idx) {
                     Ok(Some(v)) => write_f64(buf, v),
                     Ok(None) => write_nil(buf),
@@ -42,7 +53,7 @@ impl CellEncoder for SqliteEncoder {
                 }
                 true
             }
-            "bool" => {
+            ColumnTypeSpec::Boolean => {
                 match row.try_get::<Option<bool>, _>(idx) {
                     Ok(Some(v)) => write_bool(buf, v),
                     Ok(None) => write_nil(buf),
@@ -50,7 +61,7 @@ impl CellEncoder for SqliteEncoder {
                 }
                 true
             }
-            "bytes" => {
+            ColumnTypeSpec::Blob => {
                 match row.try_get::<Option<Vec<u8>>, _>(idx) {
                     Ok(Some(v)) => write_bin(buf, &v),
                     Ok(None) => write_nil(buf),
@@ -58,16 +69,7 @@ impl CellEncoder for SqliteEncoder {
                 }
                 true
             }
-            // datetime, date, time, timedelta, decimal, uuid — stored as TEXT in SQLite
-            "datetime" | "date" | "time" | "decimal" | "uuid" => {
-                match row.try_get::<Option<String>, _>(idx) {
-                    Ok(Some(v)) => write_str(buf, &v),
-                    Ok(None) => write_nil(buf),
-                    Err(_) => write_nil(buf),
-                }
-                true
-            }
-            "timedelta" => {
+            ColumnTypeSpec::Timedelta => {
                 match row.try_get::<Option<i64>, _>(idx) {
                     Ok(Some(v)) => write_f64(buf, v as f64 / 1_000_000.0),
                     Ok(None) => write_nil(buf),
@@ -75,8 +77,8 @@ impl CellEncoder for SqliteEncoder {
                 }
                 true
             }
-            // JSON — stored as TEXT, parse to preserve structure
-            "json" => {
+            // JSON and arrays — stored as TEXT, parse to preserve structure
+            ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary | ColumnTypeSpec::Array { .. } => {
                 match row.try_get::<Option<String>, _>(idx) {
                     Ok(Some(v)) => {
                         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&v) {
@@ -90,22 +92,7 @@ impl CellEncoder for SqliteEncoder {
                 }
                 true
             }
-            // Arrays stored as JSON TEXT in SQLite
-            ir_type if ir_type.ends_with("[]") => {
-                match row.try_get::<Option<String>, _>(idx) {
-                    Ok(Some(v)) => {
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&v) {
-                            write_json_value(buf, &parsed);
-                        } else {
-                            write_str(buf, &v);
-                        }
-                    }
-                    Ok(None) => write_nil(buf),
-                    Err(_) => write_nil(buf),
-                }
-                true
-            }
-            _ => false,
+            ColumnTypeSpec::Unknown => false,
         }
     }
 

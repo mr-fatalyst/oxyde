@@ -118,7 +118,7 @@ pub(crate) fn translate_db_type(db_type: &str, dialect: Dialect) -> String {
 /// Priority:
 /// 1. If `db_type` is set (user explicit) → translate for dialect
 /// 2. Generate from `python_type` for dialect
-fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
+pub(crate) fn resolve_field_type(field: &FieldDef, dialect: Dialect) -> String {
     if let Some(db_type) = &field.db_type {
         return translate_db_type(db_type, dialect);
     }

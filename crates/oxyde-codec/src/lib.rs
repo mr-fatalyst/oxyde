@@ -80,6 +80,64 @@ pub type Result<T> = std::result::Result<T, CodecError>;
 /// IR protocol version
 pub const IR_PROTO_VERSION: u32 = 1;
 
+/// Canonical column-type contract between Python and the Rust core.
+///
+/// This is the single semantic taxonomy used for value binding (oxyde-query),
+/// row decoding (oxyde-driver) and canonical DDL rendering (oxyde-migrate).
+/// Python computes it once per column from the field annotation and `db_type`
+/// (see `core/column_types.py`) and sends it as a tagged dict, e.g.
+/// `{"kind": "decimal", "precision": 10, "scale": 2}`.
+///
+/// The user-supplied verbatim DDL override (`db_type`) is NOT part of this
+/// enum — it travels separately in `FieldDef.db_type` and is only ever
+/// rendered, never classified. Unrecognized `db_type` strings map to
+/// [`ColumnTypeSpec::Unknown`]: values bind via native msgpack-type
+/// conversion, exactly like columns without a type hint today.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ColumnTypeSpec {
+    /// Python `int`. Always bound as i64; DDL width is a dialect decision.
+    BigInteger,
+    /// Python `float` (f64).
+    Double,
+    Boolean,
+    /// Unbounded text (Python `str` without max_length → VARCHAR is a DDL
+    /// concern; binding-wise both are strings).
+    Text,
+    /// Bounded string (VARCHAR(n) / CHAR(n) family).
+    String {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        length: Option<u32>,
+    },
+    /// Python `bytes`.
+    Blob,
+    /// Naive datetime (no timezone).
+    DateTime,
+    /// Timezone-aware datetime, normalized to UTC. Selected explicitly via
+    /// `db_type="TIMESTAMPTZ"`.
+    DateTimeUtc,
+    Date,
+    Time,
+    /// Python `timedelta`, stored as BIGINT microseconds.
+    Timedelta,
+    Uuid,
+    Decimal {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        precision: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scale: Option<u32>,
+    },
+    Json,
+    /// JSONB on Postgres; identical to Json elsewhere.
+    JsonBinary,
+    Array {
+        item: Box<ColumnTypeSpec>,
+    },
+    /// No binding knowledge: convert values natively by their msgpack type.
+    /// Produced for unrecognized `db_type` strings.
+    Unknown,
+}
+
 /// Query operation type
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -472,5 +530,133 @@ mod tests {
         };
         let err = ir.validate().unwrap_err();
         assert!(matches!(err, CodecError::ValidationError(msg) if msg.contains("INSERT")));
+    }
+
+    // ── ColumnTypeSpec serialization ───────────────────────────────────
+
+    /// Deserialize a JSON literal shaped exactly like the dict Python sends.
+    fn spec_from_json(json: &str) -> ColumnTypeSpec {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn test_spec_scalar_kinds_from_python_dicts() {
+        let cases = [
+            (r#"{"kind": "big_integer"}"#, ColumnTypeSpec::BigInteger),
+            (r#"{"kind": "double"}"#, ColumnTypeSpec::Double),
+            (r#"{"kind": "boolean"}"#, ColumnTypeSpec::Boolean),
+            (r#"{"kind": "text"}"#, ColumnTypeSpec::Text),
+            (r#"{"kind": "blob"}"#, ColumnTypeSpec::Blob),
+            (r#"{"kind": "date_time"}"#, ColumnTypeSpec::DateTime),
+            (r#"{"kind": "date_time_utc"}"#, ColumnTypeSpec::DateTimeUtc),
+            (r#"{"kind": "date"}"#, ColumnTypeSpec::Date),
+            (r#"{"kind": "time"}"#, ColumnTypeSpec::Time),
+            (r#"{"kind": "timedelta"}"#, ColumnTypeSpec::Timedelta),
+            (r#"{"kind": "uuid"}"#, ColumnTypeSpec::Uuid),
+            (r#"{"kind": "json"}"#, ColumnTypeSpec::Json),
+            (r#"{"kind": "json_binary"}"#, ColumnTypeSpec::JsonBinary),
+            (r#"{"kind": "unknown"}"#, ColumnTypeSpec::Unknown),
+        ];
+        for (json, expected) in cases {
+            assert_eq!(spec_from_json(json), expected, "input: {json}");
+        }
+    }
+
+    #[test]
+    fn test_spec_string_with_and_without_length() {
+        assert_eq!(
+            spec_from_json(r#"{"kind": "string", "length": 100}"#),
+            ColumnTypeSpec::String { length: Some(100) }
+        );
+        assert_eq!(
+            spec_from_json(r#"{"kind": "string"}"#),
+            ColumnTypeSpec::String { length: None }
+        );
+    }
+
+    #[test]
+    fn test_spec_decimal_optional_precision() {
+        assert_eq!(
+            spec_from_json(r#"{"kind": "decimal", "precision": 10, "scale": 2}"#),
+            ColumnTypeSpec::Decimal {
+                precision: Some(10),
+                scale: Some(2),
+            }
+        );
+        assert_eq!(
+            spec_from_json(r#"{"kind": "decimal"}"#),
+            ColumnTypeSpec::Decimal {
+                precision: None,
+                scale: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_spec_nested_array() {
+        assert_eq!(
+            spec_from_json(r#"{"kind": "array", "item": {"kind": "uuid"}}"#),
+            ColumnTypeSpec::Array {
+                item: Box::new(ColumnTypeSpec::Uuid),
+            }
+        );
+        // Arrays nest (Postgres allows multi-dimensional arrays)
+        assert_eq!(
+            spec_from_json(
+                r#"{"kind": "array", "item": {"kind": "array", "item": {"kind": "big_integer"}}}"#
+            ),
+            ColumnTypeSpec::Array {
+                item: Box::new(ColumnTypeSpec::Array {
+                    item: Box::new(ColumnTypeSpec::BigInteger),
+                }),
+            }
+        );
+    }
+
+    #[test]
+    fn test_spec_unknown_kind_is_error() {
+        let result: std::result::Result<ColumnTypeSpec, _> =
+            serde_json::from_str(r#"{"kind": "flux_capacitor"}"#);
+        assert!(result.is_err(), "unrecognized kind must fail loudly");
+    }
+
+    #[test]
+    fn test_spec_msgpack_roundtrip() {
+        let specs = vec![
+            ColumnTypeSpec::BigInteger,
+            ColumnTypeSpec::String { length: Some(36) },
+            ColumnTypeSpec::Decimal {
+                precision: Some(10),
+                scale: Some(2),
+            },
+            ColumnTypeSpec::Array {
+                item: Box::new(ColumnTypeSpec::Uuid),
+            },
+            ColumnTypeSpec::Unknown,
+        ];
+        for spec in specs {
+            let bytes = rmp_serde::to_vec_named(&spec).unwrap();
+            let back: ColumnTypeSpec = rmp_serde::from_slice(&bytes).unwrap();
+            assert_eq!(back, spec);
+        }
+    }
+
+    #[test]
+    fn test_spec_in_column_types_map_via_msgpack() {
+        // Simulate the future QueryIR.column_types payload: a msgpack map of
+        // column name → tagged spec dict, exactly as Python will send it.
+        let mut map = HashMap::new();
+        map.insert(
+            "price".to_string(),
+            ColumnTypeSpec::Decimal {
+                precision: Some(10),
+                scale: Some(2),
+            },
+        );
+        map.insert("id".to_string(), ColumnTypeSpec::BigInteger);
+
+        let bytes = rmp_serde::to_vec_named(&map).unwrap();
+        let back: HashMap<String, ColumnTypeSpec> = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(back, map);
     }
 }

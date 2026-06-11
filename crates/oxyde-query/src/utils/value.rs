@@ -205,7 +205,7 @@ fn classify_type(typ: &str) -> Option<ArrayType> {
 
 /// Convert rmpv::Value to serde_json::Value for JSON column storage.
 /// Returns `None` for values that cannot be represented in JSON (NaN, Ext).
-fn rmpv_to_json(value: &rmpv::Value) -> Option<serde_json::Value> {
+pub(crate) fn rmpv_to_json(value: &rmpv::Value) -> Option<serde_json::Value> {
     Some(match value {
         rmpv::Value::Nil => serde_json::Value::Null,
         rmpv::Value::Boolean(b) => serde_json::Value::Bool(*b),
