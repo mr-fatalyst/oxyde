@@ -19,7 +19,7 @@ from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.queries.base import (
     SupportsExecute,
-    _build_col_types,
+    _build_column_types,
     _map_values_to_columns,
     _model_key,
     _primary_key_meta,
@@ -70,7 +70,7 @@ class InsertQuery:
         """Convert to IR format."""
         table_name = self.model_class.get_table_name()
         pk_column = self._get_pk_column()
-        col_types = _build_col_types(self.model_class)
+        column_types = _build_column_types(self.model_class)
 
         if self._bulk_values is not None:
             if not self._bulk_values:
@@ -89,7 +89,7 @@ class InsertQuery:
             return ir.build_insert_ir(
                 table=table_name,
                 bulk_values=serialized_bulk,
-                col_types=col_types,
+                column_types=column_types,
                 model=_model_key(self.model_class),
                 pk_column=pk_column,
             )
@@ -107,7 +107,7 @@ class InsertQuery:
             return ir.build_insert_ir(
                 table=table_name,
                 values=serialized_values,
-                col_types=col_types,
+                column_types=column_types,
                 model=_model_key(self.model_class),
                 pk_column=pk_column,
                 returning=True,

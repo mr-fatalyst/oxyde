@@ -61,7 +61,7 @@ def _model_key(model: type[Model]) -> str:
 
 
 def _finalize_model(model: type[Model]) -> bool:
-    """Try to fully finalize a single model: FK resolve → parse → col_types → PK cache.
+    """Try to fully finalize a single model: FK resolve → parse → column_types → PK cache.
 
     Returns True if model is fully finalized, False if it should be retried later.
     """
@@ -82,9 +82,9 @@ def _finalize_model(model: type[Model]) -> bool:
         except NameError:
             return False
 
-    # Step 3: Compute col_types for IR
-    if model._db_meta.col_types is None:
-        model._compute_col_types()
+    # Step 3: Compute column_types for IR
+    if model._db_meta.column_types is None:
+        model._compute_column_types()
 
     # Step 4: Cache PK field
     if model._db_meta.pk_field is None:

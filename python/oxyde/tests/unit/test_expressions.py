@@ -177,9 +177,9 @@ class TestCoerceExpression:
 
 
 class TestCoerceExpressionValueType:
-    """Test that _coerce_expression attaches value_type from TYPE_REGISTRY.
+    """Test that _coerce_expression attaches a ColumnTypeSpec dict.
 
-    The value_type tag lets the Rust side recover typed bindings for values
+    The value_type spec lets the Rust side recover typed bindings for values
     that serialize to a string via msgpack (Decimal, UUID, datetime, date, time).
     Without it, the Rust side has no way to know that "2.50" was a Decimal.
     """
@@ -188,39 +188,39 @@ class TestCoerceExpressionValueType:
         from decimal import Decimal
 
         coerced = _coerce_expression(Decimal("2.50"))
-        assert coerced._expr.get("value_type") == "decimal"
+        assert coerced._expr.get("value_type") == {"kind": "decimal"}
 
     def test_uuid_gets_value_type(self):
         from uuid import UUID
 
         coerced = _coerce_expression(UUID("550e8400-e29b-41d4-a716-446655440000"))
-        assert coerced._expr.get("value_type") == "uuid"
+        assert coerced._expr.get("value_type") == {"kind": "uuid"}
 
     def test_datetime_gets_value_type(self):
         from datetime import datetime
 
         coerced = _coerce_expression(datetime(2024, 1, 15, 12, 30, 0))
-        assert coerced._expr.get("value_type") == "datetime"
+        assert coerced._expr.get("value_type") == {"kind": "date_time"}
 
     def test_date_gets_value_type(self):
         from datetime import date
 
         coerced = _coerce_expression(date(2024, 1, 15))
-        assert coerced._expr.get("value_type") == "date"
+        assert coerced._expr.get("value_type") == {"kind": "date"}
 
     def test_time_gets_value_type(self):
         from datetime import time
 
         coerced = _coerce_expression(time(12, 30, 0))
-        assert coerced._expr.get("value_type") == "time"
+        assert coerced._expr.get("value_type") == {"kind": "time"}
 
     def test_int_gets_value_type(self):
         """Native msgpack types still tagged — IR stays self-describing."""
         coerced = _coerce_expression(42)
-        assert coerced._expr.get("value_type") == "int"
+        assert coerced._expr.get("value_type") == {"kind": "big_integer"}
 
     def test_unknown_type_no_value_type(self):
-        """Types outside TYPE_REGISTRY are not tagged (backward-compat)."""
+        """Unknown types are not tagged (backward-compat)."""
 
         class Custom:
             pass

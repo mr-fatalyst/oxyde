@@ -1,7 +1,7 @@
-"""Test that col_types IR hints are correctly computed for all field configurations.
+"""Test that column_types specs are correctly computed for all field configurations.
 
-Validates _compute_col_types() output — the mapping sent to Rust for type-aware
-binding and reading. One model per category, parametrized cases.
+Validates _compute_column_types() output — ColumnTypeSpec dicts sent to Rust
+for typed binding and reading. One model per category, parametrized cases.
 """
 
 from __future__ import annotations
@@ -104,68 +104,72 @@ class DbTypesModel(Model):
         table_name = "db_types_model"
 
 
-# ── col_types tests ───────────────────────────────────────────────────
+# ── column_types tests ────────────────────────────────────────────────
 
 COL_TYPE_CASES = [
     # Inferred scalar
-    ("infer_str", "str"),
-    ("infer_int", "int"),
-    ("infer_float", "float"),
-    ("infer_bool", "bool"),
-    ("infer_bytes", "bytes"),
-    ("infer_datetime", "datetime"),
-    ("infer_date", "date"),
-    ("infer_time", "time"),
-    ("infer_timedelta", "timedelta"),
-    ("infer_uuid", "uuid"),
-    ("infer_decimal", "decimal"),
-    ("infer_json", "json"),
-    # Explicit db_type scalar — passed as-is (uppercased)
-    ("db_uuid", "UUID"),
-    ("db_jsonb", "JSONB"),
-    ("db_json", "JSON"),
-    ("db_varchar", "VARCHAR(255)"),
-    ("db_char", "CHAR(36)"),
-    ("db_text", "TEXT"),
-    ("db_numeric", "NUMERIC(10,2)"),
-    ("db_decimal", "DECIMAL(8,4)"),
-    ("db_timestamp", "TIMESTAMP"),
-    ("db_timestamptz", "TIMESTAMPTZ"),
-    ("db_date", "DATE"),
-    ("db_time", "TIME"),
-    ("db_bigint", "BIGINT"),
-    ("db_integer", "INTEGER"),
-    ("db_smallint", "SMALLINT"),
-    ("db_serial", "SERIAL"),
-    ("db_bigserial", "BIGSERIAL"),
-    ("db_boolean", "BOOLEAN"),
-    ("db_double", "DOUBLE PRECISION"),
-    ("db_real", "REAL"),
-    ("db_bytea", "BYTEA"),
-    ("db_blob", "BLOB"),
+    ("infer_str", {"kind": "string"}),
+    ("infer_int", {"kind": "big_integer"}),
+    ("infer_float", {"kind": "double"}),
+    ("infer_bool", {"kind": "boolean"}),
+    ("infer_bytes", {"kind": "blob"}),
+    ("infer_datetime", {"kind": "date_time"}),
+    ("infer_date", {"kind": "date"}),
+    ("infer_time", {"kind": "time"}),
+    ("infer_timedelta", {"kind": "timedelta"}),
+    ("infer_uuid", {"kind": "uuid"}),
+    ("infer_decimal", {"kind": "decimal"}),
+    ("infer_json", {"kind": "json"}),
+    # Explicit db_type scalar — semantic kind via KNOWN_DB_TYPES,
+    # the verbatim string travels separately (FieldDef.db_type)
+    ("db_uuid", {"kind": "uuid"}),
+    ("db_jsonb", {"kind": "json_binary"}),
+    ("db_json", {"kind": "json"}),
+    ("db_varchar", {"kind": "string", "length": 255}),
+    ("db_char", {"kind": "string", "length": 36}),
+    ("db_text", {"kind": "text"}),
+    ("db_numeric", {"kind": "decimal", "precision": 10, "scale": 2}),
+    ("db_decimal", {"kind": "decimal", "precision": 8, "scale": 4}),
+    ("db_timestamp", {"kind": "date_time"}),
+    ("db_timestamptz", {"kind": "date_time_utc"}),
+    ("db_date", {"kind": "date"}),
+    ("db_time", {"kind": "time"}),
+    ("db_bigint", {"kind": "big_integer"}),
+    ("db_integer", {"kind": "big_integer"}),
+    ("db_smallint", {"kind": "big_integer"}),
+    ("db_serial", {"kind": "big_integer"}),
+    ("db_bigserial", {"kind": "big_integer"}),
+    ("db_boolean", {"kind": "boolean"}),
+    ("db_double", {"kind": "double"}),
+    ("db_real", {"kind": "double"}),
+    ("db_bytea", {"kind": "blob"}),
+    ("db_blob", {"kind": "blob"}),
     # Inferred arrays
-    ("infer_str_list", "str[]"),
-    ("infer_int_list", "int[]"),
-    ("infer_uuid_list", "uuid[]"),
-    ("infer_decimal_list", "decimal[]"),
-    # Explicit db_type arrays — passed as-is (uppercased)
-    ("db_varchar_arr", "VARCHAR(100)[]"),
-    ("db_numeric_arr", "NUMERIC(10,2)[]"),
-    ("db_uuid_arr", "UUID[]"),
-    ("db_int_arr", "INTEGER[]"),
-    ("db_text_arr", "TEXT[]"),
+    ("infer_str_list", {"kind": "array", "item": {"kind": "string"}}),
+    ("infer_int_list", {"kind": "array", "item": {"kind": "big_integer"}}),
+    ("infer_uuid_list", {"kind": "array", "item": {"kind": "uuid"}}),
+    ("infer_decimal_list", {"kind": "array", "item": {"kind": "decimal"}}),
+    # Explicit db_type arrays — kind per element, params parsed
+    ("db_varchar_arr", {"kind": "array", "item": {"kind": "string", "length": 100}}),
+    (
+        "db_numeric_arr",
+        {"kind": "array", "item": {"kind": "decimal", "precision": 10, "scale": 2}},
+    ),
+    ("db_uuid_arr", {"kind": "array", "item": {"kind": "uuid"}}),
+    ("db_int_arr", {"kind": "array", "item": {"kind": "big_integer"}}),
+    ("db_text_arr", {"kind": "array", "item": {"kind": "text"}}),
     # Annotated inner arrays (inferred from python_type)
-    ("ann_str_list", "str[]"),
-    ("ann_decimal_list", "decimal[]"),
+    ("ann_str_list", {"kind": "array", "item": {"kind": "string"}}),
+    ("ann_decimal_list", {"kind": "array", "item": {"kind": "decimal"}}),
 ]
 
 
 class TestColTypes:
     @pytest.mark.parametrize("field,expected", COL_TYPE_CASES)
     def test_col_type(self, field, expected):
-        col_types = DbTypesModel._db_meta.col_types
-        assert col_types[field] == expected, (
-            f"{field}: got {col_types.get(field)!r}, expected {expected!r}"
+        column_types = DbTypesModel._db_meta.column_types
+        assert column_types[field] == expected, (
+            f"{field}: got {column_types.get(field)!r}, expected {expected!r}"
         )
 
 

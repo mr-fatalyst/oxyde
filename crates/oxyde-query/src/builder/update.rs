@@ -1,11 +1,11 @@
 //! UPDATE query building
 
-use oxyde_codec::QueryIR;
+use oxyde_codec::{ColumnTypeSpec, QueryIR};
 use sea_query::{Expr, MysqlQueryBuilder, PostgresQueryBuilder, Query, SqliteQueryBuilder, Value};
 
 use crate::error::Result;
 use crate::filter::build_filter_node;
-use crate::utils::{rmpv_to_simple_expr, rmpv_to_value_typed, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, rmpv_to_simple_expr, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build UPDATE query from QueryIR
@@ -19,11 +19,12 @@ pub fn build_update(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
     let mut query = Query::update();
     query.table(table);
 
-    // Helper to get column type from col_types
-    let get_col_type = |col: &str| -> Option<&str> {
-        ir.col_types
+    // Helper to get the column spec; Unknown = native conversion
+    let get_spec = |col: &str| -> &ColumnTypeSpec {
+        ir.column_types
             .as_ref()
-            .and_then(|ct| ct.get(col).map(|s| s.as_str()))
+            .and_then(|ct| ct.get(col))
+            .unwrap_or(&ColumnTypeSpec::Unknown)
     };
 
     if let Some(values) = &ir.values {
@@ -31,10 +32,9 @@ pub fn build_update(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
             if let Some(expr) = rmpv_to_simple_expr(val)? {
                 query.value(ColumnIdent(col.clone()), expr);
             } else {
-                let col_type = get_col_type(col);
                 query.value(
                     ColumnIdent(col.clone()),
-                    Expr::val(rmpv_to_value_typed(val, col_type)),
+                    Expr::val(bind_value(val, get_spec(col))),
                 );
             }
         }
@@ -42,7 +42,7 @@ pub fn build_update(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
 
     // Add filters (no JOIN in UPDATE, so no table qualification needed)
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree, None, ir.col_types.as_ref(), None)?;
+        let expr = build_filter_node(filter_tree, None, ir.column_types.as_ref(), None)?;
         query.and_where(expr);
     }
 

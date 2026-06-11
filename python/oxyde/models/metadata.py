@@ -119,7 +119,7 @@ class ModelMeta:
     relations: dict[str, RelationInfo] = dataclass_field(default_factory=dict)
     extra: dict[str, Any] = dataclass_field(default_factory=dict)
     # Cached IR type hints for Rust decoding (computed at finalization)
-    col_types: dict[str, str] | None = None
+    column_types: dict[str, dict] | None = None
     # Reverse mapping: db_column → field_name (only where they differ)
     reverse_column_map: dict[str, str] = dataclass_field(default_factory=dict)
     # Primary key field name and db column (cached at finalization)

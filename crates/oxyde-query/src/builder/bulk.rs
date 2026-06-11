@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use oxyde_codec::{BulkUpdate, BulkUpdateRow, QueryIR};
+use oxyde_codec::{BulkUpdate, BulkUpdateRow, ColumnTypeSpec, QueryIR};
 use sea_query::{
     CaseStatement, Cond, Expr, MysqlQueryBuilder, PostgresQueryBuilder, Query, SimpleExpr,
     SqliteQueryBuilder, Value,
@@ -10,7 +10,7 @@ use sea_query::{
 
 use crate::error::{QueryError, Result};
 use crate::filter::build_filter_node;
-use crate::utils::{rmpv_to_value_typed, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build bulk UPDATE query using CASE WHEN statements.
@@ -34,7 +34,7 @@ pub fn build_bulk_update(
     let mut query = Query::update();
     query.table(table);
 
-    let col_types = ir.col_types.as_ref();
+    let col_types = ir.column_types.as_ref();
 
     // Collect all columns that need updating across all rows
     let mut update_columns: BTreeSet<String> = BTreeSet::new();
@@ -61,13 +61,12 @@ pub fn build_bulk_update(
     //      ELSE <current_column_value> END
     for column in update_columns {
         let mut case_stmt = CaseStatement::new();
-        let col_type = col_types.and_then(|ct| ct.get(&column).map(String::as_str));
+        let spec = col_types
+            .and_then(|ct| ct.get(&column))
+            .unwrap_or(&ColumnTypeSpec::Unknown);
         for (row, cond) in bulk.rows.iter().zip(&row_conditions) {
             if let Some(value) = row.values.get(&column) {
-                case_stmt = case_stmt.case(
-                    cond.clone(),
-                    Expr::val(rmpv_to_value_typed(value, col_type)),
-                );
+                case_stmt = case_stmt.case(cond.clone(), Expr::val(bind_value(value, spec)));
             }
         }
         // ELSE keeps current value for rows not matched by this column
@@ -103,7 +102,7 @@ pub fn build_bulk_update(
 /// Build AND condition from a row's filters (e.g., `id = 1 AND tenant = 'a'`).
 fn build_bulk_row_condition(
     row: &BulkUpdateRow,
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
 ) -> Result<Cond> {
     let mut cond = Cond::all();
     for (column, value) in &row.filters {
@@ -116,12 +115,14 @@ fn build_bulk_row_condition(
 fn build_match_expression(
     column: &str,
     value: &rmpv::Value,
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
 ) -> SimpleExpr {
     if value.is_nil() {
         Expr::col(ColumnIdent(column.to_string())).is_null()
     } else {
-        let col_type = col_types.and_then(|ct| ct.get(column).map(String::as_str));
-        Expr::col(ColumnIdent(column.to_string())).eq(rmpv_to_value_typed(value, col_type))
+        let spec = col_types
+            .and_then(|ct| ct.get(column))
+            .unwrap_or(&ColumnTypeSpec::Unknown);
+        Expr::col(ColumnIdent(column.to_string())).eq(bind_value(value, spec))
     }
 }

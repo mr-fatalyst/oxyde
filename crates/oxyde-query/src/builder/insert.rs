@@ -1,12 +1,12 @@
 //! INSERT query building
 
-use oxyde_codec::{ConflictAction, QueryIR};
+use oxyde_codec::{ColumnTypeSpec, ConflictAction, QueryIR};
 use sea_query::{
     Expr, MysqlQueryBuilder, PostgresQueryBuilder, Query, SimpleExpr, SqliteQueryBuilder, Value,
 };
 
 use crate::error::{QueryError, Result};
-use crate::utils::{rmpv_to_simple_expr, rmpv_to_value_typed, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, rmpv_to_simple_expr, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build INSERT query from QueryIR
@@ -15,11 +15,12 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
     let mut query = Query::insert();
     query.into_table(table);
 
-    // Helper to get column type from col_types
-    let get_col_type = |col: &str| -> Option<&str> {
-        ir.col_types
+    // Helper to get the column spec; Unknown = native conversion
+    let get_spec = |col: &str| -> &ColumnTypeSpec {
+        ir.column_types
             .as_ref()
-            .and_then(|ct| ct.get(col).map(|s| s.as_str()))
+            .and_then(|ct| ct.get(col))
+            .unwrap_or(&ColumnTypeSpec::Unknown)
     };
 
     // Single row insert
@@ -32,8 +33,7 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
             if let Some(expr) = rmpv_to_simple_expr(val)? {
                 vals.push(expr);
             } else {
-                let col_type = get_col_type(col);
-                vals.push(Expr::val(rmpv_to_value_typed(val, col_type)).into());
+                vals.push(Expr::val(bind_value(val, get_spec(col))).into());
             }
         }
 
@@ -69,8 +69,7 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                 if let Some(expr) = rmpv_to_simple_expr(val)? {
                     vals.push(expr);
                 } else {
-                    let col_type = get_col_type(&col.0);
-                    vals.push(Expr::val(rmpv_to_value_typed(val, col_type)).into());
+                    vals.push(Expr::val(bind_value(val, get_spec(&col.0))).into());
                 }
             }
             query.values(vals)?;
@@ -115,10 +114,9 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                             if let Some(expr) = rmpv_to_simple_expr(val)? {
                                 conflict.value(ColumnIdent(col.clone()), expr);
                             } else {
-                                let col_type = get_col_type(col);
                                 conflict.value(
                                     ColumnIdent(col.clone()),
-                                    Expr::val(rmpv_to_value_typed(val, col_type)),
+                                    Expr::val(bind_value(val, get_spec(col))),
                                 );
                             }
                         }
@@ -175,10 +173,9 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                             if let Some(expr) = rmpv_to_simple_expr(val)? {
                                 conflict.value(ColumnIdent(col.clone()), expr);
                             } else {
-                                let col_type = get_col_type(col);
                                 conflict.value(
                                     ColumnIdent(col.clone()),
-                                    Expr::val(rmpv_to_value_typed(val, col_type)),
+                                    Expr::val(bind_value(val, get_spec(col))),
                                 );
                             }
                         }

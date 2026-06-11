@@ -18,7 +18,7 @@ from oxyde.core import ir
 from oxyde.core.wrapper import render_sql_debug
 from oxyde.db.pool import _msgpack_encoder
 from oxyde.queries import F
-from oxyde.queries.base import _build_col_types, _model_key
+from oxyde.queries.base import _build_column_types, _model_key
 from oxyde.queries.expressions import _serialize_value_for_ir
 
 DIALECTS = ["postgres", "sqlite", "mysql"]
@@ -225,7 +225,7 @@ def test_without_types_returns_plain_values():
     assert isinstance(params[1], str)
 
 
-# ---- count() / exists() use to_ir() and inherit col_types ----
+# ---- count() / exists() use to_ir() and inherit column_types ----
 
 
 @pytest.mark.parametrize("dialect", DIALECTS)
@@ -265,7 +265,7 @@ def _update_with_types(model_cls, values, *, filter_tree=None, dialect="postgres
         table=model_cls.get_table_name(),
         values={k: _serialize_value_for_ir(v) for k, v in values.items()},
         filter_tree=filter_tree,
-        col_types=_build_col_types(model_cls),
+        column_types=_build_column_types(model_cls),
         model=_model_key(model_cls),
     )
     ir_bytes = msgpack.packb(update_ir, default=_msgpack_encoder)
@@ -326,7 +326,7 @@ def test_f_expression_legacy_ir_without_value_type(dialect):
         table=TypeModel.get_table_name(),
         values={"price": {"__expr__": expr_node}},
         filter_tree=filter_tree,
-        col_types=_build_col_types(TypeModel),
+        column_types=_build_column_types(TypeModel),
         model=_model_key(TypeModel),
     )
     ir_bytes = msgpack.packb(update_ir, default=_msgpack_encoder)

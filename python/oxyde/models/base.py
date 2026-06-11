@@ -35,7 +35,7 @@ Internal Flow:
     1. Class definition triggers OxydeModelMeta.__new__()
     2. __init_subclass__() extracts Meta, creates _db_meta, registers table
     3. OxydeModelMeta.__new__() calls finalize_pending() after Pydantic completes
-    4. finalize_pending() resolves FKs, parses field tags, caches PK and col_types
+    4. finalize_pending() resolves FKs, parses field tags, caches PK and column_types
 
 Example:
     class User(Model):
@@ -84,7 +84,7 @@ from pydantic.fields import FieldInfo, PydanticUndefined
 from typing_extensions import dataclass_transform
 
 from oxyde.core import register_validator
-from oxyde.core.ir_types import get_ir_type
+from oxyde.core.column_types import compute_column_type
 
 if TYPE_CHECKING:
     from oxyde.queries.base import SupportsExecute
@@ -305,12 +305,12 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                 descriptor.contribute_to_model(cls, name)
 
     @classmethod
-    def _compute_col_types(cls) -> None:
-        """Compute IR type hints from field metadata (cached in _db_meta.col_types)."""
-        if cls._db_meta.col_types is not None:
+    def _compute_column_types(cls) -> None:
+        """Compute ColumnTypeSpec dicts from field metadata (cached in _db_meta)."""
+        if cls._db_meta.column_types is not None:
             return  # Already computed
 
-        col_types: dict[str, str] = {}
+        column_types: dict[str, dict] = {}
         reverse_map: dict[str, str] = {}
         for field_name, meta in cls._db_meta.field_metadata.items():
             # Skip virtual relation fields
@@ -320,18 +320,20 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             # fields (author_id) are actual columns
             if meta.foreign_key:
                 continue
-            # Use explicit db_type if specified, otherwise infer from python_type
-            if meta.db_type:
-                col_types[meta.db_column] = meta.db_type.upper()
-            else:
-                ir_type = get_ir_type(meta.python_type)
-                if ir_type:
-                    col_types[meta.db_column] = ir_type
+            spec = compute_column_type(
+                meta.python_type,
+                meta.db_type,
+                max_length=meta.max_length,
+                max_digits=meta.max_digits,
+                decimal_places=meta.decimal_places,
+            )
+            if spec is not None:
+                column_types[meta.db_column] = spec
             # Cache reverse mapping where db_column differs from field_name
             if meta.db_column != field_name:
                 reverse_map[meta.db_column] = field_name
 
-        cls._db_meta.col_types = col_types if col_types else None
+        cls._db_meta.column_types = column_types if column_types else None
         cls._db_meta.reverse_column_map = reverse_map
 
     @classmethod

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::error::{QueryError, Result};
 use crate::utils::identifier::ColumnIdent;
+use oxyde_codec::ColumnTypeSpec;
 
 /// Convert rmpv value to sea_query Value without type hint (legacy behavior)
 pub fn rmpv_to_value(value: &rmpv::Value) -> Value {
@@ -285,11 +286,13 @@ pub fn parse_expression(node: &rmpv::Value) -> Result<SimpleExpr> {
         "value" => {
             let val = map_get(node, "value")
                 .ok_or_else(|| QueryError::InvalidQuery("Value node missing 'value'".into()))?;
-            // Optional per-literal type hint, set by Python when the originating
-            // type is in TYPE_REGISTRY. Recovers Decimal/UUID/datetime/etc. that
-            // msgpack-encode as strings.
-            let value_type = map_get_str(node, "value_type");
-            Ok(Expr::val(rmpv_to_value_typed(val, value_type)).into())
+            // Optional per-literal ColumnTypeSpec hint (tagged dict), set by
+            // Python for types that msgpack-encode as strings (Decimal, UUID,
+            // datetime, ...). Absent hint = native conversion.
+            let spec = map_get(node, "value_type")
+                .and_then(|v| rmpv::ext::from_value::<ColumnTypeSpec>(v.clone()).ok())
+                .unwrap_or(ColumnTypeSpec::Unknown);
+            Ok(Expr::val(super::bind::bind_value(val, &spec)).into())
         }
         "column" => {
             let name = map_get_str(node, "name")
@@ -796,9 +799,10 @@ mod tests {
 
     // ── parse_expression: value_type hint on literal nodes ──────────────
 
-    /// Build a `{"type": "value", "value": <val>, "value_type": <hint>}` rmpv map.
-    /// If `value_type` is None, the key is omitted (legacy IR shape).
-    fn build_value_node(value: rmpv::Value, value_type: Option<&str>) -> rmpv::Value {
+    /// Build a `{"type": "value", "value": <val>, "value_type": {"kind": <kind>}}`
+    /// rmpv map — the shape Python sends for F-expression literals.
+    /// If `kind` is None, the key is omitted (no hint = native conversion).
+    fn build_value_node(value: rmpv::Value, kind: Option<&str>) -> rmpv::Value {
         let mut pairs = vec![
             (
                 rmpv::Value::String("type".into()),
@@ -806,10 +810,13 @@ mod tests {
             ),
             (rmpv::Value::String("value".into()), value),
         ];
-        if let Some(t) = value_type {
+        if let Some(k) = kind {
             pairs.push((
                 rmpv::Value::String("value_type".into()),
-                rmpv::Value::String(t.into()),
+                rmpv::Value::Map(vec![(
+                    rmpv::Value::String("kind".into()),
+                    rmpv::Value::String(k.into()),
+                )]),
             ));
         }
         rmpv::Value::Map(pairs)

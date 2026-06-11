@@ -36,7 +36,7 @@ Execution:
     to_ir() converts Query state to dict (Intermediate Representation).
     IR is serialized to MessagePack and sent to Rust for SQL generation.
 
-    The IR includes col_types (dict mapping column names to IR type hints)
+    The IR includes column_types (ColumnTypeSpec dicts per column)
     which enables type-aware decoding in Rust without expensive type_info() calls.
 
 Example:
@@ -274,7 +274,7 @@ class Query(
             ]
 
         # Use cached col_types from model metadata (computed at finalization)
-        col_types = self.model_class._db_meta.col_types
+        column_types = self.model_class._db_meta.column_types
 
         # Pass pk_column only for JOIN queries (needed for deduplication)
         pk_column = None
@@ -289,7 +289,7 @@ class Query(
         return ir.build_select_ir(
             table=table_name,
             columns=db_columns,
-            col_types=col_types,
+            column_types=column_types,
             model=_model_key(self.model_class),
             column_mappings=None,
             filter_tree=final_filter_tree,

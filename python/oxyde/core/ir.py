@@ -51,7 +51,7 @@ Example IR (SELECT):
         "op": "select",
         "table": "users",
         "cols": ["id", "name", "email"],
-        "col_types": {"id": "int", "name": "str", "email": "str"},
+        "column_types": {"id": {"kind": "big_integer"}, "name": {"kind": "string"}},
         "filter_tree": {"type": "condition", "field": "active", "operator": "=", "value": true},
         "order_by": [("created_at", "desc")],
         "limit": 10
@@ -127,7 +127,7 @@ def build_select_ir(
     *,
     table: str,
     columns: Sequence[str] | None = None,
-    col_types: dict[str, str] | None = None,
+    column_types: dict[str, dict] | None = None,
     model: str | None = None,
     column_mappings: dict[str, str] | None = None,
     filter_tree: FilterNode | None = None,
@@ -150,9 +150,8 @@ def build_select_ir(
     """Build a SELECT query IR payload.
 
     Args:
-        col_types: Optional mapping of column name to IR type hint.
-            Used by Rust for type-aware decoding without type_info() calls.
-            Types: "int", "str", "float", "bool", "bytes", "datetime", "date", "time"
+        column_types: Optional mapping of column name to ColumnTypeSpec dict
+            ({"kind": ...}). Used by Rust for typed binding and decoding
         pk_column: Primary key column name, used for deduplication in JOIN queries.
     """
     payload: dict[str, Any] = {
@@ -163,8 +162,8 @@ def build_select_ir(
     # cols is optional when count=True or exists=True
     if columns:
         payload["cols"] = list(columns)
-    if col_types:
-        payload["col_types"] = dict(col_types)
+    if column_types:
+        payload["column_types"] = dict(column_types)
     if filter_tree:
         payload["filter_tree"] = filter_tree
     if model:
@@ -209,7 +208,7 @@ def build_insert_ir(
     table: str,
     values: dict[str, Any] | None = None,
     bulk_values: Sequence[dict[str, Any]] | None = None,
-    col_types: dict[str, str] | None = None,
+    column_types: dict[str, dict] | None = None,
     model: str | None = None,
     returning: bool | None = None,
     pk_column: str | None = None,
@@ -220,8 +219,7 @@ def build_insert_ir(
         table: Table name
         values: Single row values dict
         bulk_values: Multiple rows for bulk insert
-        col_types: Column type hints for proper parameter binding.
-            Maps column name to IR type: "datetime", "date", "time", "uuid", etc.
+        column_types: ColumnTypeSpec dicts for typed parameter binding.
         model: Model name for validation
         returning: Whether to return inserted rows
         pk_column: Primary key column name (defaults to "id" if not specified)
@@ -237,8 +235,8 @@ def build_insert_ir(
         payload["values"] = dict(values)
     if bulk_values:
         payload["bulk_values"] = [dict(row) for row in bulk_values]
-    if col_types:
-        payload["col_types"] = dict(col_types)
+    if column_types:
+        payload["column_types"] = dict(column_types)
     if model:
         payload["model"] = model
     if returning is not None:
@@ -253,7 +251,7 @@ def build_update_ir(
     table: str,
     values: dict[str, Any] | None = None,
     filter_tree: FilterNode | None = None,
-    col_types: dict[str, str] | None = None,
+    column_types: dict[str, dict] | None = None,
     model: str | None = None,
     returning: bool | None = None,
     bulk_update: Sequence[dict[str, Any]] | None = None,
@@ -264,8 +262,7 @@ def build_update_ir(
         table: Table name
         values: Values to update
         filter_tree: Filter conditions
-        col_types: Column type hints for proper parameter binding.
-            Maps column name to IR type: "datetime", "date", "time", "uuid", etc.
+        column_types: ColumnTypeSpec dicts for typed parameter binding.
         model: Model name
         returning: Whether to return updated rows
         bulk_update: Bulk update rows
@@ -298,8 +295,8 @@ def build_update_ir(
             )
         # Wrap in object with "rows" field to match Rust BulkUpdate struct
         payload["bulk_update"] = {"rows": normalized_rows}
-    if col_types:
-        payload["col_types"] = dict(col_types)
+    if column_types:
+        payload["column_types"] = dict(column_types)
     if filter_tree:
         payload["filter_tree"] = filter_tree
     if model:
@@ -313,7 +310,7 @@ def build_delete_ir(
     *,
     table: str,
     filter_tree: FilterNode | None = None,
-    col_types: dict[str, str] | None = None,
+    column_types: dict[str, dict] | None = None,
     model: str | None = None,
     returning: bool | None = None,
 ) -> dict[str, Any]:
@@ -325,8 +322,8 @@ def build_delete_ir(
     }
     if filter_tree:
         payload["filter_tree"] = filter_tree
-    if col_types:
-        payload["col_types"] = dict(col_types)
+    if column_types:
+        payload["column_types"] = dict(column_types)
     if model:
         payload["model"] = model
     if returning is not None:

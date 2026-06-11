@@ -256,12 +256,12 @@ pub struct QueryIR {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cols: Option<Vec<String>>,
 
-    /// Column type hints from Python for type-aware decoding.
-    /// Maps column name to IR type string: "int", "str", "float", "bool",
-    /// "bytes", "datetime", "date", "time", "timedelta", "decimal", "uuid".
-    /// When present, Rust can decode values without expensive type_info() calls.
+    /// Column type specs from Python for typed binding and decoding.
+    /// Maps column name to `ColumnTypeSpec` (tagged dict on the wire).
+    /// When present, Rust binds values and decodes rows without expensive
+    /// type_info() calls or string classification.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub col_types: Option<HashMap<String, String>>,
+    pub column_types: Option<HashMap<String, ColumnTypeSpec>>,
 
     // Filters using FilterNode tree (supports AND/OR/NOT logic)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -369,7 +369,7 @@ impl Default for QueryIR {
             op: Operation::Select,
             table: String::new(),
             cols: None,
-            col_types: None,
+            column_types: None,
             filter_tree: None,
             limit: None,
             offset: None,

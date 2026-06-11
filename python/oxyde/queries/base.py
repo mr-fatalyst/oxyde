@@ -108,9 +108,9 @@ def _primary_key_meta(model_class: type[Model]) -> ColumnMeta:
     raise FieldLookupError(f"{model_class.__name__} has no primary key field")
 
 
-def _build_col_types(model_class: type[Model]) -> dict[str, str] | None:
-    """Get cached col_types mapping from model metadata."""
-    return model_class._db_meta.col_types
+def _build_column_types(model_class: type[Model]) -> dict[str, dict] | None:
+    """Get cached column_types mapping (ColumnTypeSpec dicts) from model metadata."""
+    return model_class._db_meta.column_types
 
 
 def _collect_model_columns(model_class: type[Model]) -> list[tuple[str, str]]:

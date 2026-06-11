@@ -4,6 +4,7 @@
 //! (PostgreSQL, MySQL, SQLite), reducing code duplication in query execution.
 
 use async_trait::async_trait;
+use oxyde_codec::ColumnTypeSpec;
 use sea_query::Value;
 use std::collections::HashMap;
 
@@ -34,7 +35,7 @@ pub trait PoolExec {
         &self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<(Vec<u8>, usize)>;
 
     /// Execute a SELECT with JOIN dedup encoding.
@@ -42,7 +43,7 @@ pub trait PoolExec {
         &self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
         relations: &[RelationInfo],
     ) -> Result<(Vec<u8>, usize)>;
 
@@ -51,7 +52,7 @@ pub trait PoolExec {
         &self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<Vec<u8>>;
 
     /// Execute a statement (INSERT/UPDATE/DELETE) and return affected rows
@@ -70,7 +71,7 @@ pub trait ConnExec {
         &mut self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<(Vec<u8>, usize)>;
 
     /// Execute a SELECT with JOIN dedup encoding.
@@ -78,7 +79,7 @@ pub trait ConnExec {
         &mut self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
         relations: &[RelationInfo],
     ) -> Result<(Vec<u8>, usize)>;
 
@@ -87,7 +88,7 @@ pub trait ConnExec {
         &mut self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<Vec<u8>>;
 
     /// Execute a statement and return affected rows
@@ -104,7 +105,7 @@ impl PoolExec for DbPool {
         &self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<(Vec<u8>, usize)> {
         match self {
             DbPool::Postgres(pool) => {
@@ -135,7 +136,7 @@ impl PoolExec for DbPool {
         &self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
         relations: &[RelationInfo],
     ) -> Result<(Vec<u8>, usize)> {
         match self {
@@ -167,7 +168,7 @@ impl PoolExec for DbPool {
         &self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<Vec<u8>> {
         match self {
             DbPool::Postgres(pool) => {
@@ -233,7 +234,7 @@ impl ConnExec for DbConn {
         &mut self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<(Vec<u8>, usize)> {
         match self {
             DbConn::Postgres(conn) => {
@@ -264,7 +265,7 @@ impl ConnExec for DbConn {
         &mut self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
         relations: &[RelationInfo],
     ) -> Result<(Vec<u8>, usize)> {
         match self {
@@ -296,7 +297,7 @@ impl ConnExec for DbConn {
         &mut self,
         sql: &str,
         params: &[Value],
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<Vec<u8>> {
         match self {
             DbConn::Postgres(conn) => {

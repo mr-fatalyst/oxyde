@@ -74,13 +74,13 @@ pub(crate) fn execute<'py>(
                         &pool_name,
                         &sql,
                         &params,
-                        ir.col_types.as_ref(),
+                        ir.column_types.as_ref(),
                         &relations,
                     )
                     .await
                     .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
-                    execute_query_columnar(&pool_name, &sql, &params, ir.col_types.as_ref())
+                    execute_query_columnar(&pool_name, &sql, &params, ir.column_types.as_ref())
                         .await
                         .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 };
@@ -101,7 +101,7 @@ pub(crate) fn execute<'py>(
                 // fall through to execute_insert_returning (last_insert_id()).
                 // Routing is decided by IR intent + dialect, never by SQL text.
                 if emits_returning(&ir, dialect) {
-                    execute_mutation_returning(&pool_name, &sql, &params, ir.col_types.as_ref())
+                    execute_mutation_returning(&pool_name, &sql, &params, ir.column_types.as_ref())
                         .await
                         .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
                 } else {
@@ -130,7 +130,7 @@ pub(crate) fn execute<'py>(
                         &pool_name,
                         &sql,
                         &params,
-                        ir.col_types.as_ref(),
+                        ir.column_types.as_ref(),
                     )
                     .await
                     .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
@@ -211,7 +211,7 @@ pub(crate) fn execute_in_transaction<'py>(
                         tx_id,
                         &sql,
                         &params,
-                        ir.col_types.as_ref(),
+                        ir.column_types.as_ref(),
                         &relations,
                     )
                     .await
@@ -221,7 +221,7 @@ pub(crate) fn execute_in_transaction<'py>(
                         tx_id,
                         &sql,
                         &params,
-                        ir.col_types.as_ref(),
+                        ir.column_types.as_ref(),
                     )
                     .await
                     .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
@@ -234,7 +234,7 @@ pub(crate) fn execute_in_transaction<'py>(
                         tx_id,
                         &sql,
                         &params,
-                        ir.col_types.as_ref(),
+                        ir.column_types.as_ref(),
                     )
                     .await
                     .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
@@ -254,7 +254,7 @@ pub(crate) fn execute_in_transaction<'py>(
                         tx_id,
                         &sql,
                         &params,
-                        ir.col_types.as_ref(),
+                        ir.column_types.as_ref(),
                     )
                     .await
                     .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?

@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 
-use oxyde_codec::{Aggregate, Filter, FilterNode};
+use oxyde_codec::{Aggregate, ColumnTypeSpec, Filter, FilterNode};
 use sea_query::{Expr, Func, LikeExpr, SimpleExpr, Value};
 
 use crate::aggregate::build_aggregate;
 use crate::error::{QueryError, Result};
-use crate::utils::{rmpv_to_value_typed, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, ColumnIdent, TableIdent};
 
 /// Create column expression, handling "table.column" format for joins
 /// If default_table is provided and column is not already qualified, prepend it
@@ -32,12 +32,14 @@ fn make_col_expr(col_name: &str, default_table: Option<&str>) -> Expr {
 
 /// Resolve column type hint from col_types map.
 /// Handles qualified names like "user.age" by extracting the column part.
-fn resolve_col_type<'a>(
+fn resolve_col_spec<'a>(
     col_name: &str,
-    col_types: Option<&'a HashMap<String, String>>,
-) -> Option<&'a str> {
+    col_types: Option<&'a HashMap<String, ColumnTypeSpec>>,
+) -> &'a ColumnTypeSpec {
     let col_key = col_name.rsplit('.').next().unwrap_or(col_name);
-    col_types.and_then(|ct| ct.get(col_key).map(String::as_str))
+    col_types
+        .and_then(|ct| ct.get(col_key))
+        .unwrap_or(&ColumnTypeSpec::Unknown)
 }
 
 fn like_expr(filter: &Filter, pattern: String) -> Result<LikeExpr> {
@@ -63,7 +65,7 @@ fn like_expr(filter: &Filter, pattern: String) -> Result<LikeExpr> {
 pub fn build_filter_node(
     node: &FilterNode,
     default_table: Option<&str>,
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     aggregates: Option<&[Aggregate]>,
 ) -> Result<SimpleExpr> {
     match node {
@@ -109,7 +111,7 @@ pub fn build_filter_node(
 fn apply_filter(
     filter: &Filter,
     default_table: Option<&str>,
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     aggregates: Option<&[Aggregate]>,
 ) -> Result<SimpleExpr> {
     let col_name = filter.column.as_ref().unwrap_or(&filter.field);
@@ -124,8 +126,8 @@ fn apply_filter(
         make_col_expr(col_name, default_table)
     };
 
-    let col_type = resolve_col_type(col_name, col_types);
-    let val = rmpv_to_value_typed(&filter.value, col_type);
+    let spec = resolve_col_spec(col_name, col_types);
+    let val = bind_value(&filter.value, spec);
 
     let expr = match filter.operator.as_str() {
         "=" => col.eq(val),
@@ -150,10 +152,7 @@ fn apply_filter(
         }
         "IN" => {
             if let rmpv::Value::Array(arr) = &filter.value {
-                let values: Vec<Value> = arr
-                    .iter()
-                    .map(|v| rmpv_to_value_typed(v, col_type))
-                    .collect();
+                let values: Vec<Value> = arr.iter().map(|v| bind_value(v, spec)).collect();
                 col.is_in(values)
             } else {
                 return Err(QueryError::InvalidQuery(
@@ -168,8 +167,8 @@ fn apply_filter(
                         "BETWEEN operator requires exactly two values".to_string(),
                     ));
                 }
-                let start = Expr::val(rmpv_to_value_typed(&arr[0], col_type));
-                let end = Expr::val(rmpv_to_value_typed(&arr[1], col_type));
+                let start = Expr::val(bind_value(&arr[0], spec));
+                let end = Expr::val(bind_value(&arr[1], spec));
                 col.between(start, end)
             } else {
                 return Err(QueryError::InvalidQuery(

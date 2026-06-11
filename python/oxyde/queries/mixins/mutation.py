@@ -16,7 +16,7 @@ from oxyde.models.serializers import (
 )
 from oxyde.queries.base import (
     SupportsExecute,
-    _build_col_types,
+    _build_column_types,
     _collect_model_columns,
     _map_values_to_columns,
     _model_key,
@@ -101,12 +101,12 @@ class MutationMixin:
             await User.objects.filter(is_active=True).increment("login_count")
         """
         exec_client = await _resolve_execution_client(using, client)
-        col_types = _build_col_types(self.model_class)
+        column_types = _build_column_types(self.model_class)
         update_ir = ir.build_update_ir(
             table=self.model_class.get_table_name(),
             values={field: _serialize_value_for_ir(F(field) + by)},
             filter_tree=self._build_filter_tree(),
-            col_types=col_types,
+            column_types=column_types,
             model=_model_key(self.model_class),
         )
         result_bytes = await exec_client.execute(update_ir)
@@ -163,7 +163,7 @@ class MutationMixin:
             )
         """
         exec_client = await _resolve_execution_client(using, client)
-        col_types = _build_col_types(self.model_class)
+        column_types = _build_column_types(self.model_class)
         mapped_values = _map_values_to_columns(self.model_class, values)
         serialized_values = {
             key: _serialize_value_for_ir(value) for key, value in mapped_values.items()
@@ -171,14 +171,14 @@ class MutationMixin:
 
         if returning and await _is_mysql(using, client):
             return await self._mysql_update_returning(
-                using, client, exec_client, serialized_values, col_types
+                using, client, exec_client, serialized_values, column_types
             )
 
         update_ir = ir.build_update_ir(
             table=self.model_class.get_table_name(),
             values=serialized_values,
             filter_tree=self._build_filter_tree(),
-            col_types=col_types,
+            column_types=column_types,
             model=_model_key(self.model_class),
             returning=returning,
         )
@@ -195,7 +195,7 @@ class MutationMixin:
         client: SupportsExecute | None,
         exec_client: SupportsExecute,
         serialized_values: dict[str, Any],
-        col_types: dict[str, str] | None,
+        column_types: dict[str, dict] | None,
     ) -> list[Model]:
         """MySQL fallback: SELECT PKs FOR UPDATE → UPDATE → re-fetch by PKs."""
         from oxyde.db.transaction import atomic, get_active_transaction
@@ -215,7 +215,7 @@ class MutationMixin:
                 table=table,
                 columns=[pk_db_col],
                 filter_tree=filter_tree,
-                col_types=col_types,
+                column_types=column_types,
                 lock="update",
             )
             pk_bytes = await tx_client.execute(select_pks_ir)
@@ -232,7 +232,7 @@ class MutationMixin:
                 table=table,
                 values=serialized_values,
                 filter_tree=filter_tree,
-                col_types=col_types,
+                column_types=column_types,
                 model=_model_key(self.model_class),
                 returning=False,
             )
@@ -252,7 +252,7 @@ class MutationMixin:
                 table=table,
                 columns=all_db_cols,
                 filter_tree=pk_in_filter,
-                col_types=col_types,
+                column_types=column_types,
             )
             refetch_bytes = await tx_client.execute(refetch_ir)
             # Columnar format: [columns_list, rows_list]
@@ -291,7 +291,7 @@ class MutationMixin:
         delete_ir = ir.build_delete_ir(
             table=self.model_class.get_table_name(),
             filter_tree=self._build_filter_tree(),
-            col_types=_build_col_types(self.model_class),
+            column_types=_build_column_types(self.model_class),
             model=_model_key(self.model_class),
         )
         result_bytes = await exec_client.execute(delete_ir)
@@ -528,11 +528,11 @@ class MutationMixin:
         if not bulk_entries:
             return 0
 
-        col_types = _build_col_types(self.model_class)
+        column_types = _build_column_types(self.model_class)
         update_ir = ir.build_update_ir(
             table=self.model_class.get_table_name(),
             bulk_update=bulk_entries,
-            col_types=col_types,
+            column_types=column_types,
             model=_model_key(self.model_class),
         )
 

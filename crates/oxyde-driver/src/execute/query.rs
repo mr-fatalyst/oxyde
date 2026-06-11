@@ -1,5 +1,6 @@
 //! Query and statement execution (pool and transaction paths).
 
+use oxyde_codec::ColumnTypeSpec;
 use sea_query::Value;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -22,7 +23,7 @@ pub async fn execute_query_columnar(
     pool_name: &str,
     sql: &str,
     params: &[Value],
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
 ) -> Result<(Vec<u8>, usize)> {
     debug!(
         "Executing columnar query on '{}': {} ({} params)",
@@ -55,7 +56,7 @@ pub async fn execute_query_columnar_dedup(
     pool_name: &str,
     sql: &str,
     params: &[Value],
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     relations: &[RelationInfo],
 ) -> Result<(Vec<u8>, usize)> {
     debug!(
@@ -77,7 +78,7 @@ pub async fn execute_mutation_returning(
     pool_name: &str,
     sql: &str,
     params: &[Value],
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
 ) -> Result<Vec<u8>> {
     debug!(
         "Executing mutation+returning on '{}': {} ({} params)",
@@ -118,7 +119,7 @@ pub async fn execute_query_columnar_in_transaction(
     tx_id: u64,
     sql: &str,
     params: &[Value],
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
 ) -> Result<(Vec<u8>, usize)> {
     let registry = transaction_registry();
     let arc = registry
@@ -143,7 +144,7 @@ pub async fn execute_query_columnar_dedup_in_transaction(
     tx_id: u64,
     sql: &str,
     params: &[Value],
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     relations: &[RelationInfo],
 ) -> Result<(Vec<u8>, usize)> {
     let registry = transaction_registry();
@@ -170,7 +171,7 @@ pub async fn execute_mutation_returning_in_transaction(
     tx_id: u64,
     sql: &str,
     params: &[Value],
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
 ) -> Result<Vec<u8>> {
     let registry = transaction_registry();
     let arc = registry

@@ -41,14 +41,15 @@ Internal Structure:
         })
 
     _serialize_value_for_ir() wraps expressions in {"__expr__": ...}
-    for the Rust IR parser to recognize them.
+    for the Rust IR parser to recognize them. Literal nodes carry an
+    optional value_type ColumnTypeSpec dict ({"kind": "decimal"}).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from oxyde.core.types import TYPE_REGISTRY
+from oxyde.core.column_types import spec_for_literal
 from oxyde.core.types import serialize_value as _serialize_type_value
 
 
@@ -102,8 +103,8 @@ class _Expression:
 def _coerce_expression(value: Any) -> _Expression:
     """Coerce a value to an _Expression.
 
-    For values whose Python type is in TYPE_REGISTRY, attach a `value_type`
-    hint. The Rust side uses it to recover typed bindings (Decimal, UUID,
+    For known Python types, attach a `value_type` ColumnTypeSpec dict.
+    The Rust side uses it to recover typed bindings (Decimal, UUID,
     datetime, ...) that msgpack-encode as strings via `serialize_value`.
     """
     if isinstance(value, _Expression):
@@ -111,9 +112,9 @@ def _coerce_expression(value: Any) -> _Expression:
     if isinstance(value, F):
         return value._expression
     node: dict[str, Any] = {"type": "value", "value": value}
-    desc = TYPE_REGISTRY.get(type(value))
-    if desc is not None:
-        node["value_type"] = desc.ir_name
+    spec = spec_for_literal(type(value))
+    if spec is not None:
+        node["value_type"] = spec
     return _Expression(node)
 
 

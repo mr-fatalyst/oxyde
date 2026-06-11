@@ -33,7 +33,7 @@ pub trait CellEncoder {
     /// Extract column metadata from the first row.
     fn extract_columns(
         row: &Self::Row,
-        col_types: Option<&HashMap<String, String>>,
+        col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Vec<ColumnMeta>
     where
         <<Self::Row as Row>::Database as Database>::Column: Column,
@@ -42,11 +42,11 @@ pub trait CellEncoder {
             .iter()
             .map(|c| {
                 let name = Column::name(c).to_string();
-                let ir_type = col_types.and_then(|ct| ct.get(&name).cloned());
+                let spec = col_types.and_then(|ct| ct.get(&name).cloned());
                 ColumnMeta {
                     db_type: Column::type_info(c).to_string().to_uppercase(),
-                    ir_type,
-                    spec: None,
+                    ir_type: None,
+                    spec,
                     name,
                 }
             })
@@ -309,7 +309,7 @@ fn encode_pk_cell<E: CellEncoder>(row: &E::Row, col_idx: usize, col_meta: &Colum
 /// Returns `(msgpack_bytes, row_count)`.
 pub async fn encode_stream<E, S>(
     mut stream: S,
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     relations: Option<&[RelationInfo]>,
 ) -> Result<(Vec<u8>, usize), sqlx::Error>
 where
@@ -484,7 +484,7 @@ where
 /// `{"affected": N, "columns": [...], "rows": [[...], ...]}`
 pub async fn encode_stream_mutation_returning<E, S>(
     mut stream: S,
-    col_types: Option<&HashMap<String, String>>,
+    col_types: Option<&HashMap<String, ColumnTypeSpec>>,
 ) -> Result<Vec<u8>, sqlx::Error>
 where
     E: CellEncoder,
