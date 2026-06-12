@@ -19,6 +19,7 @@ from oxyde.migrations.executor import (
 from oxyde.migrations.extract import extract_current_schema
 from oxyde.migrations.generator import generate_migration_file
 from oxyde.migrations.replay import SchemaState, replay_migrations
+from oxyde.migrations.squash import SquashResult, squash_migrations
 from oxyde.migrations.tracker import (
     ensure_migrations_table,
     get_applied_migrations,
@@ -29,6 +30,8 @@ from oxyde.migrations.tracker import (
 )
 
 __all__ = [
+    "SquashResult",
+    "squash_migrations",
     "extract_current_schema",
     "SchemaState",
     "replay_migrations",

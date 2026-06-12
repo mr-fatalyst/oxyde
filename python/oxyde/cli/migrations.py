@@ -431,3 +431,80 @@ def sqlmigrate(
     except Exception as e:
         typer.secho(f"❌ Error generating SQL: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
+
+
+# ── oxyde migrations <subcommand> ────────────────────────────────────────
+
+migrations_app = typer.Typer(help="Migration maintenance commands")
+app.add_typer(migrations_app, name="migrations")
+
+
+@migrations_app.command("squash")
+def squash(
+    name: str = typer.Option(
+        "squashed", help="Name suffix for the new initial migration"
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt"),
+) -> None:
+    """
+    Squash the whole migration history into a single initial migration.
+
+    Replays all migration files in memory, computes the final schema and
+    replaces the history with one 0001_<name>.py in the current format.
+    Old files are deleted (version control is your backup). Manual SQL
+    (ctx.execute) is NOT carried over — affected files are listed.
+
+    On already-deployed databases run `oxyde migrate --fake` afterwards to
+    record the new initial migration without executing it.
+    """
+    from oxyde.migrations.squash import squash_migrations
+
+    config = load_config_or_exit()
+    migrations_path = Path(config.migrations_dir)
+    files = sorted(migrations_path.glob("[0-9]*.py"))
+
+    if not files:
+        typer.secho(
+            "Nothing to squash: no migration files found.", fg=typer.colors.YELLOW
+        )
+        raise typer.Exit(0)
+
+    typer.echo(f"Will squash {len(files)} migration file(s) into one:")
+    for f in files:
+        typer.echo(f"  • {f.name}")
+    typer.echo()
+
+    if not yes and not typer.confirm(
+        "Delete these files and write a new 0001 migration?"
+    ):
+        raise typer.Exit(0)
+
+    try:
+        result = squash_migrations(config.migrations_dir, name=name)
+    except Exception as e:
+        typer.secho(f"❌ Squash failed: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1) from None
+
+    assert result.new_file is not None
+    typer.secho(
+        f"✅ Created {result.new_file.name} ({result.table_count} table(s)), "
+        f"deleted {len(result.deleted_files)} file(s).",
+        fg=typer.colors.GREEN,
+    )
+
+    if result.raw_sql_files:
+        typer.echo()
+        typer.secho(
+            "⚠️  These files contained manual SQL (ctx.execute) that was NOT "
+            "carried over — move it manually if still needed:",
+            fg=typer.colors.YELLOW,
+        )
+        for fname in result.raw_sql_files:
+            typer.echo(f"  • {fname}")
+
+    typer.echo()
+    typer.echo("Next steps:")
+    typer.echo("  • fresh databases:    oxyde migrate")
+    typer.echo(
+        "  • deployed databases: oxyde migrate --fake   (records 0001 without executing)"
+    )

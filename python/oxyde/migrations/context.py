@@ -52,6 +52,7 @@ class MigrationContext:
         self._db_conn = db_conn
         self._schema_state = schema_state
         self._operations: list[dict[str, Any]] = []
+        self._raw_sql_seen = False
 
     @property
     def dialect(self) -> str:
@@ -409,14 +410,23 @@ class MigrationContext:
     def execute(self, sql: str) -> None:
         """Execute arbitrary SQL (for data migrations, added manually).
 
-        This is ignored in "collect" mode (doesn't affect schema structure).
+        This is ignored in "collect" mode (doesn't affect schema structure),
+        but the fact is recorded so `oxyde migrations squash` can warn that
+        the file contains manual SQL not carried over by the squash.
 
         Args:
             sql: SQL statement to execute
         """
         if self._mode == "execute":
             self._execute_raw_sql(sql)
-        # In collect mode, ignore (doesn't affect schema)
+        else:
+            # Collect mode: schema-neutral, but squash must know about it
+            self._raw_sql_seen = True
+
+    @property
+    def has_raw_sql(self) -> bool:
+        """True if upgrade() called execute() with manual SQL (collect mode)."""
+        return self._raw_sql_seen
 
     # ========================================================================
     # Internal methods
