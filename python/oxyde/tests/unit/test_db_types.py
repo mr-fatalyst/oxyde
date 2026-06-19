@@ -100,6 +100,9 @@ class DbTypesModel(Model):
     db_text_arr: list[str] | None = Field(
         default=None, db_nullable=True, db_type="TEXT[]"
     )
+    db_enum_arr: list[Status] | None = Field(
+        default=None, db_nullable=True, db_type="post_status_enum[]"
+    )
 
     # Annotated inner constraints on arrays
     ann_str_list: list[Annotated[str, Field(max_length=100)]] | None = Field(
@@ -192,6 +195,17 @@ COL_TYPE_CASES = [
     ("db_uuid_arr", {"kind": "array", "item": {"kind": "uuid"}}),
     ("db_int_arr", {"kind": "array", "item": {"kind": "big_integer"}}),
     ("db_text_arr", {"kind": "array", "item": {"kind": "text"}}),
+    (
+        "db_enum_arr",
+        {
+            "kind": "array",
+            "item": {
+                "kind": "enum",
+                "name": "post_status_enum",
+                "values": ["draft", "published"],
+            },
+        },
+    ),
     # Annotated inner arrays (inferred from python_type)
     ("ann_str_list", {"kind": "array", "item": {"kind": "string", "length": 100}}),
     ("ann_decimal_list", {"kind": "array", "item": {"kind": "decimal", "precision": 10, "scale": 2}}),

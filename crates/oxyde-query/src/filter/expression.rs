@@ -37,6 +37,9 @@ fn resolve_col_spec<'a>(
     col_name: &str,
     col_types: Option<&'a HashMap<String, ColumnTypeSpec>>,
 ) -> &'a ColumnTypeSpec {
+    if let Some(spec) = col_types.and_then(|ct| ct.get(col_name)) {
+        return spec;
+    }
     let col_key = col_name.rsplit('.').next().unwrap_or(col_name);
     col_types
         .and_then(|ct| ct.get(col_key))

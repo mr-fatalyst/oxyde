@@ -256,6 +256,25 @@ mod tests {
     }
 
     #[test]
+    fn test_qualified_filter_enum_value_is_cast_on_postgres() {
+        let ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_with_column(
+                "status",
+                "author.status",
+                "=",
+                rmpv_str("draft"),
+            )),
+            column_types: Some(HashMap::from([("author.status".into(), enum_spec())])),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("$1::\"post_status_enum\""), "{sql}");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
     fn test_mysql_placeholders() {
         let ir = QueryIR {
             table: "widgets".into(),
