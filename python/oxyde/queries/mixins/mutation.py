@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Literal, overload
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin, overload
+
+from pydantic import TypeAdapter
 
 from oxyde._msgpack import msgpack
 from oxyde.core import ir
@@ -14,6 +17,7 @@ from oxyde.models.serializers import (
     _dump_insert_data,
     _normalize_instance,
 )
+from oxyde.models.utils import _unpack_annotated, _unwrap_optional
 from oxyde.queries.base import (
     SupportsExecute,
     _build_column_types,
@@ -22,7 +26,7 @@ from oxyde.queries.base import (
     _model_key,
     _resolve_execution_client,
 )
-from oxyde.queries.expressions import F, _serialize_value_for_ir
+from oxyde.queries.expressions import F, _Expression, _serialize_value_for_ir
 from oxyde.queries.insert import InsertQuery
 
 if TYPE_CHECKING:
@@ -64,6 +68,39 @@ def _decode_columnar_models(model_class: type[Model], result: list[Any]) -> list
     if len(result) < 2 or not result[1]:
         return []
     return _hydrate_models(model_class, result[0], result[1])
+
+
+def _is_enum_annotation(annotation: Any) -> bool:
+    annotation, _ = _unpack_annotated(annotation)
+    annotation, _ = _unwrap_optional(annotation)
+    origin = get_origin(annotation)
+    if origin is list:
+        args = get_args(annotation)
+        return bool(args) and _is_enum_annotation(args[0])
+    if origin is not None:
+        return any(
+            arg is not type(None) and _is_enum_annotation(arg)
+            for arg in get_args(annotation)
+        )
+    return isinstance(annotation, type) and issubclass(annotation, Enum)
+
+
+def _validate_enum_update_values(
+    model_class: type[Model],
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    validated = dict(values)
+    metadata = model_class._db_meta.field_metadata
+    for field, value in values.items():
+        if isinstance(value, (F, _Expression)):
+            continue
+        meta = metadata.get(field)
+        if meta is not None and _is_enum_annotation(meta.python_type):
+            if value is None and meta.nullable:
+                validated[field] = None
+            else:
+                validated[field] = TypeAdapter(meta.python_type).validate_python(value)
+    return validated
 
 
 class MutationMixin:
@@ -164,6 +201,7 @@ class MutationMixin:
         """
         exec_client = await _resolve_execution_client(using, client)
         column_types = _build_column_types(self.model_class)
+        values = _validate_enum_update_values(self.model_class, values)
         mapped_values = _map_values_to_columns(self.model_class, values)
         serialized_values = {
             key: _serialize_value_for_ir(value) for key, value in mapped_values.items()

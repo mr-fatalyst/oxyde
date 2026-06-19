@@ -66,7 +66,41 @@ def _operation_to_python(op: dict[str, Any], indent: str = "    ") -> str:
     """
     op_type = op.get("type")
 
-    if op_type == "create_table":
+    if op_type == "create_enum_type":
+        values_repr = _python_repr(op["values"])
+        return f"{indent}ctx.create_enum_type({_python_repr(op['name'])}, {values_repr})"
+
+    elif op_type == "drop_enum_type":
+        return f"{indent}ctx.drop_enum_type({_python_repr(op['name'])})"
+
+    elif op_type == "add_enum_value":
+        args = f"{_python_repr(op['name'])}, {_python_repr(op['value'])}"
+        if fields := op.get("fields"):
+            return (
+                f"{indent}ctx.add_enum_value(\n"
+                f"{indent}    {args},\n"
+                f"{indent}    fields={_python_repr(fields, indent=len(indent) + 11)},\n"
+                f"{indent})"
+            )
+        return f"{indent}ctx.add_enum_value({args})"
+
+    elif op_type == "alter_enum_type":
+        message = (
+            f"Manual enum migration required for {op['name']}: "
+            f"{op['old_values']!r} -> {op['new_values']!r}. "
+            "Replace ctx.require_manual(...) with ctx.execute(...) statements and keep "
+            "ctx.alter_enum_type(...) to update migration replay state."
+        )
+        return (
+            f"{indent}ctx.alter_enum_type(\n"
+            f"{indent}    {_python_repr(op['name'])},\n"
+            f"{indent}    old_values={_python_repr(op['old_values'], indent=len(indent) + 15)},\n"
+            f"{indent}    new_values={_python_repr(op['new_values'], indent=len(indent) + 15)},\n"
+            f"{indent})\n"
+            f"{indent}ctx.require_manual({_python_repr(message)})"
+        )
+
+    elif op_type == "create_table":
         table = op["table"]
         tname = table["name"]
         # Use consistent indentation for all kwargs
@@ -201,7 +235,15 @@ def _infer_migration_name(operations: list[dict[str, Any]]) -> str:
     first_op = operations[0]
     op_type = first_op.get("type")
 
-    if op_type == "create_table":
+    if op_type == "create_enum_type":
+        return f"create_{first_op['name']}_enum"
+    elif op_type == "drop_enum_type":
+        return f"drop_{first_op['name']}_enum"
+    elif op_type == "add_enum_value":
+        return f"add_{first_op['value']}_to_{first_op['name']}_enum"
+    elif op_type == "alter_enum_type":
+        return f"alter_{first_op['name']}_enum"
+    elif op_type == "create_table":
         table_name = first_op["table"]["name"]
         return f"create_{table_name}_table"
     elif op_type == "drop_table":
@@ -306,7 +348,46 @@ def generate_migration_file(
         op_type = op.get("type")
 
         # Generate reverse operation
-        if op_type == "create_table":
+        if op_type == "create_enum_type":
+            downgrade_lines.append(
+                f"    ctx.drop_enum_type({_python_repr(op['name'])})"
+            )
+        elif op_type == "drop_enum_type":
+            values = op.get("values")
+            if values:
+                values_repr = _python_repr(values)
+                downgrade_lines.append(
+                    f"    ctx.create_enum_type({_python_repr(op['name'])}, {values_repr})"
+                )
+            else:
+                message = f"Cannot recreate enum type {op['name']} without its values"
+                downgrade_lines.append(
+                    f"    raise RuntimeError({_python_repr(message)})"
+                )
+        elif op_type == "add_enum_value":
+            message = (
+                f"Cannot automatically remove enum value {op['value']} "
+                f"from {op['name']}"
+            )
+            downgrade_lines.append(
+                f"    raise RuntimeError({_python_repr(message)})"
+            )
+        elif op_type == "alter_enum_type":
+            message = (
+                f"Manual enum migration required for {op['name']}: "
+                f"{op['new_values']!r} -> {op['old_values']!r}. "
+                "Replace ctx.require_manual(...) with ctx.execute(...) statements and keep "
+                "ctx.alter_enum_type(...) to update migration replay state."
+            )
+            downgrade_lines.append(
+                f"    ctx.alter_enum_type(\n"
+                f"        {_python_repr(op['name'])},\n"
+                f"        old_values={_python_repr(op['new_values'], indent=19)},\n"
+                f"        new_values={_python_repr(op['old_values'], indent=19)},\n"
+                f"    )\n"
+                f"    ctx.require_manual({_python_repr(message)})"
+            )
+        elif op_type == "create_table":
             downgrade_lines.append(f'    ctx.drop_table("{op["table"]["name"]}")')
         elif op_type == "drop_table":
             # Reverse drop_table by recreating the table from stored structure

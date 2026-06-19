@@ -7,12 +7,45 @@
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use oxyde_codec::ColumnTypeSpec;
 use rust_decimal::Decimal;
-use sqlx::{postgres::PgRow, Row};
+use sqlx::{
+    error::BoxDynError,
+    postgres::{PgHasArrayType, PgRow, PgTypeInfo, PgTypeKind, PgValueRef, Postgres},
+    Decode, Row, Type,
+};
 use uuid::Uuid;
 
 use super::encoder::*;
 
 pub struct PgEncoder;
+
+#[derive(Debug, Clone)]
+struct PgEnumText(String);
+
+impl Type<Postgres> for PgEnumText {
+    fn type_info() -> PgTypeInfo {
+        <String as Type<Postgres>>::type_info()
+    }
+
+    fn compatible(ty: &PgTypeInfo) -> bool {
+        <String as Type<Postgres>>::compatible(ty) || matches!(ty.kind(), PgTypeKind::Enum(_))
+    }
+}
+
+impl PgHasArrayType for PgEnumText {
+    fn array_type_info() -> PgTypeInfo {
+        <String as PgHasArrayType>::array_type_info()
+    }
+
+    fn array_compatible(ty: &PgTypeInfo) -> bool {
+        matches!(ty.kind(), PgTypeKind::Array(element) if Self::compatible(element))
+    }
+}
+
+impl<'r> Decode<'r, Postgres> for PgEnumText {
+    fn decode(value: PgValueRef<'r>) -> Result<Self, BoxDynError> {
+        Ok(Self(value.as_str()?.to_string()))
+    }
+}
 
 impl CellEncoder for PgEncoder {
     type Row = PgRow;
@@ -39,6 +72,14 @@ impl CellEncoder for PgEncoder {
             ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => {
                 match row.try_get::<Option<String>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v),
+                    Ok(None) => write_nil(buf),
+                    Err(_) => write_nil(buf),
+                }
+                true
+            }
+            ColumnTypeSpec::Enum { .. } => {
+                match row.try_get::<Option<PgEnumText>, _>(idx) {
+                    Ok(Some(v)) => write_str(buf, &v.0),
                     Ok(None) => write_nil(buf),
                     Err(_) => write_nil(buf),
                 }
@@ -258,6 +299,9 @@ fn encode_pg_array(buf: &mut Vec<u8>, row: &PgRow, idx: usize, item: &ColumnType
         }
         ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => {
             encode_pg_array_ref::<String>(buf, row, idx, |b, v| write_str(b, v));
+        }
+        ColumnTypeSpec::Enum { .. } => {
+            encode_pg_array_ref::<PgEnumText>(buf, row, idx, |b, v| write_str(b, &v.0));
         }
         ColumnTypeSpec::Uuid => {
             encode_pg_array_ref::<Uuid>(buf, row, idx, |b, v| {

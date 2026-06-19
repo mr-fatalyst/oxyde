@@ -32,6 +32,7 @@ impl CellEncoder for SqliteEncoder {
             // datetime, date, time, decimal, uuid — stored as TEXT in SQLite
             ColumnTypeSpec::Text
             | ColumnTypeSpec::String { .. }
+            | ColumnTypeSpec::Enum { .. }
             | ColumnTypeSpec::DateTime
             | ColumnTypeSpec::DateTimeUtc
             | ColumnTypeSpec::Date

@@ -15,6 +15,7 @@ where Python/Rust payload shapes diverged silently.
 from __future__ import annotations
 
 import json
+from enum import Enum
 from pathlib import Path
 
 import pytest
@@ -24,13 +25,18 @@ from oxyde.core import migration_compute_diff, migration_to_sql
 from oxyde.migrations.context import MigrationContext
 from oxyde.migrations.extract import extract_current_schema
 from oxyde.migrations.generator import generate_migration_file
+from oxyde.migrations.replay import replay_migrations
 from oxyde.migrations.utils import load_migration_module
 from oxyde.models.registry import clear_registry
-
 
 ALL_DIALECTS = ["postgres", "mysql", "sqlite"]
 NON_SQLITE = ["postgres", "mysql"]
 PARTIAL_INDEX_DIALECTS = ["postgres", "sqlite"]
+
+
+class PublishState(Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
 
 
 def _snapshot_from_models(models: list[type[Model]], dialect: str) -> dict:
@@ -79,6 +85,47 @@ def _run_pipeline(
     return ops, up_sql, down_sql
 
 
+def _enum_snapshot(values: list[str]) -> dict:
+    return {
+        "version": 1,
+        "tables": {
+            "articles": {
+                "name": "articles",
+                "fields": [
+                    {
+                        "name": "id",
+                        "column_type": {"kind": "big_integer"},
+                        "db_type": None,
+                        "nullable": False,
+                        "primary_key": True,
+                        "unique": False,
+                        "default": None,
+                        "auto_increment": False,
+                    },
+                    {
+                        "name": "state",
+                        "column_type": {
+                            "kind": "enum",
+                            "name": "publish_state_enum",
+                            "values": values,
+                        },
+                        "db_type": None,
+                        "nullable": False,
+                        "primary_key": False,
+                        "unique": False,
+                        "default": None,
+                        "auto_increment": False,
+                    },
+                ],
+                "indexes": [],
+                "foreign_keys": [],
+                "checks": [],
+                "comment": None,
+            }
+        },
+    }
+
+
 class TestCreateTablePipeline:
     @pytest.mark.parametrize("dialect", ALL_DIALECTS)
     def test_create_table_from_scratch(self, tmp_path, dialect):
@@ -98,6 +145,117 @@ class TestCreateTablePipeline:
         assert any(op["type"] == "create_table" for op in ops)
         assert any("CREATE TABLE" in s.upper() and "users" in s for s in up_sql)
         assert any("DROP TABLE" in s.upper() and "users" in s for s in down_sql)
+
+
+class TestEnumPipeline:
+    @pytest.mark.parametrize("dialect", ALL_DIALECTS)
+    def test_create_table_with_enum(self, tmp_path, dialect):
+        class Article(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            state: PublishState = Field(default=PublishState.DRAFT)
+
+            class Meta:
+                is_table = True
+                table_name = "articles"
+
+        ops, up_sql, down_sql = _run_pipeline(
+            [], [Article], dialect, tmp_path, "create_articles"
+        )
+
+        assert [op["type"] for op in ops[:2]] == ["create_enum_type", "create_table"]
+        if dialect == "postgres":
+            assert up_sql[0] == (
+                'CREATE TYPE "publish_state_enum" AS ENUM ('
+                "'draft', 'published')"
+            )
+            assert any('"state" "publish_state_enum" NOT NULL' in s for s in up_sql)
+            assert down_sql[-1] == 'DROP TYPE "publish_state_enum"'
+        elif dialect == "mysql":
+            assert not any("CREATE TYPE" in s.upper() for s in up_sql)
+            assert any("ENUM('draft','published')" in s for s in up_sql)
+        else:
+            assert not any("CREATE TYPE" in s.upper() for s in up_sql)
+            assert any('"state" TEXT NOT NULL' in s for s in up_sql)
+
+    def test_add_enum_value_diff_emits_enum_op_only(self):
+        old = _enum_snapshot(["draft", "published"])
+        new = _enum_snapshot(["draft", "published", "archived"])
+
+        ops_json = migration_compute_diff(json.dumps(old), json.dumps(new))
+        ops = json.loads(ops_json)
+
+        assert len(ops) == 1
+        op = ops[0]
+        assert op["type"] == "add_enum_value"
+        assert op["name"] == "publish_state_enum"
+        assert op["value"] == "archived"
+        assert op["fields"][0]["table"] == "articles"
+        assert op["fields"][0]["field"]["name"] == "state"
+        assert migration_to_sql(ops_json, "postgres") == [
+            'ALTER TYPE "publish_state_enum" ADD VALUE IF NOT EXISTS \'archived\''
+        ]
+        assert migration_to_sql(ops_json, "mysql") == [
+            "ALTER TABLE `articles` MODIFY COLUMN `state` ENUM('draft','published','archived') NOT NULL"
+        ]
+
+    def test_add_multiple_enum_values_updates_mysql_inline_enum_progressively(self):
+        old = _enum_snapshot(["draft", "published"])
+        new = _enum_snapshot(["draft", "published", "archived", "deleted"])
+
+        ops_json = migration_compute_diff(json.dumps(old), json.dumps(new))
+        ops = json.loads(ops_json)
+
+        assert [op["value"] for op in ops] == ["archived", "deleted"]
+        assert migration_to_sql(ops_json, "mysql") == [
+            "ALTER TABLE `articles` MODIFY COLUMN `state` ENUM('draft','published','archived') NOT NULL",
+            "ALTER TABLE `articles` MODIFY COLUMN `state` ENUM('draft','published','archived','deleted') NOT NULL",
+        ]
+
+    def test_enum_value_removal_requires_manual_migration(self):
+        old = _enum_snapshot(["draft", "published"])
+        new = _enum_snapshot(["draft"])
+
+        ops_json = migration_compute_diff(json.dumps(old), json.dumps(new))
+        ops = json.loads(ops_json)
+
+        assert ops == [
+            {
+                "type": "alter_enum_type",
+                "name": "publish_state_enum",
+                "old_values": ["draft", "published"],
+                "new_values": ["draft"],
+            }
+        ]
+
+    def test_manual_enum_migration_file_contains_replay_marker(self, tmp_path):
+        old = _enum_snapshot(["draft", "published"])
+        new = _enum_snapshot(["draft"])
+        ops = json.loads(migration_compute_diff(json.dumps(old), json.dumps(new)))
+
+        empty = {"version": 1, "tables": {}}
+        create_ops = json.loads(migration_compute_diff(json.dumps(empty), json.dumps(old)))
+        generate_migration_file(
+            create_ops,
+            migrations_dir=tmp_path,
+            name="create_articles",
+        )
+        filepath = generate_migration_file(
+            ops,
+            migrations_dir=tmp_path,
+            name="alter_publish_state",
+        )
+        content = filepath.read_text()
+
+        assert "Manual enum migration required for publish_state_enum" in content
+        assert "ctx.alter_enum_type(" in content
+        assert "ctx.require_manual(" in content
+        assert "raise RuntimeError" not in content
+        assert "old_values=[" in content
+        assert "new_values=[" in content
+
+        replayed = replay_migrations(str(tmp_path))
+        state_field = replayed["tables"]["articles"]["fields"][1]
+        assert state_field["column_type"]["values"] == ["draft"]
 
 
 class TestAddColumnPipeline:

@@ -1,11 +1,11 @@
 //! UPDATE query building
 
 use oxyde_codec::{ColumnTypeSpec, QueryIR};
-use sea_query::{Expr, MysqlQueryBuilder, PostgresQueryBuilder, Query, SqliteQueryBuilder, Value};
+use sea_query::{MysqlQueryBuilder, PostgresQueryBuilder, Query, SqliteQueryBuilder, Value};
 
 use crate::error::Result;
 use crate::filter::build_filter_node;
-use crate::utils::{bind_value, rmpv_to_simple_expr, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, rmpv_to_simple_expr, typed_value_expr, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build UPDATE query from QueryIR
@@ -32,9 +32,10 @@ pub fn build_update(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
             if let Some(expr) = rmpv_to_simple_expr(val)? {
                 query.value(ColumnIdent(col.clone()), expr);
             } else {
+                let spec = get_spec(col);
                 query.value(
                     ColumnIdent(col.clone()),
-                    Expr::val(bind_value(val, get_spec(col))),
+                    typed_value_expr(bind_value(val, spec), spec, dialect),
                 );
             }
         }
@@ -42,7 +43,7 @@ pub fn build_update(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
 
     // Add filters (no JOIN in UPDATE, so no table qualification needed)
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree, None, ir.column_types.as_ref(), None)?;
+        let expr = build_filter_node(filter_tree, None, ir.column_types.as_ref(), None, dialect)?;
         query.and_where(expr);
     }
 

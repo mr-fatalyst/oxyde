@@ -121,7 +121,8 @@ pub fn build_sql(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value>)>
 mod tests {
     use super::*;
     use oxyde_codec::{
-        ConflictAction, Filter, FilterNode, JoinColumn, JoinSpec, OnConflict, Operation, QueryIR,
+        ColumnTypeSpec, ConflictAction, Filter, FilterNode, JoinColumn, JoinSpec, OnConflict,
+        Operation, QueryIR,
     };
     use std::collections::HashMap;
 
@@ -139,6 +140,13 @@ mod tests {
 
     fn rmpv_arr(vals: Vec<rmpv::Value>) -> rmpv::Value {
         rmpv::Value::Array(vals)
+    }
+
+    fn enum_spec() -> ColumnTypeSpec {
+        ColumnTypeSpec::Enum {
+            name: "post_status_enum".into(),
+            values: vec!["draft".into(), "published".into()],
+        }
     }
 
     /// Helper to create a simple condition filter node
@@ -212,6 +220,39 @@ mod tests {
             Value::BigInt(Some(v)) => assert_eq!(*v, 42),
             other => panic!("unexpected param value: {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_insert_enum_value_is_cast_on_postgres() {
+        let ir = QueryIR {
+            op: Operation::Insert,
+            table: "posts".into(),
+            values: Some(HashMap::from([("status".into(), rmpv_str("draft"))])),
+            column_types: Some(HashMap::from([("status".into(), enum_spec())])),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("$1::\"post_status_enum\""), "{sql}");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_filter_enum_in_values_are_cast_on_postgres() {
+        let ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_cond(
+                "status",
+                "IN",
+                rmpv_arr(vec![rmpv_str("draft"), rmpv_str("published")]),
+            )),
+            column_types: Some(HashMap::from([("status".into(), enum_spec())])),
+            ..Default::default()
+        };
+        let (sql, params) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("$1::\"post_status_enum\""), "{sql}");
+        assert!(sql.contains("$2::\"post_status_enum\""), "{sql}");
+        assert_eq!(params.len(), 2);
     }
 
     #[test]

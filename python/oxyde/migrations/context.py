@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     from oxyde.migrations.replay import SchemaState
 
 
+def _is_postgres_enum_add_value_sql(sql: str) -> bool:
+    upper = sql.strip().upper()
+    return upper.startswith("ALTER TYPE ") and " ADD VALUE " in upper
+
+
 class MigrationContext:
     """Context for executing migrations.
 
@@ -62,6 +67,67 @@ class MigrationContext:
             Database dialect: "sqlite", "postgres", or "mysql"
         """
         return self._dialect
+
+    def create_enum_type(self, name: str, values: list[str]) -> None:
+        op = {
+            "type": "create_enum_type",
+            "name": name,
+            "values": values,
+        }
+
+        if self._mode == "collect":
+            self._operations.append(op)
+        else:
+            self._execute_operation(op)
+
+    def drop_enum_type(self, name: str) -> None:
+        op = {
+            "type": "drop_enum_type",
+            "name": name,
+        }
+
+        if self._mode == "collect":
+            self._operations.append(op)
+        else:
+            self._execute_operation(op)
+
+    def add_enum_value(
+        self,
+        name: str,
+        value: str,
+        fields: list[dict[str, Any]] | None = None,
+    ) -> None:
+        op = {
+            "type": "add_enum_value",
+            "name": name,
+            "value": value,
+            "fields": fields or [],
+        }
+
+        if self._mode == "collect":
+            self._operations.append(op)
+        else:
+            self._execute_operation(op)
+
+    def alter_enum_type(
+        self,
+        name: str,
+        old_values: list[str],
+        new_values: list[str],
+    ) -> None:
+        op = {
+            "type": "alter_enum_type",
+            "name": name,
+            "old_values": old_values,
+            "new_values": new_values,
+        }
+
+        if self._mode == "collect":
+            self._operations.append(op)
+
+    def require_manual(self, message: str) -> None:
+        if self._mode == "execute":
+            raise RuntimeError(message)
 
     # ========================================================================
     # Table operations
@@ -482,7 +548,7 @@ class MigrationContext:
         This is called by the executor after upgrade() completes.
 
         Transaction behavior by dialect:
-        - PostgreSQL: DDL is transactional, uses Rust transaction API
+        - PostgreSQL: DDL is transactional except ALTER TYPE ADD VALUE chains
         - SQLite: DDL is transactional, uses Rust transaction API
         - MySQL: DDL is NOT transactional (implicit commit), no wrapping
 
@@ -497,8 +563,7 @@ class MigrationContext:
         if self._db_conn is None:
             raise RuntimeError("Cannot execute SQL: no database connection provided")
 
-        # MySQL doesn't support transactional DDL
-        use_transaction = self._dialect in ("postgres", "sqlite")
+        use_transaction = self._should_use_transaction()
 
         tx_id = None
         try:
@@ -527,6 +592,16 @@ class MigrationContext:
         finally:
             # Clear collected statements
             self._sql_statements = []
+
+    def _should_use_transaction(self) -> bool:
+        if self._dialect == "mysql":
+            return False
+        if self._dialect == "postgres" and any(
+            _is_postgres_enum_add_value_sql(sql)
+            for sql in getattr(self, "_sql_statements", [])
+        ):
+            return False
+        return self._dialect in ("postgres", "sqlite")
 
 
 __all__ = ["MigrationContext"]

@@ -130,6 +130,10 @@ pub enum ColumnTypeSpec {
     Json,
     /// JSONB on Postgres; identical to Json elsewhere.
     JsonBinary,
+    Enum {
+        name: String,
+        values: Vec<String>,
+    },
     Array {
         item: Box<ColumnTypeSpec>,
     },
@@ -614,6 +618,19 @@ mod tests {
     }
 
     #[test]
+    fn test_spec_enum() {
+        assert_eq!(
+            spec_from_json(
+                r#"{"kind": "enum", "name": "post_status_enum", "values": ["draft", "published"]}"#
+            ),
+            ColumnTypeSpec::Enum {
+                name: "post_status_enum".into(),
+                values: vec!["draft".into(), "published".into()],
+            }
+        );
+    }
+
+    #[test]
     fn test_spec_unknown_kind_is_error() {
         let result: std::result::Result<ColumnTypeSpec, _> =
             serde_json::from_str(r#"{"kind": "flux_capacitor"}"#);
@@ -631,6 +648,10 @@ mod tests {
             },
             ColumnTypeSpec::Array {
                 item: Box::new(ColumnTypeSpec::Uuid),
+            },
+            ColumnTypeSpec::Enum {
+                name: "post_status_enum".into(),
+                values: vec!["draft".into(), "published".into()],
             },
             ColumnTypeSpec::Unknown,
         ];

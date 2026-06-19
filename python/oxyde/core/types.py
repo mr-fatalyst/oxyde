@@ -15,6 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -55,6 +56,8 @@ def serialize_value(value: Any) -> Any:
         return [serialize_value(v) for v in value]
     if isinstance(value, dict):
         return {k: serialize_value(v) for k, v in value.items()}
+    if isinstance(value, Enum):
+        return value.value
     desc = TYPE_REGISTRY.get(type(value))
     if desc is not None:
         return desc.serialize(value)

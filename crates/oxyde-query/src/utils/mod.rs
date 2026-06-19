@@ -5,6 +5,6 @@ pub mod identifier;
 pub mod value;
 
 // Re-exports for convenience
-pub use bind::{bind_value, rmpv_to_value};
+pub use bind::{bind_value, rmpv_to_value, typed_value_expr};
 pub use identifier::{ColumnIdent, TableIdent};
 pub use value::{parse_expression, rmpv_to_simple_expr};

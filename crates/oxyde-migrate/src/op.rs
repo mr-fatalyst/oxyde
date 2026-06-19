@@ -3,10 +3,36 @@
 use crate::types::{CheckDef, FieldDef, ForeignKeyDef, IndexDef, TableDef};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnumFieldRef {
+    pub table: String,
+    pub field: FieldDef,
+}
+
 /// Migration operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MigrationOp {
+    CreateEnumType {
+        name: String,
+        values: Vec<String>,
+    },
+    DropEnumType {
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        values: Option<Vec<String>>,
+    },
+    AddEnumValue {
+        name: String,
+        value: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        fields: Vec<EnumFieldRef>,
+    },
+    AlterEnumType {
+        name: String,
+        old_values: Vec<String>,
+        new_values: Vec<String>,
+    },
     CreateTable {
         table: TableDef,
     },

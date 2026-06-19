@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from enum import Enum
 from uuid import UUID
 
 import pytest
@@ -33,6 +34,11 @@ U = UUID("550e8400-e29b-41d4-a716-446655440000")
 DEC = Decimal("99.99")
 
 
+class Status(Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+
 # -- Model covering all supported types --
 
 
@@ -56,6 +62,8 @@ class TypeModel(Model):
     decimal_tags: list[Decimal] | None = Field(
         default=None, db_nullable=True, max_digits=10, decimal_places=2
     )
+    status: Status = Field(default=Status.DRAFT)
+    status_tags: list[Status] | None = Field(default=None, db_nullable=True)
 
     class Meta:
         is_table = True
@@ -82,6 +90,7 @@ FILTER_CASES = [
     ("decimal", {"price": DEC}, [("Decimal", str(DEC))]),
     ("bytes", {"blob": b"hello"}, [("Bytes", b"hello")]),
     ("dict_json", {"data": {"key": "val"}}, [("Json", '{"key":"val"}')]),
+    ("enum", {"status": Status.DRAFT}, [("String", "draft")]),
     (
         "list_str_array",
         {"tags": ["a", "b"]},
@@ -101,6 +110,11 @@ FILTER_CASES = [
         "list_decimal_array",
         {"decimal_tags": [DEC]},
         [("Array", ("Decimal", [str(DEC)]))],
+    ),
+    (
+        "list_enum_array",
+        {"status_tags": [Status.DRAFT, Status.PUBLISHED]},
+        [("Array", ("String", ["draft", "published"]))],
     ),
 ]
 
@@ -223,6 +237,12 @@ def test_without_types_returns_plain_values():
     assert params == [25, "Alice"]
     assert isinstance(params[0], int)
     assert isinstance(params[1], str)
+
+
+def test_postgres_enum_filter_casts_parameter():
+    sql, params = TypeModel.objects.filter(status=Status.DRAFT).sql(dialect="postgres")
+    assert '$1::"status_enum"' in sql
+    assert params == ["draft"]
 
 
 # ---- count() / exists() use to_ir() and inherit column_types ----

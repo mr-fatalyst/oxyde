@@ -8,12 +8,18 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from enum import Enum
 from typing import Annotated
 from uuid import UUID
 
 import pytest
 
 from oxyde import Field, Model
+
+
+class Status(Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
 
 
 # ── Model with all type variations ────────────────────────────────────
@@ -35,6 +41,7 @@ class DbTypesModel(Model):
     infer_uuid: UUID | None = Field(default=None, db_nullable=True)
     infer_decimal: Decimal | None = Field(default=None, db_nullable=True)
     infer_json: dict | None = Field(default=None, db_nullable=True)
+    infer_enum: Status = Field(default=Status.DRAFT)
 
     # Explicit db_type (scalar)
     db_uuid: str = Field(default="", db_type="UUID")
@@ -67,12 +74,15 @@ class DbTypesModel(Model):
     db_real: float = Field(default=0.0, db_type="REAL")
     db_bytea: bytes | None = Field(default=None, db_nullable=True, db_type="BYTEA")
     db_blob: bytes | None = Field(default=None, db_nullable=True, db_type="BLOB")
+    db_enum: Status = Field(default=Status.DRAFT, db_type="post_status_enum")
+    db_enum_as_text: Status = Field(default=Status.DRAFT, db_type="TEXT")
 
     # Inferred array types (no db_type)
     infer_str_list: list[str] | None = Field(default=None, db_nullable=True)
     infer_int_list: list[int] | None = Field(default=None, db_nullable=True)
     infer_uuid_list: list[UUID] | None = Field(default=None, db_nullable=True)
     infer_decimal_list: list[Decimal] | None = Field(default=None, db_nullable=True)
+    infer_enum_list: list[Status] | None = Field(default=None, db_nullable=True)
 
     # Explicit db_type on arrays
     db_varchar_arr: list[str] | None = Field(
@@ -120,6 +130,10 @@ COL_TYPE_CASES = [
     ("infer_uuid", {"kind": "uuid"}),
     ("infer_decimal", {"kind": "decimal"}),
     ("infer_json", {"kind": "json"}),
+    (
+        "infer_enum",
+        {"kind": "enum", "name": "status_enum", "values": ["draft", "published"]},
+    ),
     # Explicit db_type scalar — semantic kind via KNOWN_DB_TYPES,
     # the verbatim string travels separately (FieldDef.db_type)
     ("db_uuid", {"kind": "uuid"}),
@@ -144,11 +158,31 @@ COL_TYPE_CASES = [
     ("db_real", {"kind": "double"}),
     ("db_bytea", {"kind": "blob"}),
     ("db_blob", {"kind": "blob"}),
+    (
+        "db_enum",
+        {
+            "kind": "enum",
+            "name": "post_status_enum",
+            "values": ["draft", "published"],
+        },
+    ),
+    ("db_enum_as_text", {"kind": "text"}),
     # Inferred arrays
     ("infer_str_list", {"kind": "array", "item": {"kind": "string"}}),
     ("infer_int_list", {"kind": "array", "item": {"kind": "big_integer"}}),
     ("infer_uuid_list", {"kind": "array", "item": {"kind": "uuid"}}),
     ("infer_decimal_list", {"kind": "array", "item": {"kind": "decimal"}}),
+    (
+        "infer_enum_list",
+        {
+            "kind": "array",
+            "item": {
+                "kind": "enum",
+                "name": "status_enum",
+                "values": ["draft", "published"],
+            },
+        },
+    ),
     # Explicit db_type arrays — kind per element, params parsed
     ("db_varchar_arr", {"kind": "array", "item": {"kind": "string", "length": 100}}),
     (
