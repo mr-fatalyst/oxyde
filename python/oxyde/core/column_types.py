@@ -277,7 +277,9 @@ def _enum_values(enum_type: type[Enum]) -> list[str]:
         value = member.value
         if not isinstance(value, str):
             raise TypeError(
-                f"Enum field '{enum_type.__name__}' must define string values"
+                f"Enum field '{enum_type.__name__}' must define string values. "
+                "Use a str-valued Enum for database enum columns, or annotate "
+                "the field as int for integer storage."
             )
         values.append(value)
     return values

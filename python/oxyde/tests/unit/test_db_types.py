@@ -8,18 +8,24 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Annotated
 from uuid import UUID
 
 import pytest
 
 from oxyde import Field, Model
+from oxyde.models.registry import clear_registry
 
 
 class Status(Enum):
     DRAFT = "draft"
     PUBLISHED = "published"
+
+
+class Priority(IntEnum):
+    LOW = 1
+    HIGH = 2
 
 
 # ── Model with all type variations ────────────────────────────────────
@@ -219,6 +225,19 @@ class TestColTypes:
         assert column_types[field] == expected, (
             f"{field}: got {column_types.get(field)!r}, expected {expected!r}"
         )
+
+    def test_int_enum_error_is_actionable(self):
+        clear_registry()
+
+        with pytest.raises(TypeError, match="Use a str-valued Enum"):
+
+            class Task(Model):
+                id: int | None = Field(default=None, db_pk=True)
+                priority: Priority = Field(default=Priority.LOW)
+
+                class Meta:
+                    is_table = True
+                    table_name = "int_enum_tasks"
 
 
 # ── Annotated inner constraints extraction ────────────────────────────
