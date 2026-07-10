@@ -68,7 +68,9 @@ def _operation_to_python(op: dict[str, Any], indent: str = "    ") -> str:
 
     if op_type == "create_enum_type":
         values_repr = _python_repr(op["values"])
-        return f"{indent}ctx.create_enum_type({_python_repr(op['name'])}, {values_repr})"
+        return (
+            f"{indent}ctx.create_enum_type({_python_repr(op['name'])}, {values_repr})"
+        )
 
     elif op_type == "drop_enum_type":
         return f"{indent}ctx.drop_enum_type({_python_repr(op['name'])})"
@@ -369,9 +371,7 @@ def generate_migration_file(
                 f"Cannot automatically remove enum value {op['value']} "
                 f"from {op['name']}"
             )
-            downgrade_lines.append(
-                f"    raise RuntimeError({_python_repr(message)})"
-            )
+            downgrade_lines.append(f"    raise RuntimeError({_python_repr(message)})")
         elif op_type == "alter_enum_type":
             message = (
                 f"Manual enum migration required for {op['name']}: "

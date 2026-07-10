@@ -14,7 +14,9 @@ from oxyde.migrations.utils import (
 )
 
 
-def _add_enum_value_to_spec(spec: dict[str, Any], name: str, value: str) -> dict[str, Any]:
+def _add_enum_value_to_spec(
+    spec: dict[str, Any], name: str, value: str
+) -> dict[str, Any]:
     if spec.get("kind") == "enum" and spec.get("name") == name:
         updated = dict(spec)
         values = list(updated.get("values", []))
