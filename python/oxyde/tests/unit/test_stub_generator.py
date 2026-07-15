@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from datetime import date, datetime, time
 from decimal import Decimal
 from uuid import UUID
@@ -9,7 +10,12 @@ from uuid import UUID
 import pytest
 
 from oxyde import Field, Model
-from oxyde.codegen.stub_generator import _get_python_type_name
+from oxyde.codegen.stub_generator import (
+    _assemble_imports,
+    _extract_top_level_copyable,
+    _generate_filter_params,
+    _get_python_type_name,
+)
 
 
 class TestGetPythonTypeName:
@@ -72,3 +78,90 @@ class TestGetPythonTypeName:
                 is_table = True
 
         assert _get_python_type_name(MyModel) == "MyModel"
+
+
+class TestExtractTopLevelCopyable:
+    """Test extraction of imports and function stubs from model source."""
+
+    def test_future_import_dropped(self):
+        """`from __future__ import ...` must never reach the stub (issue #43)."""
+        tree = ast.parse(
+            "from __future__ import annotations\nfrom pydantic import field_validator\n"
+        )
+        imports, functions = _extract_top_level_copyable(tree)
+        assert [ast.unparse(node) for node in imports] == [
+            "from pydantic import field_validator"
+        ]
+        assert functions == []
+
+    def test_overload_implementation_dropped(self):
+        """Only @overload variants survive; the implementation body is dropped."""
+        tree = ast.parse(
+            "from typing import overload\n"
+            "@overload\n"
+            "def f(x: int) -> str: ...\n"
+            "@overload\n"
+            "def f(x: str) -> int: ...\n"
+            "def f(x): return x\n"
+        )
+        _, functions = _extract_top_level_copyable(tree)
+        assert len(functions) == 2
+        assert all("@overload" in fn for fn in functions)
+
+
+class TestAssembleImports:
+    """Test the stub import block assembly (dedupe, unused-drop, merging)."""
+
+    @staticmethod
+    def _imports(source: str) -> list[ast.Import | ast.ImportFrom]:
+        imports, _ = _extract_top_level_copyable(ast.parse(source))
+        return imports
+
+    def test_skeleton_names_deduped_and_unused_dropped(self):
+        """User re-imports of skeleton names and unused names are dropped."""
+        imports = self._imports(
+            "from datetime import datetime\n"
+            "from typing import Any\n"
+            "from uuid import UUID, uuid4\n"
+            "from oxyde import Field, Model\n"
+        )
+        body = "created_at: datetime\nmeta: dict[str, Any]\nslug: UUID\nx: Any\n"
+        lines = _assemble_imports(imports, body)
+        joined = "\n".join(lines)
+        assert joined.count("from datetime import") == 1
+        assert joined.count("from uuid import") == 1
+        assert "uuid4" not in joined
+        assert "Field" not in joined
+        assert "from oxyde import Model" in lines
+
+    def test_used_third_party_import_survives(self):
+        """Imports the stub body still references are kept (cross-module FK)."""
+        imports = self._imports(
+            "from pydantic import model_validator\nfrom sibling import Owner\n"
+        )
+        body = "@model_validator(mode='after')\nowner: Owner | None\n"
+        lines = _assemble_imports(imports, body)
+        assert "from pydantic import model_validator" in lines
+        assert "from sibling import Owner" in lines
+
+    def test_stdlib_user_import_merged_into_skeleton_block(self):
+        """A user stdlib from-import merges with the skeleton's module line."""
+        imports = self._imports("from typing import overload\n")
+        body = "@overload\ndef f(x: int) -> str: ...\nx: Any\ny: ClassVar[int]\n"
+        lines = _assemble_imports(imports, body)
+        typing_lines = [ln for ln in lines if ln.startswith("from typing import")]
+        assert typing_lines == ["from typing import Any, ClassVar, overload"]
+
+
+class TestGenerateFilterParams:
+    """Test lookup parameter generation."""
+
+    def test_range_lookup_takes_a_pair(self):
+        """`__range` accepts a (lo, hi) tuple at runtime, like `__between`."""
+
+        class Ranged(Model):
+            id: int = Field(db_pk=True)
+
+        params = _generate_filter_params(Ranged)
+        assert "id__range: tuple[int, int] | None = None," in params
+        assert "id__between: tuple[int, int] | None = None," in params

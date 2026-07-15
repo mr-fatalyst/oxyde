@@ -48,12 +48,22 @@ def generate_stubs(tmp_path: Path) -> Iterator[Callable[[Path, str], Path]]:
         if tmp_on_path not in sys.path:
             sys.path.insert(0, tmp_on_path)
             path_inserted = True
-        model_file = tmp_path / f"{model_module}.py"
-        _import_from_path(model_module, model_file)
-        injected_modules.append(model_module)
-        finalize_pending()
-
         tmp_root = tmp_path.resolve()
+        model_file = tmp_path / f"{model_module}.py"
+        modules_before = set(sys.modules)
+        _import_from_path(model_module, model_file)
+        # Track transitively imported fixture modules (e.g. a sibling model
+        # module pulled in via `from sibling import Owner`) too — a stale
+        # sys.modules entry would skip re-registration on the next test and
+        # silently lose that module's stub.
+        injected_modules.extend(
+            name
+            for name in sys.modules
+            if name not in modules_before
+            and (module_file := getattr(sys.modules[name], "__file__", None))
+            and Path(module_file).resolve().is_relative_to(tmp_root)
+        )
+        finalize_pending()
         models = [
             m
             for m in registered_tables().values()

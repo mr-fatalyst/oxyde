@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 import copy
 import inspect
+import re
+import sys
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
@@ -144,7 +146,7 @@ def _generate_filter_params(model_class: type[Model]) -> str:
             # Determine type for lookup
             if lookup == "in":
                 lookup_type = f"list[{type_name}] | None"
-            elif lookup == "between":
+            elif lookup in ("between", "range"):
                 lookup_type = f"tuple[{type_name}, {type_name}] | None"
             elif lookup == "isnull":
                 lookup_type = "bool | None"
@@ -224,12 +226,16 @@ def _has_overload_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> boo
     return False
 
 
-def _extract_top_level_copyable(tree: ast.Module) -> list[str]:
-    """Copy top-level imports and function definitions in source order.
+def _extract_top_level_copyable(
+    tree: ast.Module,
+) -> tuple[list[ast.Import | ast.ImportFrom], list[str]]:
+    """Collect top-level imports (as AST nodes) and function stubs from source.
 
-    - ``Import`` / ``ImportFrom``: copied verbatim (needed for cross-module type
-      resolution and for type references used by helper functions).
-    - ``FunctionDef`` / ``AsyncFunctionDef``: copied with body replaced by
+    - ``Import`` / ``ImportFrom``: returned as AST nodes so the caller can
+      dedupe them against the stub skeleton imports and drop unused ones.
+      ``from __future__ import ...`` is dropped entirely — a ``.pyi`` never
+      needs it, and anywhere but the top of the file it is a syntax error.
+    - ``FunctionDef`` / ``AsyncFunctionDef``: returned with body replaced by
       ``...`` (stub convention). Decorators and type annotations are preserved.
       For ``@overload`` functions, only the ``@overload``-decorated variants are
       kept; the implementation body (PEP 484 requires one in a ``.py`` file but
@@ -244,10 +250,13 @@ def _extract_top_level_copyable(tree: ast.Module) -> list[str]:
         and _has_overload_decorator(node)
     }
 
-    result: list[str] = []
+    imports: list[ast.Import | ast.ImportFrom] = []
+    functions: list[str] = []
     for node in tree.body:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            result.append(ast.unparse(node))
+            if isinstance(node, ast.ImportFrom) and node.module == "__future__":
+                continue
+            imports.append(node)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             # Skip the non-@overload implementation of an overloaded function —
             # `.pyi` cannot contain such an implementation.
@@ -255,8 +264,85 @@ def _extract_top_level_copyable(tree: ast.Module) -> list[str]:
                 continue
             node_copy = copy.deepcopy(node)
             node_copy.body = [ast.Expr(value=ast.Constant(value=Ellipsis))]
-            result.append(ast.unparse(node_copy))
-    return result
+            functions.append(ast.unparse(node_copy))
+    return imports, functions
+
+
+# Names the generated stub skeleton may reference, grouped by stdlib module.
+# Each is emitted only when the generated body actually uses it.
+_STUB_HEADER_IMPORTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("datetime", ("date", "datetime", "time")),
+    ("decimal", ("Decimal",)),
+    ("typing", ("Any", "ClassVar", "Literal")),
+    ("uuid", ("UUID",)),
+)
+
+
+def _is_name_used(name: str, body: str) -> bool:
+    return re.search(rf"\b{re.escape(name)}\b", body) is not None
+
+
+def _assemble_imports(
+    user_imports: list[ast.Import | ast.ImportFrom], body: str
+) -> list[str]:
+    """Build the stub import block: skeleton imports plus surviving user imports.
+
+    Skeleton names (typing/datetime/decimal/uuid + oxyde) are emitted only when
+    the generated body references them. User imports are kept for names the body
+    still needs (cross-module FK types, custom-method signatures, decorators);
+    unused names and duplicates of skeleton names are dropped — on a name
+    collision the skeleton import wins, since the generated code references the
+    skeleton's meaning of that name. Stdlib ``from`` imports are merged with the
+    skeleton block so each module is imported once.
+    """
+    stdlib_from: dict[str, set[str]] = {}
+    for module, names in _STUB_HEADER_IMPORTS:
+        used = {name for name in names if _is_name_used(name, body)}
+        if used:
+            stdlib_from[module] = used
+
+    provided: set[str] = {"Model", "Query", "QueryManager"}
+    provided.update(*stdlib_from.values())
+
+    other_lines: list[str] = []
+    for node in user_imports:
+        kept = [
+            alias
+            for alias in node.names
+            if (bound := alias.asname or alias.name.split(".")[0]) not in provided
+            and _is_name_used(bound, body)
+        ]
+        if not kept:
+            continue
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module is not None
+            and node.module.split(".")[0] in sys.stdlib_module_names
+            and all(alias.asname is None for alias in kept)
+        ):
+            stdlib_from.setdefault(node.module, set()).update(a.name for a in kept)
+            continue
+        node_copy = copy.deepcopy(node)
+        node_copy.names = [copy.deepcopy(alias) for alias in kept]
+        other_lines.append(ast.unparse(node_copy))
+
+    lines = [
+        f"from {module} import {', '.join(sorted(names))}"
+        for module, names in sorted(stdlib_from.items())
+    ]
+    if lines:
+        lines.append("")
+    lines.extend(
+        sorted(
+            [
+                "from oxyde import Model",
+                "from oxyde.queries import Query, QueryManager",
+                *other_lines,
+            ]
+        )
+    )
+    return lines
 
 
 def _extract_custom_methods(class_def: ast.ClassDef) -> list[str]:
@@ -322,8 +408,13 @@ def _generate_model_class_stub(
         for raw_line in method_src.splitlines():
             lines.append(f"    {raw_line}" if raw_line else "")
 
-    # Add objects manager with proper type
-    lines.append(f'    objects: ClassVar["{model_name}Manager"]')
+    # Add objects manager with proper type. The base Model declares
+    # `objects: ClassVar[QueryManager]`; narrowing it here is intentional,
+    # so silence pyright's invariant-variable-override check.
+    lines.append(
+        f"    objects: ClassVar[{model_name}Manager]"
+        "  # pyright: ignore[reportIncompatibleVariableOverride]"
+    )
 
     return "\n".join(lines)
 
@@ -348,7 +439,7 @@ class {model_name}Query(Query[{model_name}]):
         self,
         *args: Any,
 {filter_params}
-    ) -> "{model_name}Query":
+    ) -> {model_name}Query:
         \"\"\"Filter by Q-expressions or field lookups.\"\"\"
         ...
 
@@ -356,63 +447,63 @@ class {model_name}Query(Query[{model_name}]):
         self,
         *args: Any,
 {filter_params}
-    ) -> "{model_name}Query":
+    ) -> {model_name}Query:
         \"\"\"Exclude objects matching field lookups.\"\"\"
         ...
 
-    def order_by(self, *fields: {order_by_literal}) -> "{model_name}Query":  # type: ignore[override]
+    def order_by(self, *fields: {order_by_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         \"\"\"Order results by fields.\"\"\"
         ...
 
-    def limit(self, n: int) -> "{model_name}Query":
+    def limit(self, value: int) -> {model_name}Query:
         \"\"\"Limit number of results.\"\"\"
         ...
 
-    def offset(self, n: int) -> "{model_name}Query":
-        \"\"\"Skip first n results.\"\"\"
+    def offset(self, value: int) -> {model_name}Query:
+        \"\"\"Skip first value results.\"\"\"
         ...
 
-    def distinct(self, value: bool = True) -> "{model_name}Query":
+    def distinct(self, distinct: bool = True) -> {model_name}Query:
         \"\"\"Return distinct results.\"\"\"
         ...
 
-    def select(self, *fields: {field_literal}) -> "{model_name}Query":  # type: ignore[override]
+    def select(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         \"\"\"Select specific fields.\"\"\"
         ...
 
-    def join(self, *paths: str) -> "{model_name}Query":
+    def join(self, *paths: str) -> {model_name}Query:
         \"\"\"Perform LEFT JOIN for relations.\"\"\"
         ...
 
-    def prefetch(self, *paths: str) -> "{model_name}Query":
+    def prefetch(self, *paths: str) -> {model_name}Query:
         \"\"\"Prefetch related objects (separate queries).\"\"\"
         ...
 
-    def for_update(self) -> "{model_name}Query":
+    def for_update(self) -> {model_name}Query:
         \"\"\"Add FOR UPDATE lock to query.\"\"\"
         ...
 
-    def for_share(self) -> "{model_name}Query":
+    def for_share(self) -> {model_name}Query:
         \"\"\"Add FOR SHARE lock to query.\"\"\"
         ...
 
-    def annotate(self, **annotations: Any) -> "{model_name}Query":
+    def annotate(self, **annotations: Any) -> {model_name}Query:
         \"\"\"Add computed fields using aggregate functions.\"\"\"
         ...
 
-    def group_by(self, *fields: {field_literal}) -> "{model_name}Query":  # type: ignore[override]
+    def group_by(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         \"\"\"Add GROUP BY clause.\"\"\"
         ...
 
-    def having(self, *q_exprs: Any, **kwargs: Any) -> "{model_name}Query":
+    def having(self, *q_exprs: Any, **kwargs: Any) -> {model_name}Query:
         \"\"\"Add HAVING clause for filtering grouped results.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> "{model_name}Query":  # type: ignore[override]
+    def values(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    def values_list(self, *fields: {field_literal}, flat: bool = False) -> "{model_name}Query":  # type: ignore[override]
+    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         \"\"\"Return tuples/values instead of models.\"\"\"
         ...
 
@@ -494,7 +585,7 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Get minimum field value.\"\"\"
         ...
 
-    async def update(  # type: ignore[override]
+    async def update(  # type: ignore[override]  # ty: ignore[invalid-method-override]
         self,
         *,
         client: Any | None = None,
@@ -552,11 +643,11 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Exclude objects matching field lookups.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]
+    def values(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}Query:  # type: ignore[override]
+    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         \"\"\"Return tuples/values instead of models.\"\"\"
         ...
 
@@ -701,7 +792,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Get minimum field value.\"\"\"
         ...
 
-    async def create(  # type: ignore[override]
+    async def create(  # type: ignore[override]  # ty: ignore[invalid-method-override]
         self,
         *,
         instance: {model_name} | None = None,
@@ -712,7 +803,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Create new object.\"\"\"
         ...
 
-    async def bulk_create(  # type: ignore[override]
+    async def bulk_create(  # type: ignore[override]  # ty: ignore[invalid-method-override]
         self,
         objects: list[{model_name}],
         *,
@@ -723,7 +814,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Bulk create objects.\"\"\"
         ...
 
-    async def bulk_update(  # type: ignore[override]
+    async def bulk_update(  # type: ignore[override]  # ty: ignore[invalid-method-override]
         self,
         objects: list[{model_name}],
         fields: list[str],
@@ -741,16 +832,16 @@ class {model_name}Manager(QueryManager[{model_name}]):
 def _build_stub(file_path: Path, models: list[type[Model]]) -> str:
     """Build .pyi stub content for a source file that contains Model classes.
 
-    Policy: the .pyi covers models only. From the source we copy top-level
-    imports (needed to resolve cross-module FK types) and custom methods
-    defined directly on each Model class. Non-model top-level code (functions,
-    dataclasses, constants) is intentionally not propagated — models belong
-    in dedicated files.
+    Policy: the .pyi covers models plus top-level functions (as stubs). From
+    the source we also keep the imports still referenced by the generated body
+    (cross-module FK types, custom-method signatures, decorators); everything
+    else at top level (classes, dataclasses, constants) is intentionally not
+    propagated — those belong in dedicated modules.
     """
     source = file_path.read_text()
     tree = ast.parse(source)
 
-    user_imports = _extract_top_level_copyable(tree)
+    user_imports, function_stubs = _extract_top_level_copyable(tree)
 
     model_names = {m.__name__ for m in models}
     custom_methods_by_model: dict[str, list[str]] = {}
@@ -758,35 +849,30 @@ def _build_stub(file_path: Path, models: list[type[Model]]) -> str:
         if isinstance(node, ast.ClassDef) and node.name in model_names:
             custom_methods_by_model[node.name] = _extract_custom_methods(node)
 
-    parts: list[str] = [
-        "# Auto-generated by oxyde generate-stubs",
-        "# DO NOT EDIT - This file will be overwritten",
-        "",
-        "from typing import Any, ClassVar, Literal",
-        "from datetime import datetime, date, time",
-        "from decimal import Decimal",
-        "from uuid import UUID",
-        "",
-        "from oxyde import Model",
-        "from oxyde.queries import Query, QueryManager",
-        "",
-    ]
-
-    if user_imports:
-        parts.extend(user_imports)
-        parts.append("")
-
+    body_parts: list[str] = []
+    for function_stub in function_stubs:
+        body_parts.append(function_stub)
+        body_parts.append("")
     for model in models:
-        parts.append(
+        body_parts.append(
             _generate_model_class_stub(
                 model,
                 custom_methods_by_model.get(model.__name__, []),
             )
         )
-        parts.append("")
-        parts.append(generate_model_stub(model))
-        parts.append("")
+        body_parts.append("")
+        body_parts.append(generate_model_stub(model))
+        body_parts.append("")
+    body = "\n".join(body_parts)
 
+    parts: list[str] = [
+        "# Auto-generated by oxyde generate-stubs",
+        "# DO NOT EDIT - This file will be overwritten",
+        "",
+        *_assemble_imports(user_imports, body),
+        "",
+        body,
+    ]
     return "\n".join(parts)
 
 
@@ -794,7 +880,6 @@ def generate_stub_for_file(file_path: Path) -> None:
     """Generate .pyi stub file for models in a Python file."""
     # Import the module to get model classes
     import importlib.util
-    import sys
 
     spec = importlib.util.spec_from_file_location("temp_module", file_path)
     if spec is None or spec.loader is None:
