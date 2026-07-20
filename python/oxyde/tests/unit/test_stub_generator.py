@@ -12,7 +12,9 @@ import pytest
 from oxyde import Field, Model
 from oxyde.codegen.stub_generator import (
     _assemble_imports,
+    _extract_custom_methods,
     _extract_top_level_copyable,
+    _generate_create_params,
     _generate_filter_params,
     _get_python_type_name,
 )
@@ -157,11 +159,83 @@ class TestGenerateFilterParams:
     """Test lookup parameter generation."""
 
     def test_range_lookup_takes_a_pair(self):
-        """`__range` accepts a (lo, hi) tuple at runtime, like `__between`."""
+        """`__range`/`__between` accept a (lo, hi) pair as tuple or list."""
 
         class Ranged(Model):
             id: int = Field(db_pk=True)
 
         params = _generate_filter_params(Ranged)
-        assert "id__range: tuple[int, int] | None = None," in params
-        assert "id__between: tuple[int, int] | None = None," in params
+        assert "id__range: tuple[int, int] | list[int] | None = None," in params
+        assert "id__between: tuple[int, int] | list[int] | None = None," in params
+
+    def test_in_lookup_takes_any_iterable(self):
+        """`__in` accepts any iterable at runtime (tuple, set, generator)."""
+
+        class Inny(Model):
+            id: int = Field(db_pk=True)
+
+        params = _generate_filter_params(Inny)
+        assert "id__in: Iterable[int] | None = None," in params
+
+    def test_date_part_lookups_match_runtime_shapes(self):
+        """Runtime wants year=int, month=(y, m), day=(y, m, d)."""
+
+        class Dated(Model):
+            id: int = Field(db_pk=True)
+            created: datetime = Field(default_factory=datetime.now)
+
+        params = _generate_filter_params(Dated)
+        assert "created__year: int | None = None," in params
+        assert "created__month: tuple[int, int] | list[int] | None = None," in params
+        assert (
+            "created__day: tuple[int, int, int] | list[int] | None = None," in params
+        )
+
+    def test_reserved_field_names_not_enumerated(self):
+        """Fields named like service params must not produce duplicate args."""
+
+        class Clashy(Model):
+            id: int = Field(db_pk=True)
+            client: str = Field(default="")
+            kwargs: str = Field(default="")
+            defaults: str = Field(default="")
+
+        params = _generate_filter_params(Clashy)
+        for reserved in ("client", "kwargs", "defaults"):
+            assert f"\n        {reserved}:" not in f"\n{params}"
+        assert params.rstrip().endswith("**kwargs: Any,")
+        # The resulting signature must stay syntactically valid
+        ast.parse(f"def f(\n        self,\n        *args,\n{params}\n): ...\n")
+
+        create_params = _generate_create_params(Clashy)
+        assert "\n        client:" not in f"\n{create_params}"
+        ast.parse(
+            "def f(\n        self,\n        *,\n        instance=None,\n"
+            "        client=None,\n        using=None,\n"
+            f"{create_params}\n): ...\n"
+        )
+
+
+class TestExtractCustomMethods:
+    """Test model-method stubbing."""
+
+    def test_class_overload_implementation_dropped(self):
+        """@overload variants survive; the in-class implementation is dropped."""
+        tree = ast.parse(
+            "class M:\n"
+            "    @overload\n"
+            "    def render(self, short: bool) -> str: ...\n"
+            "    @overload\n"
+            "    def render(self) -> bytes: ...\n"
+            "    def render(self, short=None):\n"
+            "        return b''\n"
+            "    def plain(self) -> int:\n"
+            "        return 1\n"
+        )
+        class_def = tree.body[0]
+        assert isinstance(class_def, ast.ClassDef)
+        methods = _extract_custom_methods(class_def)
+        renders = [m for m in methods if "def render" in m]
+        assert len(renders) == 2
+        assert all("@overload" in m for m in renders)
+        assert any("def plain" in m for m in methods)

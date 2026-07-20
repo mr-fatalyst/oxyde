@@ -55,6 +55,7 @@ from .manager import QueryManager
 from .q import Q
 from .raw import execute_raw
 from .select import Query
+from .typed import FlatValuesListQuery, ValuesListQuery, ValuesQuery
 
 __all__ = [
     "Query",
@@ -72,4 +73,7 @@ __all__ = [
     "Coalesce",
     "RawSQL",
     "execute_raw",
+    "ValuesQuery",
+    "ValuesListQuery",
+    "FlatValuesListQuery",
 ]

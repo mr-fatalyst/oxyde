@@ -100,6 +100,16 @@ class ExecutionMixin:
             return [tuple(row.get(field) for field in fields) for row in rows]
         return rows
 
+    async def _fetch_by_mode(self, client: SupportsExecute) -> list[Any]:
+        """Fetch results honoring the values()/values_list() result mode.
+
+        Single-row terminals (first/last/get) share this so a query in dict or
+        list mode yields the same row shape as ``all()`` would.
+        """
+        if self._result_mode in {"dict", "list"}:
+            return await self.fetch_all(client)
+        return await self.fetch_models(client)
+
     async def fetch_one(self, client: SupportsExecute) -> dict[str, Any] | None:
         """Execute query and return first result as dict."""
         query = self.limit(1)
@@ -212,21 +222,23 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Model | None:
+    ) -> Any:
         """
         Return the first result or None.
 
-        Applies LIMIT 1 and returns a single model instance.
+        Applies LIMIT 1 and returns a single row in the query's result mode:
+        a model instance by default, a dict after values(), a tuple (or bare
+        value with flat=True) after values_list().
 
         Returns:
-            Model instance or None if no results
+            Single result or None if no results
 
         Examples:
             user = await User.objects.filter(is_active=True).first()
         """
         exec_client = await _resolve_execution_client(using, client)
         query = self.limit(1)
-        results = await query.fetch_models(exec_client)
+        results = await query._fetch_by_mode(exec_client)
         return results[0] if results else None
 
     async def last(
@@ -234,14 +246,15 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Model | None:
+    ) -> Any:
         """
         Return the last result or None.
 
-        Reverses the current ordering (or orders by PK desc) and returns one result.
+        Reverses the current ordering (or orders by PK desc) and returns one
+        result in the query's result mode (model / dict / tuple — see first()).
 
         Returns:
-            Model instance or None if no results
+            Single result or None if no results
 
         Examples:
             user = await User.objects.order_by("created_at").last()
@@ -263,7 +276,7 @@ class ExecutionMixin:
                 query._order_by_fields = [(pk_meta.name, "DESC")]
 
         query = query.limit(1)
-        results = await query.fetch_models(exec_client)
+        results = await query._fetch_by_mode(exec_client)
         return results[0] if results else None
 
     async def exists(
@@ -319,21 +332,23 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Model:
+    ) -> Any:
         """
         Return exactly one result matching the query.
 
-        Raises NotFoundError if no match, MultipleObjectsReturned if more than one.
+        Raises NotFoundError if no match, MultipleObjectsReturned if more than
+        one. The result comes back in the query's result mode (model / dict /
+        tuple — see first()).
 
         Returns:
-            Model instance
+            Single result
 
         Examples:
             user = await User.objects.filter(id=1).get()
         """
         exec_client = await _resolve_execution_client(using, client)
         query = self.limit(2)
-        results = await query.fetch_models(exec_client)
+        results = await query._fetch_by_mode(exec_client)
         if not results:
             raise NotFoundError(f"{self.model_class.__name__} matching query not found")
         if len(results) > 1:
@@ -347,14 +362,16 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Model | None:
+    ) -> Any:
         """
         Return one result or None if not found.
 
-        Raises MultipleObjectsReturned if more than one match.
+        Raises MultipleObjectsReturned if more than one match. The result
+        comes back in the query's result mode (model / dict / tuple — see
+        first()).
 
         Returns:
-            Model instance or None
+            Single result or None
 
         Examples:
             user = await User.objects.filter(email="test@example.com").get_or_none()

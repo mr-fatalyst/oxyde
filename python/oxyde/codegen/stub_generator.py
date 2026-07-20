@@ -7,20 +7,15 @@ import copy
 import inspect
 import re
 import sys
+import types
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, ForwardRef, Literal, Union, get_args, get_origin
 from uuid import UUID
 
 from oxyde.models.base import Model
-from oxyde.models.lookups import (
-    COMMON_LOOKUPS,
-    DATE_PART_LOOKUPS,
-    DATETIME_LOOKUPS,
-    NUMERIC_LOOKUPS,
-    STRING_LOOKUPS,
-)
+from oxyde.models.lookups import _allowed_lookups_for_meta, _resolve_column_meta
 from oxyde.models.registry import registered_tables
 
 
@@ -46,12 +41,34 @@ def _get_python_type_name(python_type: Any) -> str:
         return "Decimal"
     elif python_type is UUID:
         return "UUID"
+    elif python_type is type(None):
+        return "None"
+    elif python_type is Ellipsis:
+        return "..."
+    elif isinstance(python_type, ForwardRef):
+        # Unresolved forward reference (e.g. reverse FK to a class defined
+        # later in the module). Its target name is already stub-safe.
+        return python_type.__forward_arg__
+    elif isinstance(python_type, str):
+        # Unevaluated string annotation. Emit verbatim.
+        return python_type
     elif isinstance(python_type, type) and issubclass(python_type, Model):
-        # FK field pointing to another model
+        # FK/relation field pointing to another model
         return python_type.__name__
-    elif hasattr(python_type, "__origin__"):
-        # Parameterized generics (e.g. list[str], dict[str, Any])
-        return str(python_type).replace("typing.", "")
+    elif (origin := get_origin(python_type)) is not None:
+        # Parameterized generics — rendered recursively so type arguments
+        # referencing user models come out unqualified (list[Post], not
+        # list[some_module.Post] as str() would produce).
+        if origin is Literal:
+            values = ", ".join(repr(arg) for arg in get_args(python_type))
+            return f"Literal[{values}]"
+        if origin is Union or origin is types.UnionType:
+            return " | ".join(_get_python_type_name(a) for a in get_args(python_type))
+        args = ", ".join(_get_python_type_name(a) for a in get_args(python_type))
+        origin_name = getattr(origin, "__name__", None) or str(origin).replace(
+            "typing.", ""
+        )
+        return f"{origin_name}[{args}]"
     elif isinstance(python_type, type):
         # Bare built-in types (dict, list, set, tuple, etc.)
         return python_type.__name__
@@ -60,32 +77,44 @@ def _get_python_type_name(python_type: Any) -> str:
         return str(python_type).replace("typing.", "")
 
 
-def _get_lookups_for_type(python_type: Any) -> list[str]:
-    """Get available lookups for a given Python type."""
-    lookups = []
+def _filter_field_specs(model_class: type[Model]) -> dict[str, tuple[str, list[str]]]:
+    """Per-field filter value type and allowed lookups.
 
-    # String types
-    if python_type is str:
-        lookups.extend(STRING_LOOKUPS)
+    Lookups come from the runtime lookup tables (``_allowed_lookups_for_meta``),
+    so the stub can never drift from what ``filter()`` actually accepts. For FK
+    fields the value type is the *primary-key* type of the synthetic column
+    (``filter(author=5)``): the runtime compares against the pk value and
+    cannot serialize a model instance.
+    """
+    from oxyde.models.field import OxydeFieldInfo
+    from oxyde.models.utils import _unpack_annotated, _unwrap_optional
 
-    # Numeric types
-    elif python_type in (int, float, Decimal):
-        lookups.extend(NUMERIC_LOOKUPS)
+    specs: dict[str, tuple[str, list[str]]] = {}
+    for field_name, field_info in model_class.model_fields.items():
+        # Virtual fields (reverse FK, m2m) are not filterable columns
+        if isinstance(field_info, OxydeFieldInfo):
+            if getattr(field_info, "db_reverse_fk", None) or getattr(
+                field_info, "db_m2m", False
+            ):
+                continue
 
-    # Boolean types (no special lookups beyond common)
-    elif python_type is bool:
-        pass
+        meta = _resolve_column_meta(model_class, field_name)
+        lookups = _allowed_lookups_for_meta(meta)
 
-    # Date/datetime types
-    elif python_type in (datetime, date):
-        lookups.extend(DATETIME_LOOKUPS)
-        if python_type is datetime:
-            lookups.extend(DATE_PART_LOOKUPS)
+        if meta.foreign_key is not None:
+            synthetic = model_class.model_fields.get(meta.db_column)
+            if synthetic is not None and synthetic is not field_info:
+                base_hint, _ = _unpack_annotated(synthetic.annotation)
+                python_type, _ = _unwrap_optional(base_hint)
+            else:
+                python_type = int
+        else:
+            base_hint, _ = _unpack_annotated(field_info.annotation)
+            python_type, _ = _unwrap_optional(base_hint)
 
-    # Add common lookups for all types
-    lookups.extend(COMMON_LOOKUPS)
+        specs[field_name] = (_get_python_type_name(python_type), lookups)
 
-    return lookups
+    return specs
 
 
 def _get_field_info(model_class: type[Model]) -> dict[str, tuple[Any, bool]]:
@@ -127,41 +156,70 @@ def _get_field_info(model_class: type[Model]) -> dict[str, tuple[Any, bool]]:
     return result
 
 
+# Field names that would collide with service parameters in the generated
+# method signatures (filter/exclude and the get-family share one parameter
+# block). Colliding fields are not enumerated — they stay reachable through
+# ``**kwargs``, which mirrors the runtime situation: terminal methods swallow
+# e.g. ``client=`` as the service argument anyway.
+_RESERVED_FILTER_PARAMS = frozenset(
+    {"self", "args", "kwargs", "client", "using", "defaults"}
+)
+_RESERVED_CREATE_PARAMS = frozenset({"self", "instance", "client", "using"})
+
+
 def _generate_filter_params(model_class: type[Model]) -> str:
-    """Generate filter method parameters with all lookups."""
+    """Generate filter method parameters with all lookups.
+
+    Ends with ``**kwargs: Any`` because the runtime also accepts FK traversal
+    paths (``author__name="Alice"``) that cannot be enumerated statically.
+    """
     lines = []
-    field_info = _get_field_info(model_class)
 
-    for field_name, (python_type, _is_pk) in sorted(field_info.items()):
-        type_name = _get_python_type_name(python_type)
+    for field_name, (type_name, lookups) in sorted(
+        _filter_field_specs(model_class).items()
+    ):
+        if field_name in _RESERVED_FILTER_PARAMS:
+            continue
 
-        # Exact match (field without lookup)
+        # Bare field name (implicit exact match)
         lines.append(f"        {field_name}: {type_name} | None = None,")
 
-        # Add all lookups for this type
-        lookups = _get_lookups_for_type(python_type)
         for lookup in lookups:
             lookup_field = f"{field_name}__{lookup}"
 
-            # Determine type for lookup
+            # Determine type for lookup (matching what the runtime accepts:
+            # `in` takes any iterable, between/range/month/day take a pair or
+            # triple as tuple or list, year takes a bare int)
             if lookup == "in":
-                lookup_type = f"list[{type_name}] | None"
+                lookup_type = f"Iterable[{type_name}] | None"
             elif lookup in ("between", "range"):
-                lookup_type = f"tuple[{type_name}, {type_name}] | None"
+                lookup_type = (
+                    f"tuple[{type_name}, {type_name}] | list[{type_name}] | None"
+                )
             elif lookup == "isnull":
                 lookup_type = "bool | None"
-            elif lookup in DATE_PART_LOOKUPS:
+            elif lookup == "year":
                 lookup_type = "int | None"
+            elif lookup == "month":
+                lookup_type = "tuple[int, int] | list[int] | None"
+            elif lookup == "day":
+                lookup_type = "tuple[int, int, int] | list[int] | None"
             else:
                 lookup_type = f"{type_name} | None"
 
             lines.append(f"        {lookup_field}: {lookup_type} = None,")
 
+    lines.append("        **kwargs: Any,")
     return "\n".join(lines)
 
 
 def _generate_order_by_literal(model_class: type[Model]) -> str:
-    """Generate Literal type for order_by fields (includes - prefix for DESC)."""
+    """Generate the order_by fields type (includes - prefix for DESC).
+
+    The union with ``str`` keeps the literals as autocomplete suggestions while
+    still accepting values the runtime supports but the stub cannot enumerate:
+    ``"?"`` (random ordering), ``annotate()`` aliases and FK traversal paths.
+    """
     field_info = _get_field_info(model_class)
     literals = []
 
@@ -172,35 +230,22 @@ def _generate_order_by_literal(model_class: type[Model]) -> str:
     if not literals:
         return "str"  # Fallback if no fields
 
-    return f"Literal[{', '.join(literals)}]"
+    return f"Literal[{', '.join(literals)}] | str"
 
 
 def _generate_field_literal(model_class: type[Model]) -> str:
-    """Generate Literal type for field names (for select/values/group_by)."""
+    """Generate the field-names type (for select/values/group_by).
+
+    Union with ``str`` for the same reason as ``_generate_order_by_literal``:
+    ``annotate()`` aliases and traversal paths are legal at runtime.
+    """
     field_info = _get_field_info(model_class)
     literals = [f'"{field_name}"' for field_name in sorted(field_info.keys())]
 
     if not literals:
         return "str"  # Fallback if no fields
 
-    return f"Literal[{', '.join(literals)}]"
-
-
-def _generate_update_params(model_class: type[Model]) -> str:
-    """Generate update method parameters (field: type | None = None for each field)."""
-    lines = []
-    field_info = _get_field_info(model_class)
-
-    for field_name, (python_type, is_pk) in sorted(field_info.items()):
-        # Skip primary key - usually not updated
-        if is_pk:
-            continue
-
-        type_name = _get_python_type_name(python_type)
-        # All update params are optional
-        lines.append(f"        {field_name}: {type_name} | None = None,")
-
-    return "\n".join(lines)
+    return f"Literal[{', '.join(literals)}] | str"
 
 
 def _generate_create_params(model_class: type[Model]) -> str:
@@ -209,6 +254,8 @@ def _generate_create_params(model_class: type[Model]) -> str:
     field_info = _get_field_info(model_class)
 
     for field_name, (python_type, _is_pk) in sorted(field_info.items()):
+        if field_name in _RESERVED_CREATE_PARAMS:
+            continue
         type_name = _get_python_type_name(python_type)
         # All create params are optional in stub (instance can be passed instead)
         lines.append(f"        {field_name}: {type_name} | None = None,")
@@ -226,6 +273,32 @@ def _has_overload_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> boo
     return False
 
 
+def _stub_function_defs(body: list[ast.stmt]) -> list[str]:
+    """Turn the function definitions of an AST body into stub sources.
+
+    Bodies are replaced by ``...`` (stub convention); decorators and type
+    annotations are preserved. For ``@overload`` functions, only the
+    ``@overload``-decorated variants are kept; the implementation (PEP 484
+    requires one in a ``.py`` file but forbids it in a ``.pyi``) is dropped.
+    """
+    overloaded_names: set[str] = {
+        node.name
+        for node in body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and _has_overload_decorator(node)
+    }
+
+    functions: list[str] = []
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name in overloaded_names and not _has_overload_decorator(node):
+                continue
+            node_copy = copy.deepcopy(node)
+            node_copy.body = [ast.Expr(value=ast.Constant(value=Ellipsis))]
+            functions.append(ast.unparse(node_copy))
+    return functions
+
+
 def _extract_top_level_copyable(
     tree: ast.Module,
 ) -> tuple[list[ast.Import | ast.ImportFrom], list[str]]:
@@ -235,45 +308,26 @@ def _extract_top_level_copyable(
       dedupe them against the stub skeleton imports and drop unused ones.
       ``from __future__ import ...`` is dropped entirely — a ``.pyi`` never
       needs it, and anywhere but the top of the file it is a syntax error.
-    - ``FunctionDef`` / ``AsyncFunctionDef``: returned with body replaced by
-      ``...`` (stub convention). Decorators and type annotations are preserved.
-      For ``@overload`` functions, only the ``@overload``-decorated variants are
-      kept; the implementation body (PEP 484 requires one in a ``.py`` file but
-      forbids it in a ``.pyi``) is dropped.
+    - ``FunctionDef`` / ``AsyncFunctionDef``: stubbed via ``_stub_function_defs``.
     - Everything else (top-level classes, dataclasses, enums, assignments) is
       intentionally skipped — those belong in dedicated modules.
     """
-    overloaded_names: set[str] = {
-        node.name
+    imports: list[ast.Import | ast.ImportFrom] = [
+        node
         for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and _has_overload_decorator(node)
-    }
-
-    imports: list[ast.Import | ast.ImportFrom] = []
-    functions: list[str] = []
-    for node in tree.body:
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            if isinstance(node, ast.ImportFrom) and node.module == "__future__":
-                continue
-            imports.append(node)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            # Skip the non-@overload implementation of an overloaded function —
-            # `.pyi` cannot contain such an implementation.
-            if node.name in overloaded_names and not _has_overload_decorator(node):
-                continue
-            node_copy = copy.deepcopy(node)
-            node_copy.body = [ast.Expr(value=ast.Constant(value=Ellipsis))]
-            functions.append(ast.unparse(node_copy))
-    return imports, functions
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        and not (isinstance(node, ast.ImportFrom) and node.module == "__future__")
+    ]
+    return imports, _stub_function_defs(tree.body)
 
 
 # Names the generated stub skeleton may reference, grouped by stdlib module.
 # Each is emitted only when the generated body actually uses it.
 _STUB_HEADER_IMPORTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("collections.abc", ("Iterable",)),
     ("datetime", ("date", "datetime", "time")),
     ("decimal", ("Decimal",)),
-    ("typing", ("Any", "ClassVar", "Literal")),
+    ("typing", ("Any", "ClassVar", "Literal", "overload")),
     ("uuid", ("UUID",)),
 )
 
@@ -301,7 +355,14 @@ def _assemble_imports(
         if used:
             stdlib_from[module] = used
 
-    provided: set[str] = {"Model", "Query", "QueryManager"}
+    provided: set[str] = {
+        "FlatValuesListQuery",
+        "Model",
+        "Query",
+        "QueryManager",
+        "ValuesListQuery",
+        "ValuesQuery",
+    }
     provided.update(*stdlib_from.values())
 
     other_lines: list[str] = []
@@ -333,11 +394,22 @@ def _assemble_imports(
     ]
     if lines:
         lines.append("")
+    # Parenthesized because the one-line form exceeds the 88-char line limit
+    # and would trip isort's formatting check in user projects.
+    oxyde_queries_import = (
+        "from oxyde.queries import (\n"
+        "    FlatValuesListQuery,\n"
+        "    Query,\n"
+        "    QueryManager,\n"
+        "    ValuesListQuery,\n"
+        "    ValuesQuery,\n"
+        ")"
+    )
     lines.extend(
         sorted(
             [
                 "from oxyde import Model",
-                "from oxyde.queries import Query, QueryManager",
+                oxyde_queries_import,
                 *other_lines,
             ]
         )
@@ -351,13 +423,7 @@ def _extract_custom_methods(class_def: ast.ClassDef) -> list[str]:
     Returns list of method definitions as strings, each indented relative to the
     class body (i.e. without the leading class indent — caller adds it).
     """
-    methods: list[str] = []
-    for child in class_def.body:
-        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            child_copy = copy.deepcopy(child)
-            child_copy.body = [ast.Expr(value=ast.Constant(value=Ellipsis))]
-            methods.append(ast.unparse(child_copy))
-    return methods
+    return _stub_function_defs(class_def.body)
 
 
 def _generate_model_class_stub(
@@ -365,7 +431,6 @@ def _generate_model_class_stub(
     custom_methods: list[str],
 ) -> str:
     """Generate stub class definition for model (to avoid circular imports in .pyi)."""
-    from oxyde.models.field import OxydeFieldInfo
     from oxyde.models.utils import _unpack_annotated, _unwrap_optional
 
     model_name = model_class.__name__
@@ -384,15 +449,10 @@ def _generate_model_class_stub(
         if hasattr(meta, "database"):
             lines.append("        database: str")
 
-    # Add field annotations (exclude virtual fields like reverse FK, m2m)
+    # Add field annotations. Virtual relation fields (reverse FK, m2m) are
+    # included too: they exist on instances (filled by prefetch()) even though
+    # they don't map to DB columns and are excluded from filter/select params.
     for field_name, field_info in model_class.model_fields.items():
-        # Skip virtual fields (reverse FK, m2m) - they don't map to DB columns
-        if isinstance(field_info, OxydeFieldInfo):
-            if getattr(field_info, "db_reverse_fk", None) or getattr(
-                field_info, "db_m2m", False
-            ):
-                continue
-
         annotation = field_info.annotation
         base_hint, _ = _unpack_annotated(annotation)
         python_type, is_optional = _unwrap_optional(base_hint)
@@ -451,8 +511,8 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Exclude objects matching field lookups.\"\"\"
         ...
 
-    def order_by(self, *fields: {order_by_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
-        \"\"\"Order results by fields.\"\"\"
+    def order_by(self, *fields: {order_by_literal}) -> {model_name}Query:
+        \"\"\"Order results by fields ("?" = random order).\"\"\"
         ...
 
     def limit(self, value: int) -> {model_name}Query:
@@ -467,7 +527,7 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Return distinct results.\"\"\"
         ...
 
-    def select(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    def select(self, *fields: {field_literal}) -> {model_name}Query:
         \"\"\"Select specific fields.\"\"\"
         ...
 
@@ -491,7 +551,7 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Add computed fields using aggregate functions.\"\"\"
         ...
 
-    def group_by(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    def group_by(self, *fields: {field_literal}) -> {model_name}Query:
         \"\"\"Add GROUP BY clause.\"\"\"
         ...
 
@@ -499,12 +559,16 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Add HAVING clause for filtering grouped results.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    def values(self, *fields: {field_literal}) -> ValuesQuery[{model_name}]:  # type: ignore[override]
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
-        \"\"\"Return tuples/values instead of models.\"\"\"
+    @overload  # type: ignore[override]
+    def values_list(self, field: {field_literal}, /, *, flat: Literal[True]) -> FlatValuesListQuery[{model_name}]:
+        ...
+
+    @overload
+    def values_list(self, *fields: {field_literal}, flat: Literal[False] = ...) -> ValuesListQuery[{model_name}]:  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
         ...
 
     # Terminal methods (async, execute query)
@@ -585,14 +649,53 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Get minimum field value.\"\"\"
         ...
 
-    async def update(  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    async def exists(
         self,
         *,
         client: Any | None = None,
         using: str | None = None,
+    ) -> bool:
+        \"\"\"Check if any records match the query.\"\"\"
+        ...
+
+    async def get(
+        self,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> {model_name}:
+        \"\"\"Return exactly one result (raises if none or many).\"\"\"
+        ...
+
+    async def get_or_none(
+        self,
+        *,
+        client: Any | None = None,
+        using: str | None = None,
+    ) -> {model_name} | None:
+        \"\"\"Return one result or None (raises if many).\"\"\"
+        ...
+
+    @overload  # type: ignore[override]
+    async def update(
+        self,
+        *,
+        returning: Literal[True],
+        client: Any | None = ...,
+        using: str | None = ...,
+        **values: Any,
+    ) -> list[{model_name}]:
+        ...
+
+    @overload
+    async def update(  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        *,
+        returning: Literal[False] = ...,
+        client: Any | None = ...,
+        using: str | None = ...,
         **values: Any,
     ) -> int:
-        \"\"\"Update matching objects.\"\"\"
         ...
 
     async def increment(
@@ -643,12 +746,16 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Exclude objects matching field lookups.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    def values(self, *fields: {field_literal}) -> ValuesQuery[{model_name}]:
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    def values_list(self, *fields: {field_literal}, flat: bool = False) -> {model_name}Query:  # type: ignore[override]  # ty: ignore[invalid-method-override]
-        \"\"\"Return tuples/values instead of models.\"\"\"
+    @overload  # type: ignore[override]
+    def values_list(self, field: {field_literal}, /, *, flat: Literal[True]) -> FlatValuesListQuery[{model_name}]:
+        ...
+
+    @overload
+    def values_list(self, *fields: {field_literal}, flat: Literal[False] = ...) -> ValuesListQuery[{model_name}]:  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
         ...
 
     def distinct(self, distinct: bool = True) -> {model_name}Query:
@@ -671,6 +778,22 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Add FOR SHARE lock to query.\"\"\"
         ...
 
+    def order_by(self, *fields: {order_by_literal}) -> {model_name}Query:
+        \"\"\"Order results by fields ("?" = random order).\"\"\"
+        ...
+
+    def limit(self, value: int) -> {model_name}Query:
+        \"\"\"Limit number of results.\"\"\"
+        ...
+
+    def offset(self, value: int) -> {model_name}Query:
+        \"\"\"Skip first value results.\"\"\"
+        ...
+
+    def annotate(self, **annotations: Any) -> {model_name}Query:
+        \"\"\"Add computed fields using aggregate functions.\"\"\"
+        ...
+
     # Terminal methods (async, execute query)
 
     async def get(
@@ -678,7 +801,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         *,
         client: Any | None = None,
         using: str | None = None,
-        **filters: Any,
+{filter_params}
     ) -> {model_name}:
         \"\"\"Get single object matching lookups.\"\"\"
         ...
@@ -688,7 +811,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         *,
         client: Any | None = None,
         using: str | None = None,
-        **filters: Any,
+{filter_params}
     ) -> {model_name} | None:
         \"\"\"Get object or None if not found.\"\"\"
         ...
@@ -699,7 +822,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         defaults: dict[str, Any] | None = None,
         client: Any | None = None,
         using: str | None = None,
-        **filters: Any,
+{filter_params}
     ) -> tuple[{model_name}, bool]:
         \"\"\"Get object or create if not found. Returns (object, created).\"\"\"
         ...
@@ -710,19 +833,38 @@ class {model_name}Manager(QueryManager[{model_name}]):
         defaults: dict[str, Any] | None = None,
         client: Any | None = None,
         using: str | None = None,
-        **filters: Any,
+{filter_params}
     ) -> tuple[{model_name}, bool]:
         \"\"\"Get object, create if missing, or update it when defaults are provided.\"\"\"
         ...
 
-    async def all(
+    async def exists(
         self,
         *,
         client: Any | None = None,
         using: str | None = None,
-        mode: str = "models",
+    ) -> bool:
+        \"\"\"Check if any records exist.\"\"\"
+        ...
+
+    @overload  # type: ignore[override]
+    async def all(
+        self,
+        *,
+        client: Any | None = ...,
+        using: str | None = ...,
+        mode: Literal["models"] = ...,
     ) -> list[{model_name}]:
-        \"\"\"Get all objects.\"\"\"
+        ...
+
+    @overload
+    async def all(  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
+        self,
+        *,
+        client: Any | None = ...,
+        using: str | None = ...,
+        mode: str,
+    ) -> Any:
         ...
 
     async def first(
@@ -805,7 +947,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
 
     async def bulk_create(  # type: ignore[override]  # ty: ignore[invalid-method-override]
         self,
-        objects: list[{model_name}],
+        objects: Iterable[{model_name} | dict[str, Any]],
         *,
         batch_size: int | None = None,
         client: Any | None = None,
@@ -816,8 +958,8 @@ class {model_name}Manager(QueryManager[{model_name}]):
 
     async def bulk_update(  # type: ignore[override]  # ty: ignore[invalid-method-override]
         self,
-        objects: list[{model_name}],
-        fields: list[str],
+        objects: Iterable[{model_name}],
+        fields: Iterable[str],
         *,
         client: Any | None = None,
         using: str | None = None,

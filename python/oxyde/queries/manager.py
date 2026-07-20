@@ -140,7 +140,8 @@ class QueryManager(Generic[TModel]):
         client: SupportsExecute | None = None,
     ) -> Model | None:
         """Return first result or None."""
-        return await self._query().first(using=using, client=client)
+        result: Model | None = await self._query().first(using=using, client=client)
+        return result
 
     async def last(
         self,
@@ -149,7 +150,8 @@ class QueryManager(Generic[TModel]):
         client: SupportsExecute | None = None,
     ) -> Model | None:
         """Return last result or None."""
-        return await self._query().last(using=using, client=client)
+        result: Model | None = await self._query().last(using=using, client=client)
+        return result
 
     async def get(
         self,
@@ -162,7 +164,8 @@ class QueryManager(Generic[TModel]):
         q = self._query()
         if filters:
             q = q.filter(**filters)
-        return await q.get(using=using, client=client)
+        result: Model = await q.get(using=using, client=client)
+        return result
 
     async def get_or_none(
         self,
@@ -175,7 +178,8 @@ class QueryManager(Generic[TModel]):
         q = self._query()
         if filters:
             q = q.filter(**filters)
-        return await q.get_or_none(using=using, client=client)
+        result: Model | None = await q.get_or_none(using=using, client=client)
+        return result
 
     async def get_or_create(
         self,

@@ -859,6 +859,59 @@ async def test_query_all_respects_values_mode() -> None:
 
 
 @pytest.mark.asyncio
+async def test_query_first_respects_values_mode() -> None:
+    """first() after values() returns a dict, same shape as all()."""
+    payload = (["id", "email"], [[1, "ada@example.com"]])
+    stub = StubExecuteClient([payload])
+    row = await User.objects.values("id", "email").first(client=stub)
+    assert row == {"id": 1, "email": "ada@example.com"}
+
+
+@pytest.mark.asyncio
+async def test_query_first_respects_values_list_modes() -> None:
+    """first() after values_list() returns a tuple (or scalar with flat)."""
+    stub = StubExecuteClient(
+        [
+            (["id", "email"], [[1, "ada@example.com"]]),
+            (["email"], [["ada@example.com"]]),
+        ]
+    )
+    pair = await User.objects.values_list("id", "email").first(client=stub)
+    assert pair == (1, "ada@example.com")
+    email = await User.objects.values_list("email", flat=True).first(client=stub)
+    assert email == "ada@example.com"
+
+
+@pytest.mark.asyncio
+async def test_query_last_respects_values_mode() -> None:
+    """last() after values() returns a dict."""
+    payload = (["id"], [[7]])
+    stub = StubExecuteClient([payload])
+    row = await User.objects.values("id").last(client=stub)
+    assert row == {"id": 7}
+
+
+@pytest.mark.asyncio
+async def test_query_get_respects_values_mode() -> None:
+    """get()/get_or_none() after values() return dicts."""
+    stub = StubExecuteClient([(["id"], [[1]]), (["id"], [[1]])])
+    row = await User.objects.filter(id=1).values("id").get(client=stub)
+    assert row == {"id": 1}
+    row = await User.objects.filter(id=1).values("id").get_or_none(client=stub)
+    assert row == {"id": 1}
+
+
+@pytest.mark.asyncio
+async def test_query_first_returns_model_by_default() -> None:
+    """Without values()/values_list(), first() still hydrates a model."""
+    payload = (["id", "email", "is_active"], [[1, "ada@example.com", True]])
+    stub = StubExecuteClient([payload])
+    user = await User.objects.first(client=stub)
+    assert isinstance(user, User)
+    assert user.email == "ada@example.com"
+
+
+@pytest.mark.asyncio
 async def test_query_all_conflicting_execution_args() -> None:
     """Test that providing both client and using raises error."""
     stub = StubExecuteClient([([], [])])

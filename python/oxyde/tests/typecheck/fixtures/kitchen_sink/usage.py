@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import time
 from typing import Any
 
 from models import Author, Post, Tag
@@ -18,12 +19,36 @@ async def mgr_exclude() -> list[Post]:
     return await Post.objects.exclude(published=False).all()
 
 
-async def mgr_values() -> list[Post]:
+async def mgr_values() -> list[dict[str, Any]]:
     return await Post.objects.values("id", "title").all()
 
 
-async def mgr_values_list() -> list[Post]:
+async def mgr_values_first() -> dict[str, Any] | None:
+    return await Post.objects.values("id").first()
+
+
+async def mgr_values_get() -> tuple[dict[str, Any], dict[str, Any] | None]:
+    q = Post.objects.filter(id=1).values("id", "title")
+    return await q.get(), await q.get_or_none()
+
+
+async def mgr_values_list_terminals() -> tuple[tuple[Any, ...] | None, Any]:
+    return (
+        await Post.objects.values_list("id", "title").last(),
+        await Post.objects.values_list("id", flat=True).first(),
+    )
+
+
+async def mgr_values_list() -> list[tuple[Any, ...]]:
+    return await Post.objects.values_list("id", "title").all()
+
+
+async def mgr_values_list_flat() -> list[Any]:
     return await Post.objects.values_list("id", flat=True).all()
+
+
+async def mgr_values_chained() -> list[dict[str, Any]]:
+    return await Post.objects.values("id").order_by("-id").limit(3).all()
 
 
 async def mgr_distinct() -> list[Post]:
@@ -94,6 +119,10 @@ async def mgr_bulk_create(items: list[Post]) -> list[Post]:
     return await Post.objects.bulk_create(items, batch_size=100)
 
 
+async def mgr_bulk_create_mixed(post: Post) -> list[Post]:
+    return await Post.objects.bulk_create([post, {"title": "from-dict"}])
+
+
 async def mgr_bulk_update(items: list[Post]) -> int:
     return await Post.objects.bulk_update(items, ["title"])
 
@@ -130,6 +159,15 @@ async def q_update_delete() -> tuple[int, int]:
     )
 
 
+async def q_update_returning() -> list[Post]:
+    return await Post.objects.filter(id=1).update(title="X", returning=True)
+
+
+async def q_get_family() -> tuple[Post, Post | None, bool]:
+    q = Post.objects.filter(id=1)
+    return await q.get(), await q.get_or_none(), await q.exists()
+
+
 async def q_increment() -> int:
     return await Post.objects.filter(id=1).increment("views", by=1)
 
@@ -149,6 +187,43 @@ async def rel_tags() -> list[Tag]:
     return await Tag.objects.filter(name__icontains="py").all()
 
 
+# --- Manager-level query builders that used to fall back to bare Query ---
+
+
+async def mgr_order_limit_offset() -> list[Post]:
+    return await Post.objects.order_by("-views").limit(5).offset(10).all()
+
+
+async def mgr_annotate() -> list[Post]:
+    return await Post.objects.annotate(total=1).group_by("published").all()
+
+
+async def mgr_exists() -> bool:
+    return await Post.objects.exists()
+
+
+# --- Runtime string escapes: "?" ordering, annotate aliases, FK traversal ---
+
+
+async def order_random() -> list[Post]:
+    return await Post.objects.filter().order_by("?").all()
+
+
+async def order_by_annotate_alias() -> list[Post]:
+    return await Post.objects.filter().annotate(total=1).order_by("-total").all()
+
+
+async def filter_fk_traversal() -> list[Post]:
+    return await Post.objects.filter(author__name="Alice").all()
+
+
+# --- Virtual relation fields exist on instances (filled by prefetch) ---
+
+
+def virtual_relation_fields(post: Post, author: Author) -> tuple[list[Tag], list[Post]]:
+    return post.tags, author.posts
+
+
 # --- Various field types exercised in filter lookups ---
 
 
@@ -161,6 +236,26 @@ async def field_types_filters() -> list[Post]:
             created_at__year=2026,
             slug_id__isnull=False,
             title__startswith="Hi",
+            title__exact="Hi",
+            published_on__year=2026,
+            publish_time__gt=time(9, 0),
+            author=1,
+            author__gte=1,
+            author_id__in=[1, 2],
+        )
+        .all()
+    )
+
+
+async def lookup_value_shapes() -> list[Post]:
+    return await (
+        Post.objects.filter(
+            views__in=(1, 2),
+            id__in={1, 2},
+            views__between=[0, 100],
+            score__range=(0.0, 1.0),
+            created_at__month=(2026, 5),
+            published_on__day=[2026, 5, 12],
         )
         .all()
     )
