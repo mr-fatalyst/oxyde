@@ -15,6 +15,9 @@ Lookup Categories by Field Type:
         exact, gt, gte, lt, lte, between, range, year, month, day,
         in, isnull
 
+    Time fields:
+        exact, gt, gte, lt, lte, between, range, in, isnull
+
     Boolean fields:
         exact, in, isnull
 
@@ -119,6 +122,10 @@ def _allowed_lookups_for_meta(meta: ColumnMeta) -> list[str]:
     elif category == "datetime":
         lookups.extend(DATETIME_LOOKUPS)
         lookups.extend(DATE_PART_LOOKUPS)
+    elif category == "time":
+        # Comparisons are valid for times of day, but there is no calendar
+        # part to extract — the year/month/day builders reject time fields.
+        lookups.extend(DATETIME_LOOKUPS)
     elif category == "bool":
         lookups.extend(BOOL_LOOKUPS)
     else:

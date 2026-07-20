@@ -452,16 +452,19 @@ def _generate_model_class_stub(
     # Add field annotations. Virtual relation fields (reverse FK, m2m) are
     # included too: they exist on instances (filled by prefetch()) even though
     # they don't map to DB columns and are excluded from filter/select params.
+    # Fields with a default (or default_factory) get an `= ...` marker —
+    # pydantic's dataclass_transform derives the synthesized __init__ from
+    # these assignments, so a bare annotation would make the field a required
+    # constructor argument in every type checker.
     for field_name, field_info in model_class.model_fields.items():
         annotation = field_info.annotation
         base_hint, _ = _unpack_annotated(annotation)
         python_type, is_optional = _unwrap_optional(base_hint)
         type_name = _get_python_type_name(python_type)
 
-        if is_optional:
-            lines.append(f"    {field_name}: {type_name} | None")
-        else:
-            lines.append(f"    {field_name}: {type_name}")
+        optional_suffix = " | None" if is_optional else ""
+        default_marker = "" if field_info.is_required() else " = ..."
+        lines.append(f"    {field_name}: {type_name}{optional_suffix}{default_marker}")
 
     # Copy user-defined methods (body replaced by `...`)
     for method_src in custom_methods:
@@ -568,7 +571,11 @@ class {model_name}Query(Query[{model_name}]):
         ...
 
     @overload
-    def values_list(self, *fields: {field_literal}, flat: Literal[False] = ...) -> ValuesListQuery[{model_name}]:  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    def values_list(self, *fields: {field_literal}, flat: Literal[False] = ...) -> ValuesListQuery[{model_name}]:
+        ...
+
+    @overload
+    def values_list(self, *fields: {field_literal}, flat: bool) -> ValuesListQuery[{model_name}] | FlatValuesListQuery[{model_name}]:  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
         ...
 
     # Terminal methods (async, execute query)
@@ -755,7 +762,11 @@ class {model_name}Manager(QueryManager[{model_name}]):
         ...
 
     @overload
-    def values_list(self, *fields: {field_literal}, flat: Literal[False] = ...) -> ValuesListQuery[{model_name}]:  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    def values_list(self, *fields: {field_literal}, flat: Literal[False] = ...) -> ValuesListQuery[{model_name}]:
+        ...
+
+    @overload
+    def values_list(self, *fields: {field_literal}, flat: bool) -> ValuesListQuery[{model_name}] | FlatValuesListQuery[{model_name}]:  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
         ...
 
     def distinct(self, distinct: bool = True) -> {model_name}Query:

@@ -191,6 +191,48 @@ class TestGenerateFilterParams:
             "created__day: tuple[int, int, int] | list[int] | None = None," in params
         )
 
+    def test_time_fields_get_comparisons_but_no_date_parts(self):
+        """A time-of-day has no calendar part: the runtime rejects
+        year/month/day for it, so the stub must not offer them."""
+
+        class Timed(Model):
+            id: int = Field(db_pk=True)
+            starts_at: time = Field(default_factory=lambda: time(9, 0))
+
+        params = _generate_filter_params(Timed)
+        assert "starts_at__gt: time | None = None," in params
+        assert (
+            "starts_at__between: tuple[time, time] | list[time] | None = None,"
+            in params
+        )
+        assert "starts_at__year" not in params
+        assert "starts_at__month" not in params
+        assert "starts_at__day" not in params
+
+    def test_time_lookup_table_matches_builders(self):
+        """The runtime permission table itself must not advertise date parts
+        for time fields (the year/month/day builders raise for them)."""
+        from oxyde.models.lookups import (
+            _allowed_lookups_for_meta,
+            _resolve_column_meta,
+        )
+
+        class Clocked(Model):
+            id: int = Field(db_pk=True)
+            starts_at: time = Field(default_factory=lambda: time(9, 0))
+            created: datetime = Field(default_factory=datetime.now)
+
+        time_lookups = _allowed_lookups_for_meta(
+            _resolve_column_meta(Clocked, "starts_at")
+        )
+        assert "gt" in time_lookups and "between" in time_lookups
+        assert not {"year", "month", "day"} & set(time_lookups)
+
+        dt_lookups = _allowed_lookups_for_meta(
+            _resolve_column_meta(Clocked, "created")
+        )
+        assert {"year", "month", "day"} <= set(dt_lookups)
+
     def test_reserved_field_names_not_enumerated(self):
         """Fields named like service params must not produce duplicate args."""
 

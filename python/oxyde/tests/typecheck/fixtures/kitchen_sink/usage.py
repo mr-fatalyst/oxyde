@@ -51,6 +51,20 @@ async def mgr_values_chained() -> list[dict[str, Any]]:
     return await Post.objects.values("id").order_by("-id").limit(3).all()
 
 
+async def mode_switch_chain() -> (
+    tuple[list[tuple[Any, ...]], list[dict[str, Any]], list[Any]]
+):
+    tuples = await Post.objects.values("id").values_list("id", "title").all()
+    dicts = await Post.objects.values_list("id").values("id").all()
+    flat = await Post.objects.values("id").values_list("id", flat=True).all()
+    return tuples, dicts, flat
+
+
+async def values_list_flat_flag(flag: bool) -> int:
+    rows = await Post.objects.values_list("id", flat=flag).all()
+    return len(rows)
+
+
 async def mgr_distinct() -> list[Post]:
     return await Post.objects.distinct().all()
 
@@ -222,6 +236,18 @@ async def filter_fk_traversal() -> list[Post]:
 
 def virtual_relation_fields(post: Post, author: Author) -> tuple[list[Tag], list[Post]]:
     return post.tags, author.posts
+
+
+# --- Constructing models directly: fields with defaults must stay optional ---
+
+
+def construct_models() -> tuple[Post, Author, Tag]:
+    from datetime import datetime
+
+    post = Post(title="Hello", created_at=datetime(2026, 1, 1))
+    author = Author(name="Ada", email="ada@example.com")
+    tag = Tag(name="python")
+    return post, author, tag
 
 
 # --- Various field types exercised in filter lookups ---

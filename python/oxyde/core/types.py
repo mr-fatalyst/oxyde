@@ -23,7 +23,7 @@ from uuid import UUID
 class TypeDescriptor:
     """Describes how a Python type maps to ORM operations."""
 
-    category: str  # "string", "numeric", "datetime", "bool", "generic"
+    category: str  # "string", "numeric", "datetime", "time", "bool", "generic"
     serialize: Callable[[Any], Any]  # value → msgpack-safe value
 
 
@@ -36,7 +36,9 @@ TYPE_REGISTRY: dict[type, TypeDescriptor] = {
     bytearray: TypeDescriptor("generic", bytes),
     datetime: TypeDescriptor("datetime", lambda v: v.isoformat()),
     date: TypeDescriptor("datetime", lambda v: v.isoformat()),
-    time: TypeDescriptor("datetime", lambda v: v.isoformat()),
+    # Own category: comparisons apply, but a time-of-day has no calendar
+    # part, so date-part lookups (year/month/day) must not be offered.
+    time: TypeDescriptor("time", lambda v: v.isoformat()),
     timedelta: TypeDescriptor("generic", lambda v: int(v.total_seconds() * 1_000_000)),
     UUID: TypeDescriptor("generic", str),
     Decimal: TypeDescriptor("numeric", str),
