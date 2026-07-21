@@ -196,6 +196,26 @@ class User(Model):
         ]
 ```
 
+### NULLS NOT DISTINCT Unique Indexes
+
+PostgreSQL 15+ can treat `NULL` values as equal inside a unique index:
+
+```python
+class User(Model):
+    tenant_id: int
+    email: str | None = None
+
+    class Meta:
+        is_table = True
+        indexes = [
+            Index(
+                ("tenant_id", "email"),
+                unique=True,
+                nulls_not_distinct=True,
+            ),
+        ]
+```
+
 ## Explain Queries
 
 Analyze query performance:

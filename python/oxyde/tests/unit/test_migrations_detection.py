@@ -141,6 +141,39 @@ class TestSchemaExtraction:
         [index] = snapshot["tables"]["users"]["indexes"]
         assert index["where"] == "deleted_at IS NULL"
 
+    def test_index_nulls_not_distinct_requires_unique(self):
+        """NULLS NOT DISTINCT only makes sense for unique indexes."""
+        from oxyde.models.decorators import Index
+
+        with pytest.raises(ValueError, match="requires unique=True"):
+            Index(fields=["email"], nulls_not_distinct=True)
+
+    def test_extract_nulls_not_distinct_index_in_snapshot(self):
+        """NULLS NOT DISTINCT indexes must survive schema extraction."""
+        from oxyde.models.decorators import Index
+
+        class User(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str | None = Field(default=None)
+
+            class Meta:
+                is_table = True
+                table_name = "users"
+                indexes = [
+                    Index(
+                        fields=["email"],
+                        name="idx_users_email_nulls_not_distinct",
+                        unique=True,
+                        nulls_not_distinct=True,
+                    ),
+                ]
+
+        assert User._db_meta.indexes[0].nulls_not_distinct is True
+
+        snapshot = extract_current_schema(dialect="postgres")
+        [index] = snapshot["tables"]["users"]["indexes"]
+        assert index["nulls_not_distinct"] is True
+
     def test_extract_unique_together(self):
         """Test extracting unique_together constraints."""
 

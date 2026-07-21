@@ -145,6 +145,20 @@ fn build_create_index(table: &str, index: &IndexDef, dialect: Dialect) -> Result
         stmt.unique();
     }
 
+    if index.nulls_not_distinct {
+        if !index.unique {
+            return Err(MigrateError::MigrationError(
+                "NULLS NOT DISTINCT requires a UNIQUE index".to_string(),
+            ));
+        }
+        if dialect != Dialect::Postgres {
+            return Err(MigrateError::MigrationError(
+                "NULLS NOT DISTINCT indexes are only supported on PostgreSQL".to_string(),
+            ));
+        }
+        stmt.nulls_not_distinct();
+    }
+
     for field in &index.fields {
         stmt.col(Alias::new(field));
     }

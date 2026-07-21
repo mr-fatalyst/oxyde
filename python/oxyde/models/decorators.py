@@ -21,6 +21,8 @@ Classes:
         method: btree | hash | gin | gist (default: btree)
         name: Custom index name (auto-generated if None)
         unique: Create UNIQUE index
+        nulls_not_distinct: Treat NULL values as equal for UNIQUE indexes
+                            (PostgreSQL only)
         where: Partial index condition (SQL fragment)
 
     Check: CHECK constraint definition.
@@ -69,6 +71,7 @@ class Index:
     method: Literal["btree", "hash", "gin", "gist"] | None = None
     name: str | None = None
     unique: bool = False
+    nulls_not_distinct: bool = False
     where: str | None = None  # Partial index condition
 
     def __init__(
@@ -77,14 +80,18 @@ class Index:
         method: Literal["btree", "hash", "gin", "gist"] | None = None,
         name: str | None = None,
         unique: bool = False,
+        nulls_not_distinct: bool = False,
         where: str | None = None,
     ):
         if not fields:
             raise ValueError("Index requires at least one field")
+        if nulls_not_distinct and not unique:
+            raise ValueError("Index(nulls_not_distinct=True) requires unique=True")
         self.fields = tuple(fields) if isinstance(fields, list) else fields
         self.method = method
         self.name = name
         self.unique = unique
+        self.nulls_not_distinct = nulls_not_distinct
         if where is not None:
             where = where.strip() or None
         self.where = where

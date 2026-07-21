@@ -13,7 +13,6 @@ from oxyde.migrations.context import MigrationContext
 from oxyde.migrations.replay import SchemaState
 
 
-
 @pytest.fixture
 def temp_migrations_dir():
     """Create a temporary migrations directory."""
@@ -665,7 +664,10 @@ class TestOpMatrix:
             },
         )
         sqls = _render(ctx, dialect)
-        assert any("CREATE" in s.upper() and "INDEX" in s.upper() and "idx_users_email" in s for s in sqls)
+        assert any(
+            "CREATE" in s.upper() and "INDEX" in s.upper() and "idx_users_email" in s
+            for s in sqls
+        )
 
     @pytest.mark.parametrize("dialect", PARTIAL_INDEX_DIALECTS)
     def test_create_partial_index(self, dialect):
@@ -697,6 +699,37 @@ class TestOpMatrix:
         )
         with pytest.raises(Exception, match="partial indexes"):
             _render(ctx, "mysql")
+
+    def test_create_nulls_not_distinct_index_postgres(self):
+        ctx = MigrationContext(mode="collect", dialect="postgres")
+        ctx.create_index(
+            "users",
+            {
+                "name": "idx_users_email_nulls_not_distinct",
+                "fields": ["email"],
+                "unique": True,
+                "method": None,
+                "nulls_not_distinct": True,
+            },
+        )
+        sqls = _render(ctx, "postgres")
+        assert any("NULLS NOT DISTINCT" in s for s in sqls)
+
+    @pytest.mark.parametrize("dialect", ["mysql", "sqlite"])
+    def test_create_nulls_not_distinct_index_non_postgres_rejected(self, dialect):
+        ctx = MigrationContext(mode="collect", dialect=dialect)
+        ctx.create_index(
+            "users",
+            {
+                "name": "idx_users_email_nulls_not_distinct",
+                "fields": ["email"],
+                "unique": True,
+                "method": None,
+                "nulls_not_distinct": True,
+            },
+        )
+        with pytest.raises(Exception, match="NULLS NOT DISTINCT"):
+            _render(ctx, dialect)
 
     @pytest.mark.parametrize("dialect", ALL_DIALECTS)
     def test_drop_index(self, dialect):
@@ -773,7 +806,9 @@ def _base_snapshot() -> dict:
             "users": {
                 "name": "users",
                 "fields": [
-                    _field("id", python_type="int", primary_key=True, auto_increment=True),
+                    _field(
+                        "id", python_type="int", primary_key=True, auto_increment=True
+                    ),
                     _field("email", unique=True),
                 ],
                 "indexes": [],
