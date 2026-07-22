@@ -108,8 +108,22 @@ def makemigrations(
                 typer.echo(f"      - Add column: {op['table']}.{op['field']['name']}")
             elif op_type == "drop_column":
                 typer.echo(f"      - Drop column: {op['table']}.{op['field']}")
+            elif op_type == "alter_enum_type":
+                typer.secho(
+                    f"      - Manual enum change: {op['name']} "
+                    f"{op['old_values']} -> {op['new_values']}",
+                    fg=typer.colors.YELLOW,
+                )
             else:
                 typer.echo(f"      - {op_type}")
+
+        if any(op.get("type") == "alter_enum_type" for op in operations):
+            typer.secho(
+                "   ⚠️  One or more enum types changed in a way that requires "
+                "manual SQL. The migration file will include a ctx.require_manual(...) "
+                "guard; replace it with ctx.execute(...) and keep ctx.alter_enum_type(...).",
+                fg=typer.colors.YELLOW,
+            )
 
     except Exception as e:
         typer.secho(f"   ❌ Error computing diff: {e}", fg=typer.colors.RED)

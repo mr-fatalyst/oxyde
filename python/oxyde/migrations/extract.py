@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
@@ -78,6 +79,10 @@ def _serialize_default(value: Any, dialect: str) -> str | None:
     # User should use db_default for SQL expressions
     if callable(value):
         return None
+
+    if isinstance(value, Enum):
+        escaped = str(value.value).replace("'", "''")
+        return f"'{escaped}'"
 
     # String - quote it
     if isinstance(value, str):

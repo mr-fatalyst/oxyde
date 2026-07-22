@@ -211,6 +211,22 @@ class Query(
         clone._lock_type = "share"
         return clone
 
+    def _column_types_for_query(self) -> dict[str, dict] | None:
+        """Return base and joined column type specs keyed by SQL/result column names."""
+        base_types = self.model_class._db_meta.column_types or {}
+        column_types: dict[str, dict] = dict(base_types)
+
+        for descriptor in self._join_specs:
+            target_types = descriptor.target_model._db_meta.column_types or {}
+            for _, column in descriptor.columns:
+                spec = target_types.get(column)
+                if spec is None:
+                    continue
+                column_types[f"{descriptor.alias}.{column}"] = spec
+                column_types[f"{descriptor.result_prefix}__{column}"] = spec
+
+        return column_types or None
+
     def to_ir(self) -> dict[str, Any]:
         """Convert query to IR format for Rust execution."""
         from oxyde.models.base import Model
@@ -273,8 +289,8 @@ class Query(
                 self._column_for_field(field) for field in self._group_by_fields
             ]
 
-        # Use cached col_types from model metadata (computed at finalization)
-        column_types = self.model_class._db_meta.column_types
+        # Use cached col_types from model metadata plus joined column aliases.
+        column_types = self._column_types_for_query()
 
         # Pass pk_column only for JOIN queries (needed for deduplication)
         pk_column = None

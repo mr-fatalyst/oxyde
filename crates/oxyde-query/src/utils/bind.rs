@@ -12,8 +12,10 @@ use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use oxyde_codec::ColumnTypeSpec;
 use rust_decimal::Decimal;
 use sea_query::value::ArrayType;
-use sea_query::Value;
+use sea_query::{Expr, SimpleExpr, Value};
 use uuid::Uuid;
+
+use crate::Dialect;
 
 /// Convert an rmpv value without a column spec (raw SQL parameters).
 /// Identical to `bind_value(value, &ColumnTypeSpec::Unknown)`.
@@ -70,6 +72,15 @@ pub fn bind_value(value: &rmpv::Value, spec: &ColumnTypeSpec) -> Value {
     }
 }
 
+pub fn typed_value_expr(value: Value, spec: &ColumnTypeSpec, dialect: Dialect) -> SimpleExpr {
+    if dialect == Dialect::Postgres {
+        if let Some(type_name) = postgres_enum_cast_type(spec) {
+            return Expr::cust_with_values(format!("$1::{type_name}"), vec![value]);
+        }
+    }
+    Expr::val(value).into()
+}
+
 /// Bind a string payload according to the spec.
 ///
 /// Temporal specs and `Unknown` fall back to the RFC3339 heuristic on parse
@@ -120,6 +131,7 @@ fn bind_string(s: &str, spec: &ColumnTypeSpec) -> Value {
                 Err(_) => string_value(s),
             }
         }
+        ColumnTypeSpec::Enum { .. } => string_value(s),
         // Known non-temporal specs: definitely not a datetime — no heuristic.
         ColumnTypeSpec::BigInteger
         | ColumnTypeSpec::Double
@@ -139,7 +151,9 @@ fn typed_null(spec: &ColumnTypeSpec) -> Value {
         ColumnTypeSpec::BigInteger | ColumnTypeSpec::Timedelta => Value::BigInt(None),
         ColumnTypeSpec::Double => Value::Double(None),
         ColumnTypeSpec::Boolean => Value::Bool(None),
-        ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => Value::String(None),
+        ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } | ColumnTypeSpec::Enum { .. } => {
+            Value::String(None)
+        }
         ColumnTypeSpec::Blob => Value::Bytes(None),
         ColumnTypeSpec::DateTime => Value::ChronoDateTime(None),
         ColumnTypeSpec::DateTimeUtc => Value::ChronoDateTimeUtc(None),
@@ -163,7 +177,9 @@ fn element_array_type(item: &ColumnTypeSpec) -> Option<ArrayType> {
         ColumnTypeSpec::BigInteger | ColumnTypeSpec::Timedelta => Some(ArrayType::BigInt),
         ColumnTypeSpec::Double => Some(ArrayType::Double),
         ColumnTypeSpec::Boolean => Some(ArrayType::Bool),
-        ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => Some(ArrayType::String),
+        ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } | ColumnTypeSpec::Enum { .. } => {
+            Some(ArrayType::String)
+        }
         ColumnTypeSpec::Blob => Some(ArrayType::Bytes),
         ColumnTypeSpec::DateTime => Some(ArrayType::ChronoDateTime),
         ColumnTypeSpec::DateTimeUtc => Some(ArrayType::ChronoDateTimeUtc),
@@ -174,6 +190,24 @@ fn element_array_type(item: &ColumnTypeSpec) -> Option<ArrayType> {
         ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary => Some(ArrayType::Json),
         ColumnTypeSpec::Array { .. } | ColumnTypeSpec::Unknown => None,
     }
+}
+
+fn postgres_enum_cast_type(spec: &ColumnTypeSpec) -> Option<String> {
+    match spec {
+        ColumnTypeSpec::Enum { name, .. } => Some(quote_pg_type_path(name)),
+        ColumnTypeSpec::Array { item } => match item.as_ref() {
+            ColumnTypeSpec::Enum { name, .. } => Some(format!("{}[]", quote_pg_type_path(name))),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn quote_pg_type_path(name: &str) -> String {
+    name.split('.')
+        .map(|part| format!("\"{}\"", part.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 fn string_value(s: &str) -> Value {

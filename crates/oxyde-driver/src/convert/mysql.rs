@@ -31,7 +31,7 @@ impl CellEncoder for MySqlEncoder {
                 }
                 true
             }
-            ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => {
+            ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } | ColumnTypeSpec::Enum { .. } => {
                 match row.try_get::<Option<String>, _>(idx) {
                     Ok(Some(v)) => write_str(buf, &v),
                     Ok(None) => write_nil(buf),

@@ -3,11 +3,12 @@
 use std::collections::HashMap;
 
 use oxyde_codec::{Aggregate, ColumnTypeSpec, Filter, FilterNode};
-use sea_query::{Expr, Func, LikeExpr, SimpleExpr, Value};
+use sea_query::{Expr, Func, LikeExpr, SimpleExpr};
 
 use crate::aggregate::build_aggregate;
 use crate::error::{QueryError, Result};
-use crate::utils::{bind_value, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, typed_value_expr, ColumnIdent, TableIdent};
+use crate::Dialect;
 
 /// Create column expression, handling "table.column" format for joins
 /// If default_table is provided and column is not already qualified, prepend it
@@ -36,6 +37,9 @@ fn resolve_col_spec<'a>(
     col_name: &str,
     col_types: Option<&'a HashMap<String, ColumnTypeSpec>>,
 ) -> &'a ColumnTypeSpec {
+    if let Some(spec) = col_types.and_then(|ct| ct.get(col_name)) {
+        return spec;
+    }
     let col_key = col_name.rsplit('.').next().unwrap_or(col_name);
     col_types
         .and_then(|ct| ct.get(col_key))
@@ -67,19 +71,28 @@ pub fn build_filter_node(
     default_table: Option<&str>,
     col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     aggregates: Option<&[Aggregate]>,
+    dialect: Dialect,
 ) -> Result<SimpleExpr> {
     match node {
-        FilterNode::Condition(filter) => apply_filter(filter, default_table, col_types, aggregates),
+        FilterNode::Condition(filter) => {
+            apply_filter(filter, default_table, col_types, aggregates, dialect)
+        }
         FilterNode::And { conditions } => {
             if conditions.is_empty() {
                 return Err(QueryError::InvalidQuery(
                     "AND node must have at least one condition".into(),
                 ));
             }
-            let first = build_filter_node(&conditions[0], default_table, col_types, aggregates)?;
+            let first = build_filter_node(
+                &conditions[0],
+                default_table,
+                col_types,
+                aggregates,
+                dialect,
+            )?;
             let mut result = first;
             for cond in &conditions[1..] {
-                let next = build_filter_node(cond, default_table, col_types, aggregates)?;
+                let next = build_filter_node(cond, default_table, col_types, aggregates, dialect)?;
                 result = result.and(next);
             }
             Ok(result)
@@ -90,16 +103,23 @@ pub fn build_filter_node(
                     "OR node must have at least one condition".into(),
                 ));
             }
-            let first = build_filter_node(&conditions[0], default_table, col_types, aggregates)?;
+            let first = build_filter_node(
+                &conditions[0],
+                default_table,
+                col_types,
+                aggregates,
+                dialect,
+            )?;
             let mut result = first;
             for cond in &conditions[1..] {
-                let next = build_filter_node(cond, default_table, col_types, aggregates)?;
+                let next = build_filter_node(cond, default_table, col_types, aggregates, dialect)?;
                 result = result.or(next);
             }
             Ok(result)
         }
         FilterNode::Not { condition } => {
-            let inner = build_filter_node(condition, default_table, col_types, aggregates)?;
+            let inner =
+                build_filter_node(condition, default_table, col_types, aggregates, dialect)?;
             Ok(inner.not())
         }
     }
@@ -113,6 +133,7 @@ fn apply_filter(
     default_table: Option<&str>,
     col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     aggregates: Option<&[Aggregate]>,
+    dialect: Dialect,
 ) -> Result<SimpleExpr> {
     let col_name = filter.column.as_ref().unwrap_or(&filter.field);
 
@@ -130,12 +151,12 @@ fn apply_filter(
     let val = bind_value(&filter.value, spec);
 
     let expr = match filter.operator.as_str() {
-        "=" => col.eq(val),
-        "!=" => col.ne(val),
-        ">" => col.gt(val),
-        ">=" => col.gte(val),
-        "<" => col.lt(val),
-        "<=" => col.lte(val),
+        "=" => col.eq(typed_value_expr(val, spec, dialect)),
+        "!=" => col.ne(typed_value_expr(val, spec, dialect)),
+        ">" => col.gt(typed_value_expr(val, spec, dialect)),
+        ">=" => col.gte(typed_value_expr(val, spec, dialect)),
+        "<" => col.lt(typed_value_expr(val, spec, dialect)),
+        "<=" => col.lte(typed_value_expr(val, spec, dialect)),
         "LIKE" => {
             let text = filter.value.as_str().ok_or_else(|| {
                 QueryError::InvalidQuery("LIKE operator requires string value".into())
@@ -152,7 +173,10 @@ fn apply_filter(
         }
         "IN" => {
             if let rmpv::Value::Array(arr) = &filter.value {
-                let values: Vec<Value> = arr.iter().map(|v| bind_value(v, spec)).collect();
+                let values: Vec<SimpleExpr> = arr
+                    .iter()
+                    .map(|v| typed_value_expr(bind_value(v, spec), spec, dialect))
+                    .collect();
                 col.is_in(values)
             } else {
                 return Err(QueryError::InvalidQuery(
@@ -167,8 +191,8 @@ fn apply_filter(
                         "BETWEEN operator requires exactly two values".to_string(),
                     ));
                 }
-                let start = Expr::val(bind_value(&arr[0], spec));
-                let end = Expr::val(bind_value(&arr[1], spec));
+                let start = typed_value_expr(bind_value(&arr[0], spec), spec, dialect);
+                let end = typed_value_expr(bind_value(&arr[1], spec), spec, dialect);
                 col.between(start, end)
             } else {
                 return Err(QueryError::InvalidQuery(

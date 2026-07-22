@@ -16,7 +16,7 @@ pub fn build_delete(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
 
     // Add filters (no JOIN in DELETE, so no table qualification needed)
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree, None, ir.column_types.as_ref(), None)?;
+        let expr = build_filter_node(filter_tree, None, ir.column_types.as_ref(), None, dialect)?;
         query.and_where(expr);
     }
 

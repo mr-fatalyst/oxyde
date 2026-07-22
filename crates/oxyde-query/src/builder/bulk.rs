@@ -10,7 +10,7 @@ use sea_query::{
 
 use crate::error::{QueryError, Result};
 use crate::filter::build_filter_node;
-use crate::utils::{bind_value, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, typed_value_expr, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build bulk UPDATE query using CASE WHEN statements.
@@ -45,7 +45,7 @@ pub fn build_bulk_update(
         for column in row.values.keys() {
             update_columns.insert(column.clone());
         }
-        let cond = build_bulk_row_condition(row, col_types)?;
+        let cond = build_bulk_row_condition(row, col_types, dialect)?;
         row_conditions.push(cond);
     }
 
@@ -66,7 +66,10 @@ pub fn build_bulk_update(
             .unwrap_or(&ColumnTypeSpec::Unknown);
         for (row, cond) in bulk.rows.iter().zip(&row_conditions) {
             if let Some(value) = row.values.get(&column) {
-                case_stmt = case_stmt.case(cond.clone(), Expr::val(bind_value(value, spec)));
+                case_stmt = case_stmt.case(
+                    cond.clone(),
+                    typed_value_expr(bind_value(value, spec), spec, dialect),
+                );
             }
         }
         // ELSE keeps current value for rows not matched by this column
@@ -82,7 +85,7 @@ pub fn build_bulk_update(
     query.cond_where(filter_cond);
 
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree, None, col_types, None)?;
+        let expr = build_filter_node(filter_tree, None, col_types, None, dialect)?;
         query.and_where(expr);
     }
 
@@ -103,10 +106,11 @@ pub fn build_bulk_update(
 fn build_bulk_row_condition(
     row: &BulkUpdateRow,
     col_types: Option<&HashMap<String, ColumnTypeSpec>>,
+    dialect: Dialect,
 ) -> Result<Cond> {
     let mut cond = Cond::all();
     for (column, value) in &row.filters {
-        cond = cond.add(build_match_expression(column, value, col_types));
+        cond = cond.add(build_match_expression(column, value, col_types, dialect));
     }
     Ok(cond)
 }
@@ -116,6 +120,7 @@ fn build_match_expression(
     column: &str,
     value: &rmpv::Value,
     col_types: Option<&HashMap<String, ColumnTypeSpec>>,
+    dialect: Dialect,
 ) -> SimpleExpr {
     if value.is_nil() {
         Expr::col(ColumnIdent(column.to_string())).is_null()
@@ -123,6 +128,10 @@ fn build_match_expression(
         let spec = col_types
             .and_then(|ct| ct.get(column))
             .unwrap_or(&ColumnTypeSpec::Unknown);
-        Expr::col(ColumnIdent(column.to_string())).eq(bind_value(value, spec))
+        Expr::col(ColumnIdent(column.to_string())).eq(typed_value_expr(
+            bind_value(value, spec),
+            spec,
+            dialect,
+        ))
     }
 }

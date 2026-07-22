@@ -118,6 +118,59 @@ class TestSquash:
         assert result.raw_sql_files == ["0002_add_age.py"]
         assert sorted(result.legacy_files) == ["0001_users.py", "0002_add_age.py"]
 
+    def test_legacy_field_next_to_enum_add_value_replays(self, tmp_path):
+        (tmp_path / "0001_create.py").write_text(
+            '''depends_on = None
+
+
+def upgrade(ctx):
+    ctx.create_enum_type("status_enum", ["draft"])
+    ctx.create_table(
+        "articles",
+        fields=[
+            {
+                "name": "id",
+                "python_type": "int",
+                "db_type": None,
+                "nullable": False,
+                "primary_key": True,
+                "unique": False,
+                "default": None,
+                "auto_increment": True,
+            },
+            {
+                "name": "status",
+                "column_type": {
+                    "kind": "enum",
+                    "name": "status_enum",
+                    "values": ["draft"],
+                },
+                "db_type": None,
+                "nullable": False,
+                "primary_key": False,
+                "unique": False,
+                "default": None,
+                "auto_increment": False,
+            },
+        ],
+    )
+'''
+        )
+        (tmp_path / "0002_add_value.py").write_text(
+            '''depends_on = "0001_create"
+
+
+def upgrade(ctx):
+    ctx.add_enum_value("status_enum", "published")
+'''
+        )
+
+        snapshot = replay_migrations(str(tmp_path))
+
+        fields = snapshot["tables"]["articles"]["fields"]
+        status = next(field for field in fields if field["name"] == "status")
+        assert status["column_type"]["values"] == ["draft", "published"]
+
     def test_squashed_history_replays_to_same_schema(self, tmp_path, recwarn):
         _write_legacy_history(tmp_path)
         before = replay_migrations(str(tmp_path))

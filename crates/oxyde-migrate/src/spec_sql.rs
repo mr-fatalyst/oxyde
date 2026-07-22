@@ -27,10 +27,21 @@ pub fn resolve_spec_type(
     dialect: Dialect,
     is_pk: bool,
 ) -> String {
+    if contains_enum_spec(spec) {
+        return canonical_type(spec, dialect, is_pk);
+    }
     if let Some(db_type) = db_type {
         return translate_user_db_type(db_type, dialect);
     }
     canonical_type(spec, dialect, is_pk)
+}
+
+fn contains_enum_spec(spec: &ColumnTypeSpec) -> bool {
+    match spec {
+        ColumnTypeSpec::Enum { .. } => true,
+        ColumnTypeSpec::Array { item } => contains_enum_spec(item),
+        _ => false,
+    }
 }
 
 /// SERIAL/BIGSERIAL are PostgreSQL-specific — translate for other dialects.
@@ -117,6 +128,18 @@ fn canonical_type(spec: &ColumnTypeSpec, dialect: Dialect, is_pk: bool) -> Strin
             D::Mysql => "JSON".to_string(),
             D::Sqlite => "TEXT".to_string(),
         },
+        S::Enum { name, values } => match dialect {
+            D::Postgres => quote_postgres_type_name(name),
+            D::Mysql => format!(
+                "ENUM({})",
+                values
+                    .iter()
+                    .map(|value| quote_sql_string(value))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            D::Sqlite => "TEXT".to_string(),
+        },
         S::Array { item } => match dialect {
             D::Postgres => format!("{}[]", canonical_type(item, dialect, false)),
             D::Mysql => "JSON".to_string(),
@@ -124,6 +147,17 @@ fn canonical_type(spec: &ColumnTypeSpec, dialect: Dialect, is_pk: bool) -> Strin
         },
         S::Unknown => "TEXT".to_string(),
     }
+}
+
+pub(crate) fn quote_postgres_type_name(name: &str) -> String {
+    name.split('.')
+        .map(|part| format!("\"{}\"", part.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+pub(crate) fn quote_sql_string(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
 }
 
 #[cfg(test)]
@@ -239,6 +273,26 @@ mod tests {
         assert_eq!(
             resolve_spec_type(&spec, Some("SERIAL"), Dialect::Postgres, false),
             "SERIAL"
+        );
+    }
+
+    #[test]
+    fn enum_type_rendering() {
+        let spec = ColumnTypeSpec::Enum {
+            name: "post_status_enum".to_string(),
+            values: vec!["draft".to_string(), "published".to_string()],
+        };
+        assert_eq!(
+            resolve_spec_type(&spec, None, Dialect::Postgres, false),
+            r#""post_status_enum""#
+        );
+        assert_eq!(
+            resolve_spec_type(&spec, None, Dialect::Mysql, false),
+            "ENUM('draft','published')"
+        );
+        assert_eq!(
+            resolve_spec_type(&spec, None, Dialect::Sqlite, false),
+            "TEXT"
         );
     }
 

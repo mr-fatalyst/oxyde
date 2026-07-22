@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from enum import Enum
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 
 import msgpack
 import pytest
+from pydantic import ValidationError
 
 from oxyde import Field, Model
 from oxyde.db import atomic
@@ -161,7 +163,7 @@ def test_field_metadata_captures_db_attributes() -> None:
     # db_type is NOT auto-inferred - only set if user explicitly specifies Field(db_type="...")
     # Type inference happens at schema extraction time based on dialect
     assert user_meta.field_metadata["email"].db_type is None
-    assert user_meta.field_metadata["email"].python_type == str
+    assert user_meta.field_metadata["email"].python_type is str
 
     article_meta = Article._db_meta
 
@@ -410,6 +412,71 @@ async def test_async_manager_create_update_delete_and_save() -> None:
     )
     assert deleted == 2
     assert delete_stub.calls[0]["op"] == "delete"
+
+    clear_registry()
+
+
+@pytest.mark.asyncio
+async def test_update_validates_enum_values() -> None:
+    clear_registry()
+
+    class Status(Enum):
+        DRAFT = "draft"
+        PUBLISHED = "published"
+
+    meta = type("Meta", (), {"is_table": True})
+    Post = type(
+        "EnumUpdatePost",
+        (Model,),
+        {
+            "__module__": __name__,
+            "__annotations__": {
+                "id": int | None,
+                "status": Status,
+                "status_tags": list[Status] | None,
+                "Meta": ClassVar[type],
+            },
+            "id": Field(default=None, db_pk=True),
+            "status": Field(default=Status.DRAFT),
+            "status_tags": Field(default=None, db_nullable=True),
+            "Meta": meta,
+        },
+    )
+
+    valid_stub = StubExecuteClient([{"affected": 1}])
+    result = await Post.objects.filter(id=1).update(
+        status="published",
+        status_tags=["draft", "published"],
+        client=valid_stub,
+    )
+
+    assert result == 1
+    assert valid_stub.calls[0]["values"]["status"] == "published"
+    assert valid_stub.calls[0]["values"]["status_tags"] == ["draft", "published"]
+
+    null_stub = StubExecuteClient([{"affected": 1}])
+    result = await Post.objects.filter(id=1).update(
+        status_tags=None,
+        client=null_stub,
+    )
+    assert result == 1
+    assert null_stub.calls[0]["values"]["status_tags"] is None
+
+    invalid_stub = StubExecuteClient([{"affected": 1}])
+    with pytest.raises(ValidationError):
+        await Post.objects.filter(id=1).update(
+            status="deleted",
+            client=invalid_stub,
+        )
+    assert invalid_stub.calls == []
+
+    invalid_list_stub = StubExecuteClient([{"affected": 1}])
+    with pytest.raises(ValidationError):
+        await Post.objects.filter(id=1).update(
+            status_tags=["draft", "deleted"],
+            client=invalid_list_stub,
+        )
+    assert invalid_list_stub.calls == []
 
     clear_registry()
 

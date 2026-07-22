@@ -4,8 +4,8 @@
 
 use oxyde_codec::ColumnTypeSpec;
 use oxyde_migrate::{
-    compute_diff, CheckDef, Dialect, FieldDef, ForeignKeyDef, IndexDef, MigrationOp, Snapshot,
-    TableDef,
+    compute_diff, CheckDef, Dialect, FieldDef, ForeignKeyDef, IndexDef, Migration, MigrationOp,
+    Snapshot, TableDef,
 };
 
 fn sample_field(name: &str) -> FieldDef {
@@ -53,6 +53,51 @@ fn sample_table() -> TableDef {
         foreign_keys: vec![],
         checks: vec![],
         comment: Some("User accounts".into()),
+    }
+}
+
+fn enum_spec(values: &[&str]) -> ColumnTypeSpec {
+    ColumnTypeSpec::Enum {
+        name: "post_status_enum".into(),
+        values: values.iter().map(|value| (*value).into()).collect(),
+    }
+}
+
+fn enum_table(values: &[&str]) -> TableDef {
+    TableDef {
+        name: "posts".into(),
+        fields: vec![
+            FieldDef {
+                name: "id".into(),
+                column_type: ColumnTypeSpec::BigInteger,
+                db_type: None,
+                nullable: false,
+                primary_key: true,
+                unique: false,
+                default: None,
+                auto_increment: false,
+                max_length: None,
+                max_digits: None,
+                decimal_places: None,
+            },
+            FieldDef {
+                name: "status".into(),
+                column_type: enum_spec(values),
+                db_type: None,
+                nullable: false,
+                primary_key: false,
+                unique: false,
+                default: None,
+                auto_increment: false,
+                max_length: None,
+                max_digits: None,
+                decimal_places: None,
+            },
+        ],
+        indexes: vec![],
+        foreign_keys: vec![],
+        checks: vec![],
+        comment: None,
     }
 }
 
@@ -120,6 +165,170 @@ fn test_migration_create_table_generates_sql() {
 
     assert!(sql[0].contains(r#"CREATE TABLE "users""#));
     assert!(sql[1].contains(r#"CREATE UNIQUE INDEX "users_email_idx""#));
+}
+
+#[test]
+fn test_postgres_enum_type_is_created_before_table() {
+    let migration = Migration {
+        name: "enum".into(),
+        operations: vec![
+            MigrationOp::CreateEnumType {
+                name: "post_status_enum".into(),
+                values: vec!["draft".into(), "published".into()],
+            },
+            MigrationOp::CreateTable {
+                table: enum_table(&["draft", "published"]),
+            },
+        ],
+    };
+
+    let sql = migration.to_sql(Dialect::Postgres).unwrap();
+    assert_eq!(
+        sql[0],
+        r#"CREATE TYPE "post_status_enum" AS ENUM ('draft', 'published')"#
+    );
+    assert!(
+        sql[1].contains(r#""status" "post_status_enum" NOT NULL"#),
+        "{}",
+        sql[1]
+    );
+}
+
+#[test]
+fn test_mysql_enum_is_inline_column_type() {
+    let sql = MigrationOp::CreateTable {
+        table: enum_table(&["draft", "published"]),
+    }
+    .to_sql(Dialect::Mysql)
+    .unwrap();
+
+    assert!(sql[0].contains("`status` ENUM('draft','published') NOT NULL"));
+}
+
+#[test]
+fn test_compute_diff_adds_enum_value_without_altering_column() {
+    let mut old = Snapshot::new();
+    old.add_table(enum_table(&["draft", "published"]));
+    let mut new = Snapshot::new();
+    new.add_table(enum_table(&["draft", "published", "archived"]));
+
+    let ops = compute_diff(&old, &new).unwrap();
+    assert_eq!(ops.len(), 1);
+    match &ops[0] {
+        MigrationOp::AddEnumValue {
+            name,
+            value,
+            fields,
+        } => {
+            assert_eq!(name, "post_status_enum");
+            assert_eq!(value, "archived");
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].table, "posts");
+            assert_eq!(fields[0].field.name, "status");
+        }
+        op => panic!("expected AddEnumValue, got {:?}", op),
+    }
+}
+
+#[test]
+fn test_mysql_enum_value_append_modifies_inline_enum_columns() {
+    let mut old = Snapshot::new();
+    old.add_table(enum_table(&["draft", "published"]));
+    let mut new = Snapshot::new();
+    new.add_table(enum_table(&["draft", "published", "archived"]));
+
+    let ops = compute_diff(&old, &new).unwrap();
+    let migration = Migration {
+        name: "enum_value".into(),
+        operations: ops,
+    };
+
+    let sql = migration.to_sql(Dialect::Mysql).unwrap();
+    assert_eq!(sql.len(), 1);
+    assert_eq!(
+        sql[0],
+        "ALTER TABLE `posts` MODIFY COLUMN `status` ENUM('draft','published','archived') NOT NULL"
+    );
+}
+
+#[test]
+fn test_mysql_multiple_enum_value_append_modifies_inline_enum_columns_progressively() {
+    let mut old = Snapshot::new();
+    old.add_table(enum_table(&["draft", "published"]));
+    let mut new = Snapshot::new();
+    new.add_table(enum_table(&["draft", "published", "archived", "deleted"]));
+
+    let ops = compute_diff(&old, &new).unwrap();
+    let migration = Migration {
+        name: "enum_value".into(),
+        operations: ops,
+    };
+
+    let sql = migration.to_sql(Dialect::Mysql).unwrap();
+    assert_eq!(
+        sql,
+        vec![
+            "ALTER TABLE `posts` MODIFY COLUMN `status` ENUM('draft','published','archived') NOT NULL",
+            "ALTER TABLE `posts` MODIFY COLUMN `status` ENUM('draft','published','archived','deleted') NOT NULL",
+        ]
+    );
+}
+
+#[test]
+fn test_postgres_enum_value_is_added_before_dependent_ddl() {
+    let migration = Migration {
+        name: "enum_value".into(),
+        operations: vec![
+            MigrationOp::CreateIndex {
+                table: "posts".into(),
+                index: IndexDef {
+                    name: "posts_archived_idx".into(),
+                    fields: vec!["status".into()],
+                    unique: false,
+                    method: Some("btree".into()),
+                    where_clause: Some("status = 'archived'".into()),
+                },
+            },
+            MigrationOp::AddEnumValue {
+                name: "post_status_enum".into(),
+                value: "archived".into(),
+                fields: vec![],
+            },
+        ],
+    };
+
+    let sql = migration.to_sql(Dialect::Postgres).unwrap();
+    assert_eq!(
+        sql[0],
+        r#"ALTER TYPE "post_status_enum" ADD VALUE IF NOT EXISTS 'archived'"#
+    );
+    assert!(sql[1].contains(r#"CREATE INDEX "posts_archived_idx""#));
+}
+
+#[test]
+fn test_compute_diff_emits_manual_enum_alter_for_value_removal() {
+    let mut old = Snapshot::new();
+    old.add_table(enum_table(&["draft", "published"]));
+    let mut new = Snapshot::new();
+    new.add_table(enum_table(&["draft"]));
+
+    let ops = compute_diff(&old, &new).unwrap();
+    assert_eq!(ops.len(), 1);
+    match &ops[0] {
+        MigrationOp::AlterEnumType {
+            name,
+            old_values,
+            new_values,
+        } => {
+            assert_eq!(name, "post_status_enum");
+            assert_eq!(
+                old_values,
+                &vec!["draft".to_string(), "published".to_string()]
+            );
+            assert_eq!(new_values, &vec!["draft".to_string()]);
+        }
+        op => panic!("expected AlterEnumType, got {:?}", op),
+    }
 }
 
 #[test]

@@ -14,7 +14,7 @@ use crate::Dialect;
 
 /// Build a `SelectStatement` from QueryIR (without serializing to string).
 /// Used recursively for UNION sub-queries.
-fn build_select_statement(ir: &QueryIR) -> Result<SelectStatement> {
+fn build_select_statement(ir: &QueryIR, dialect: Dialect) -> Result<SelectStatement> {
     let table = TableIdent(ir.table.clone());
     let mut query = Query::select();
     query.from(table.clone());
@@ -61,7 +61,13 @@ fn build_select_statement(ir: &QueryIR) -> Result<SelectStatement> {
     };
 
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree, default_table, ir.column_types.as_ref(), None)?;
+        let expr = build_filter_node(
+            filter_tree,
+            default_table,
+            ir.column_types.as_ref(),
+            None,
+            dialect,
+        )?;
         query.and_where(expr);
     }
 
@@ -85,6 +91,7 @@ fn build_select_statement(ir: &QueryIR) -> Result<SelectStatement> {
             default_table,
             ir.column_types.as_ref(),
             ir.aggregates.as_deref(),
+            dialect,
         )?;
         query.and_having(expr);
     }
@@ -95,7 +102,7 @@ fn build_select_statement(ir: &QueryIR) -> Result<SelectStatement> {
 
     // UNION via sea-query (recursive)
     if let Some(union_query_ir) = &ir.union_query {
-        let union_stmt = build_select_statement(union_query_ir)?;
+        let union_stmt = build_select_statement(union_query_ir, dialect)?;
         let union_type = if ir.union_all.unwrap_or(false) {
             UnionType::All
         } else {
@@ -172,8 +179,13 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         };
 
         if let Some(filter_tree) = &ir.filter_tree {
-            let expr =
-                build_filter_node(filter_tree, default_table, ir.column_types.as_ref(), None)?;
+            let expr = build_filter_node(
+                filter_tree,
+                default_table,
+                ir.column_types.as_ref(),
+                None,
+                dialect,
+            )?;
             count_query.and_where(expr);
         }
 
@@ -184,7 +196,7 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         return Ok(build_query_string(count_query, dialect));
     }
 
-    let query = build_select_statement(ir)?;
+    let query = build_select_statement(ir, dialect)?;
     let (sql, values) = build_query_string(query, dialect);
 
     if ir.exists.unwrap_or(false) {

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from enum import Enum
 from uuid import UUID
 
 import pytest
@@ -17,6 +18,7 @@ from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.core.wrapper import render_sql_debug
 from oxyde.db.pool import _msgpack_encoder
+from oxyde.models.registry import clear_registry
 from oxyde.queries import F
 from oxyde.queries.base import _build_column_types, _model_key
 from oxyde.queries.expressions import _serialize_value_for_ir
@@ -31,6 +33,11 @@ T = time(12, 30, 0)
 TD = timedelta(seconds=90)
 U = UUID("550e8400-e29b-41d4-a716-446655440000")
 DEC = Decimal("99.99")
+
+
+class Status(Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
 
 
 # -- Model covering all supported types --
@@ -55,6 +62,11 @@ class TypeModel(Model):
     uuid_tags: list[UUID] | None = Field(default=None, db_nullable=True)
     decimal_tags: list[Decimal] | None = Field(
         default=None, db_nullable=True, max_digits=10, decimal_places=2
+    )
+    status: Status = Field(default=Status.DRAFT)
+    status_tags: list[Status] | None = Field(default=None, db_nullable=True)
+    custom_status_tags: list[Status] | None = Field(
+        default=None, db_nullable=True, db_type="post_status_enum[]"
     )
 
     class Meta:
@@ -82,6 +94,7 @@ FILTER_CASES = [
     ("decimal", {"price": DEC}, [("Decimal", str(DEC))]),
     ("bytes", {"blob": b"hello"}, [("Bytes", b"hello")]),
     ("dict_json", {"data": {"key": "val"}}, [("Json", '{"key":"val"}')]),
+    ("enum", {"status": Status.DRAFT}, [("String", "draft")]),
     (
         "list_str_array",
         {"tags": ["a", "b"]},
@@ -101,6 +114,11 @@ FILTER_CASES = [
         "list_decimal_array",
         {"decimal_tags": [DEC]},
         [("Array", ("Decimal", [str(DEC)]))],
+    ),
+    (
+        "list_enum_array",
+        {"status_tags": [Status.DRAFT, Status.PUBLISHED]},
+        [("Array", ("String", ["draft", "published"]))],
     ),
 ]
 
@@ -223,6 +241,58 @@ def test_without_types_returns_plain_values():
     assert params == [25, "Alice"]
     assert isinstance(params[0], int)
     assert isinstance(params[1], str)
+
+
+def test_postgres_enum_filter_casts_parameter():
+    sql, params = TypeModel.objects.filter(status=Status.DRAFT).sql(dialect="postgres")
+    assert '$1::"status_enum"' in sql
+    assert params == ["draft"]
+
+
+def test_postgres_custom_enum_array_filter_casts_parameter():
+    sql, params = TypeModel.objects.filter(
+        custom_status_tags=[Status.DRAFT],
+    ).sql(dialect="postgres", with_types=True)
+
+    assert '$1::"post_status_enum"[]' in sql
+    assert params == [("Array", ("String", ["draft"]))]
+
+
+def test_joined_enum_filter_and_result_columns_are_typed():
+    clear_registry()
+
+    class Author(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        status: Status = Field(default=Status.DRAFT)
+
+        class Meta:
+            is_table = True
+            table_name = "authors"
+
+    class Post(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        author: Author | None = Field(default=None)
+
+        class Meta:
+            is_table = True
+            table_name = "posts"
+
+    query = Post.objects.filter(author__status=Status.DRAFT)
+    query_ir = query.query()
+    enum_spec = {
+        "kind": "enum",
+        "name": "status_enum",
+        "values": ["draft", "published"],
+    }
+
+    assert query_ir["column_types"]["author.status"] == enum_spec
+    assert query_ir["column_types"]["author__status"] == enum_spec
+
+    sql, params = query.sql(dialect="postgres")
+    assert '$1::"status_enum"' in sql
+    assert params == ["draft"]
+
+    clear_registry()
 
 
 # ---- count() / exists() use to_ir() and inherit column_types ----

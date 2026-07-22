@@ -14,6 +14,39 @@ from oxyde.migrations.utils import (
 )
 
 
+def _add_enum_value_to_spec(
+    spec: dict[str, Any], name: str, value: str
+) -> dict[str, Any]:
+    if spec.get("kind") == "enum" and spec.get("name") == name:
+        updated = dict(spec)
+        values = list(updated.get("values", []))
+        if value not in values:
+            values.append(value)
+        updated["values"] = values
+        return updated
+    if spec.get("kind") == "array" and isinstance(spec.get("item"), dict):
+        updated = dict(spec)
+        updated["item"] = _add_enum_value_to_spec(spec["item"], name, value)
+        return updated
+    return spec
+
+
+def _replace_enum_values_in_spec(
+    spec: dict[str, Any],
+    name: str,
+    values: list[str],
+) -> dict[str, Any]:
+    if spec.get("kind") == "enum" and spec.get("name") == name:
+        updated = dict(spec)
+        updated["values"] = list(values)
+        return updated
+    if spec.get("kind") == "array" and isinstance(spec.get("item"), dict):
+        updated = dict(spec)
+        updated["item"] = _replace_enum_values_in_spec(spec["item"], name, values)
+        return updated
+    return spec
+
+
 class SchemaState:
     """Represents database schema in memory.
 
@@ -32,7 +65,37 @@ class SchemaState:
         """
         op_type = op.get("type")
 
-        if op_type == "create_table":
+        if op_type == "create_enum_type":
+            pass
+
+        elif op_type == "drop_enum_type":
+            pass
+
+        elif op_type == "add_enum_value":
+            enum_name = op["name"]
+            enum_value = op["value"]
+            for table in self.tables.values():
+                for field in table["fields"]:
+                    if column_type := field.get("column_type"):
+                        field["column_type"] = _add_enum_value_to_spec(
+                            column_type,
+                            enum_name,
+                            enum_value,
+                        )
+
+        elif op_type == "alter_enum_type":
+            enum_name = op["name"]
+            enum_values = op["new_values"]
+            for table in self.tables.values():
+                for field in table["fields"]:
+                    if column_type := field.get("column_type"):
+                        field["column_type"] = _replace_enum_values_in_spec(
+                            column_type,
+                            enum_name,
+                            enum_values,
+                        )
+
+        elif op_type == "create_table":
             table = op["table"]
             self.tables[table["name"]] = {
                 "name": table["name"],

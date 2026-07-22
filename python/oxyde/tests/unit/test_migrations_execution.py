@@ -13,7 +13,6 @@ from oxyde.migrations.context import MigrationContext
 from oxyde.migrations.replay import SchemaState
 
 
-
 @pytest.fixture
 def temp_migrations_dir():
     """Create a temporary migrations directory."""
@@ -355,6 +354,9 @@ class TestMigrationValidation:
         for name in invalid_names:
             assert not re.match(pattern, name), f"{name} should be invalid"
 
+        for name in invalid_names:
+            assert not re.match(pattern, name), f"{name} should be invalid"
+
     def test_validate_table_name(self):
         """Test table name validation."""
         import re
@@ -381,6 +383,9 @@ class TestMigrationValidation:
 
         for name in valid_names:
             assert re.match(pattern, name), f"{name} should be valid"
+
+        for name in invalid_names:
+            assert not re.match(pattern, name), f"{name} should be invalid"
 
 
 class TestMigrationDependencies:
@@ -562,6 +567,23 @@ class TestDropOpsMinimalPayloadRegression:
         # Must not raise — round-trip through Rust must succeed
         sqls = migration_to_sql(ops_json, "postgres")
         assert any("idx_users_email" in s for s in sqls)
+
+
+class TestMigrationTransactionMode:
+    def test_postgres_enum_add_value_runs_without_transaction(self):
+        ctx = MigrationContext(mode="execute", dialect="postgres")
+        ctx._sql_statements = [
+            'ALTER TYPE "post_status_enum" ADD VALUE IF NOT EXISTS \'archived\'',
+            'CREATE INDEX "posts_archived_idx" ON "posts" ("status")',
+        ]
+
+        assert ctx._should_use_transaction() is False
+
+    def test_regular_postgres_migration_uses_transaction(self):
+        ctx = MigrationContext(mode="execute", dialect="postgres")
+        ctx._sql_statements = ['CREATE TABLE "users" ("id" BIGINT)']
+
+        assert ctx._should_use_transaction() is True
 
 
 ALL_DIALECTS = ["postgres", "mysql", "sqlite"]

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from enum import Enum
 from typing import Any, get_args, get_origin
 from uuid import UUID
 
@@ -107,6 +108,9 @@ def compute_column_type(
     otherwise the Python annotation. Returns None when nothing is known —
     the column is then omitted from ``column_types``.
     """
+    enum_spec = _spec_from_enum_annotation(python_type, db_type)
+    if enum_spec is not None:
+        return enum_spec
     if db_type:
         return _spec_from_db_type(db_type)
     return _spec_from_annotation(
@@ -124,6 +128,8 @@ def spec_for_literal(value_type: type) -> ColumnSpec | None:
     that msgpack-encode as strings. Returns None for types msgpack carries
     natively with correct binding.
     """
+    if _is_enum_type(value_type):
+        return _enum_spec(value_type)
     kind = _PY_SCALAR_KINDS.get(value_type)
     return {"kind": kind} if kind is not None else None
 
@@ -194,6 +200,8 @@ def _spec_from_annotation(
 
     kind = _PY_SCALAR_KINDS.get(python_type)
     if kind is None:
+        if _is_enum_type(python_type):
+            return _enum_spec(python_type)
         return None
 
     spec: ColumnSpec = {"kind": kind}
@@ -205,6 +213,89 @@ def _spec_from_annotation(
         if decimal_places is not None:
             spec["scale"] = decimal_places
     return spec
+
+
+def _spec_from_enum_annotation(
+    python_type: Any,
+    db_type: str | None,
+) -> ColumnSpec | None:
+    enum_info = _enum_annotation_info(python_type)
+    if enum_info is None:
+        return None
+    enum_type, is_array = enum_info
+    if db_type:
+        db_spec = _spec_from_db_type(db_type)
+        if db_spec is not None:
+            return db_spec
+    spec = _enum_spec(enum_type, _enum_type_name_from_db_type(db_type, is_array))
+    return {"kind": "array", "item": spec} if is_array else spec
+
+
+def _enum_annotation_info(python_type: Any) -> tuple[type[Enum], bool] | None:
+    origin = get_origin(python_type)
+    if origin is list:
+        args = get_args(python_type)
+        if not args:
+            return None
+        inner = _enum_annotation_info(args[0])
+        return (inner[0], True) if inner is not None else None
+    if origin is not None:
+        for arg in get_args(python_type):
+            if arg is type(None):
+                continue
+            enum_info = _enum_annotation_info(arg)
+            if enum_info is not None:
+                return enum_info
+        return None
+    return (python_type, False) if _is_enum_type(python_type) else None
+
+
+def _enum_type_name_from_db_type(db_type: str | None, is_array: bool) -> str | None:
+    if db_type is None:
+        return None
+    name = db_type.strip()
+    if is_array and name.upper().endswith("[]"):
+        name = name[:-2].strip()
+    return name
+
+
+def _is_enum_type(value: Any) -> bool:
+    return isinstance(value, type) and issubclass(value, Enum)
+
+
+def _enum_spec(enum_type: type[Enum], db_type: str | None = None) -> ColumnSpec:
+    return {
+        "kind": "enum",
+        "name": db_type or _default_enum_type_name(enum_type),
+        "values": _enum_values(enum_type),
+    }
+
+
+def _enum_values(enum_type: type[Enum]) -> list[str]:
+    values = []
+    for member in enum_type:
+        value = member.value
+        if not isinstance(value, str):
+            raise TypeError(
+                f"Enum field '{enum_type.__name__}' must define string values. "
+                "Use a str-valued Enum for database enum columns, or annotate "
+                "the field as int for integer storage."
+            )
+        values.append(value)
+    return values
+
+
+def _default_enum_type_name(enum_type: type[Enum]) -> str:
+    name = enum_type.__name__
+    parts: list[str] = []
+    for index, char in enumerate(name):
+        if char.isupper() and index > 0:
+            prev = name[index - 1]
+            next_char = name[index + 1] if index + 1 < len(name) else ""
+            if prev != "_" and (not prev.isupper() or next_char.islower()):
+                parts.append("_")
+        parts.append(char.lower())
+    return f"{''.join(parts)}_enum"
 
 
 def _split_type_params(upper: str) -> tuple[str, list[int]]:

@@ -6,7 +6,7 @@ use sea_query::{
 };
 
 use crate::error::{QueryError, Result};
-use crate::utils::{bind_value, rmpv_to_simple_expr, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, rmpv_to_simple_expr, typed_value_expr, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build INSERT query from QueryIR
@@ -33,7 +33,8 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
             if let Some(expr) = rmpv_to_simple_expr(val)? {
                 vals.push(expr);
             } else {
-                vals.push(Expr::val(bind_value(val, get_spec(col))).into());
+                let spec = get_spec(col);
+                vals.push(typed_value_expr(bind_value(val, spec), spec, dialect));
             }
         }
 
@@ -69,7 +70,8 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                 if let Some(expr) = rmpv_to_simple_expr(val)? {
                     vals.push(expr);
                 } else {
-                    vals.push(Expr::val(bind_value(val, get_spec(&col.0))).into());
+                    let spec = get_spec(&col.0);
+                    vals.push(typed_value_expr(bind_value(val, spec), spec, dialect));
                 }
             }
             query.values(vals)?;
@@ -114,9 +116,10 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                             if let Some(expr) = rmpv_to_simple_expr(val)? {
                                 conflict.value(ColumnIdent(col.clone()), expr);
                             } else {
+                                let spec = get_spec(col);
                                 conflict.value(
                                     ColumnIdent(col.clone()),
-                                    Expr::val(bind_value(val, get_spec(col))),
+                                    typed_value_expr(bind_value(val, spec), spec, dialect),
                                 );
                             }
                         }
@@ -173,9 +176,10 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                             if let Some(expr) = rmpv_to_simple_expr(val)? {
                                 conflict.value(ColumnIdent(col.clone()), expr);
                             } else {
+                                let spec = get_spec(col);
                                 conflict.value(
                                     ColumnIdent(col.clone()),
-                                    Expr::val(bind_value(val, get_spec(col))),
+                                    typed_value_expr(bind_value(val, spec), spec, dialect),
                                 );
                             }
                         }

@@ -263,6 +263,61 @@ impl MigrationOp {
     /// (e.g., ALTER COLUMN on SQLite without table schema).
     pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
         match self {
+            MigrationOp::CreateEnumType { name, values } => {
+                if dialect != Dialect::Postgres {
+                    return Ok(Vec::new());
+                }
+                let labels = values
+                    .iter()
+                    .map(|value| crate::spec_sql::quote_sql_string(value))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Ok(vec![format!(
+                    "CREATE TYPE {} AS ENUM ({})",
+                    crate::spec_sql::quote_postgres_type_name(name),
+                    labels
+                )])
+            }
+
+            MigrationOp::DropEnumType { name, values: _ } => {
+                if dialect != Dialect::Postgres {
+                    return Ok(Vec::new());
+                }
+                Ok(vec![format!(
+                    "DROP TYPE {}",
+                    crate::spec_sql::quote_postgres_type_name(name)
+                )])
+            }
+
+            MigrationOp::AddEnumValue {
+                name,
+                value,
+                fields,
+            } => {
+                if dialect == Dialect::Mysql {
+                    return Ok(fields
+                        .iter()
+                        .map(|field| {
+                            format!(
+                                "ALTER TABLE `{}` MODIFY COLUMN {}",
+                                field.table,
+                                mysql_column_def(&field.field)
+                            )
+                        })
+                        .collect());
+                }
+                if dialect == Dialect::Sqlite {
+                    return Ok(Vec::new());
+                }
+                Ok(vec![format!(
+                    "ALTER TYPE {} ADD VALUE IF NOT EXISTS {}",
+                    crate::spec_sql::quote_postgres_type_name(name),
+                    crate::spec_sql::quote_sql_string(value)
+                )])
+            }
+
+            MigrationOp::AlterEnumType { .. } => Ok(Vec::new()),
+
             MigrationOp::CreateTable { table } => {
                 let mut create = SeaTable::create();
                 create.table(Alias::new(&table.name));
