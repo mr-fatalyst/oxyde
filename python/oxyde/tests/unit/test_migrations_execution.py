@@ -354,9 +354,6 @@ class TestMigrationValidation:
         for name in invalid_names:
             assert not re.match(pattern, name), f"{name} should be invalid"
 
-        for name in invalid_names:
-            assert not re.match(pattern, name), f"{name} should be invalid"
-
     def test_validate_table_name(self):
         """Test table name validation."""
         import re

@@ -228,16 +228,20 @@ class TestColTypes:
 
     def test_int_enum_error_is_actionable(self):
         clear_registry()
+        try:
+            with pytest.raises(TypeError, match="Use a str-valued Enum"):
 
-        with pytest.raises(TypeError, match="Use a str-valued Enum"):
+                class Task(Model):
+                    id: int | None = Field(default=None, db_pk=True)
+                    priority: Priority = Field(default=Priority.LOW)
 
-            class Task(Model):
-                id: int | None = Field(default=None, db_pk=True)
-                priority: Priority = Field(default=Priority.LOW)
-
-                class Meta:
-                    is_table = True
-                    table_name = "int_enum_tasks"
+                    class Meta:
+                        is_table = True
+                        table_name = "int_enum_tasks"
+        finally:
+            # The failed Task stays in _PENDING_MODELS otherwise and re-raises
+            # on the next model finalization in an unrelated test.
+            clear_registry()
 
 
 # ── Annotated inner constraints extraction ────────────────────────────
