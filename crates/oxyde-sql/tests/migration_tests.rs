@@ -1,12 +1,12 @@
-//! Integration tests for oxyde-migrate.
+//! Integration tests for the diff → DDL pipeline.
 //!
-//! Tests for public API: MigrationOp::to_sql(), compute_diff(), Snapshot.
+//! Tests for public API: MigrationOpExt::to_sql(), compute_diff(), Snapshot.
 
-use oxyde_codec::ColumnTypeSpec;
-use oxyde_migrate::{
-    compute_diff, CheckDef, Dialect, FieldDef, ForeignKeyDef, IndexDef, Migration, MigrationOp,
-    Snapshot, TableDef,
+use oxyde_codec::{
+    CheckDef, ColumnTypeSpec, FieldDef, ForeignKeyDef, IndexDef, MigrationOp, Snapshot, TableDef,
 };
+use oxyde_migrate::compute_diff;
+use oxyde_sql::{Dialect, Migration, MigrationOpExt};
 
 fn sample_field(name: &str) -> FieldDef {
     FieldDef {

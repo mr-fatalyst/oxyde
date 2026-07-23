@@ -41,7 +41,8 @@ pub(crate) fn migration_compute_diff(old_json: &str, new_json: &str) -> PyResult
 ///     List of SQL statements
 #[pyfunction]
 pub(crate) fn migration_to_sql(operations_json: &str, dialect: &str) -> PyResult<Vec<String>> {
-    use oxyde_migrate::{Dialect, Migration, MigrationOp};
+    use oxyde_codec::MigrationOp;
+    use oxyde_sql::{Dialect, Migration};
 
     let ops: Vec<MigrationOp> = serde_json::from_str(operations_json)
         .map_err(|e| PyErr::new::<PyValueError, _>(format!("Failed to parse operations: {}", e)))?;

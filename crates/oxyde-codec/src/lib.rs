@@ -59,6 +59,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
+pub mod migration;
+
+pub use migration::{
+    CheckDef, EnumFieldRef, FieldDef, ForeignKeyDef, IndexDef, MigrateError, MigrationOp, Snapshot,
+    TableDef,
+};
+
 /// Errors that can occur during IR serialization, deserialization, or validation.
 #[derive(Debug, Error)]
 pub enum CodecError {
@@ -82,7 +89,7 @@ pub const IR_PROTO_VERSION: u32 = 1;
 
 /// Canonical column-type contract between Python and the Rust core.
 ///
-/// This is the single semantic taxonomy used for value binding (oxyde-query),
+/// This is the single semantic taxonomy used for value binding (oxyde-sql),
 /// row decoding (oxyde-driver) and canonical DDL rendering (oxyde-migrate).
 /// Python computes it once per column from the field annotation and `db_type`
 /// (see `core/column_types.py`) and sends it as a tagged dict, e.g.

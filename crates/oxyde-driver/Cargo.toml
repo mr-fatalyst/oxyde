@@ -25,4 +25,4 @@ oxyde-codec = { path = "../oxyde-codec" }
 [dev-dependencies]
 tempfile = "3"
 rmp-serde = "1.1"
-oxyde-query = { path = "../oxyde-query" }
+oxyde-sql = { path = "../oxyde-sql" }

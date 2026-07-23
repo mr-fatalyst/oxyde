@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/oxyde-codec",
-    "crates/oxyde-query",
+    "crates/oxyde-sql",
     "crates/oxyde-driver",
     "crates/oxyde-migrate",
     "crates/oxyde-core-py",

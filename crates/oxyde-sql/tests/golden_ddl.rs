@@ -20,16 +20,16 @@
 //! # Workflow
 //!
 //! ```bash
-//! cargo test -p oxyde-migrate --test golden_ddl     # compare against snapshots
-//! cargo insta review                                 # review & accept pending
-//! # or non-interactively: INSTA_UPDATE=always cargo test -p oxyde-migrate --test golden_ddl
+//! cargo test -p oxyde-sql --test golden_ddl     # compare against snapshots
+//! cargo insta review                             # review & accept pending
+//! # or non-interactively: INSTA_UPDATE=always cargo test -p oxyde-sql --test golden_ddl
 //! ```
 
-use oxyde_codec::ColumnTypeSpec as S;
-use oxyde_migrate::{
-    CheckDef, Dialect, EnumFieldRef, FieldDef, ForeignKeyDef, IndexDef, Migration, MigrationOp,
+use oxyde_codec::{
+    CheckDef, ColumnTypeSpec as S, EnumFieldRef, FieldDef, ForeignKeyDef, IndexDef, MigrationOp,
     TableDef,
 };
+use oxyde_sql::{Dialect, Migration};
 
 /// Shorthand: array spec with the given element.
 fn arr(item: S) -> S {

@@ -58,7 +58,7 @@ Example IR (SELECT):
     }
 
 Rust Processing:
-    IR bytes → oxyde-codec::QueryIR → oxyde-query::build_sql() → SQL string
+    IR bytes → oxyde-codec::QueryIR → oxyde-sql::build_sql() → SQL string
     SQL → oxyde-driver::execute_query() → rows → MessagePack bytes → Python
 """
 

@@ -1083,7 +1083,7 @@ dependencies = [
  "oxyde-codec",
  "oxyde-driver",
  "oxyde-migrate",
- "oxyde-query",
+ "oxyde-sql",
  "pyo3",
  "pyo3-async-runtimes",
  "rmpv",
@@ -1104,7 +1104,7 @@ dependencies = [
  "futures",
  "once_cell",
  "oxyde-codec",
- "oxyde-query",
+ "oxyde-sql",
  "rmp",
  "rmp-serde",
  "rmpv",
@@ -1123,24 +1123,18 @@ dependencies = [
 name = "oxyde-migrate"
 version = "0.6.2"
 dependencies = [
- "anyhow",
- "insta",
  "oxyde-codec",
- "oxyde-driver",
- "sea-query",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
 ]
 
 [[package]]
-name = "oxyde-query"
+name = "oxyde-sql"
 version = "0.6.2"
 dependencies = [
  "anyhow",
  "chrono",
+ "insta",
  "oxyde-codec",
+ "oxyde-migrate",
  "rmpv",
  "rust_decimal",
  "sea-query",

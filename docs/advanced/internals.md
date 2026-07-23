@@ -17,7 +17,7 @@ graph TD
 
     subgraph Rust["Rust Core"]
         CorePy --> Codec["oxyde-codec<br/>(IR deserialize)"]
-        Codec --> QGen["oxyde-query<br/>(SQL generation)"]
+        Codec --> QGen["oxyde-sql<br/>(SQL generation)"]
         QGen --> Driver["oxyde-driver<br/>(execute via sqlx)"]
         Driver --> Sqlx["sqlx"]
     end
@@ -86,11 +86,11 @@ pub struct Filter {
 }
 ```
 
-### oxyde-query
+### oxyde-sql
 
 **Purpose**: Generate SQL from IR using sea-query.
 
-**Location**: `crates/oxyde-query/src/`
+**Location**: `crates/oxyde-sql/src/`
 
 Modules: `builder/` (select, insert, update, delete, bulk), `filter/`, `aggregate/`, `utils/`, `error/`.
 
@@ -223,7 +223,7 @@ sequenceDiagram
     P->>R: execute(pool_name, ir_bytes)
     Note over R: GIL released
     R->>R: oxyde-codec: deserialize IR
-    R->>R: oxyde-query: build_sql()
+    R->>R: oxyde-sql: build_sql()
     R->>DB: sqlx execute
     DB-->>R: rows
     R->>R: oxyde-driver: encode to msgpack
@@ -389,7 +389,7 @@ print(params)
    pub struct NewOperationIR { ... }
    ```
 
-2. Add SQL generation in `oxyde-query`:
+2. Add SQL generation in `oxyde-sql`:
    ```rust
    fn build_new_operation(ir: &NewOperationIR, dialect: Dialect) -> Result<...>
    ```

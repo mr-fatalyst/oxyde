@@ -1,5 +1,5 @@
 [package]
-name = "oxyde-query"
+name = "oxyde-sql"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,3 +15,7 @@ uuid = "1"
 rust_decimal = { version = "1", features = ["serde"] }
 oxyde-codec = { path = "../oxyde-codec" }
 rmpv = { version = "1", features = ["with-serde"] }
+
+[dev-dependencies]
+insta = "1"
+oxyde-migrate = { path = "../oxyde-migrate" }

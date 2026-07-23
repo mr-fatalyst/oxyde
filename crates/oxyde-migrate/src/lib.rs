@@ -1,76 +1,25 @@
-//! Schema migration system with diff computation and SQL generation.
+//! Schema diff computation.
 //!
-//! This crate provides Django-style migrations for Oxyde ORM. It compares
-//! model schemas (snapshots) and generates migration operations.
-//!
-//! # Architecture
+//! This crate owns exactly one responsibility: comparing two schema
+//! snapshots and producing the list of migration operations.
 //!
 //! ```text
-//! Models → Snapshot (JSON) → compute_diff() → MigrationOp[] → to_sql() → DDL
+//! Snapshot (old) + Snapshot (new) → compute_diff() → Vec<MigrationOp>
 //! ```
 //!
-//! # Core Types
-//!
-//! ## Snapshot
-//! Point-in-time representation of database schema:
-//! - `tables`: HashMap of TableDef
-//! - `version`: Schema version number
-//!
-//! ## TableDef
-//! Table schema definition:
-//! - `fields`: Column definitions (FieldDef)
-//! - `indexes`: Index definitions (IndexDef)
-//! - `foreign_keys`: FK constraints (ForeignKeyDef)
-//! - `checks`: CHECK constraints (CheckDef)
-//!
-//! ## MigrationOp
-//! Individual migration operation (enum):
-//! - CreateTable, DropTable, RenameTable
-//! - AddColumn, DropColumn, RenameColumn, AlterColumn
-//! - CreateIndex, DropIndex
-//! - AddForeignKey, DropForeignKey
-//! - AddCheck, DropCheck
-//!
-//! # Dialect Support
-//!
-//! - **PostgreSQL**: Full ALTER TABLE support
-//! - **SQLite**: Limited ALTER (requires table rebuild for some ops)
-//! - **MySQL**: Full support with CHANGE/MODIFY syntax
-//!
-//! # SQLite Limitations
-//!
-//! SQLite doesn't support:
-//! - ALTER TABLE ADD CONSTRAINT (FK/CHECK)
-//! - ALTER COLUMN (type changes)
-//!
-//! Solution: Table rebuild migration (12-step process):
-//! 1. PRAGMA foreign_keys=OFF
-//! 2. CREATE TABLE _new_X with new schema
-//! 3. INSERT INTO _new_X SELECT * FROM X
-//! 4. DROP TABLE X
-//! 5. ALTER TABLE _new_X RENAME TO X
-//! 6. Recreate indexes
-//! 7. PRAGMA foreign_keys=ON
-//!
-//! # Usage
-//!
-//! ```rust,ignore
-//! // Compute diff between snapshots
-//! let ops = compute_diff(&old_snapshot, &new_snapshot);
-//!
-//! // Generate SQL for PostgreSQL
-//! let migration = Migration { name: "0001".into(), operations: ops };
-//! let sql_statements = migration.to_sql(Dialect::Postgres)?;
-//! ```
+//! The contract types (`Snapshot`, `TableDef`, `MigrationOp`, ...) live in
+//! `oxyde-codec` — they are serialized across the Python boundary. SQL
+//! rendering for the produced operations lives in `oxyde-sql`
+//! (`migration_to_sql` / `MigrationOpExt`). This crate sees no SQL at all.
 
 mod diff;
-mod op;
-mod spec_sql;
-mod sql;
-mod types;
 
-// Public re-exports (API не меняется)
-pub use diff::{compute_diff, Migration};
-pub use op::{EnumFieldRef, MigrationOp};
-pub use spec_sql::resolve_spec_type;
-pub use types::*;
+pub use diff::compute_diff;
+
+// Contract types re-exported for convenience (canonical home: oxyde-codec).
+pub use oxyde_codec::{
+    CheckDef, EnumFieldRef, FieldDef, ForeignKeyDef, IndexDef, MigrateError, MigrationOp, Snapshot,
+    TableDef,
+};
+
+pub type Result<T> = std::result::Result<T, MigrateError>;

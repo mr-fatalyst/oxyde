@@ -1,17 +1,17 @@
-//! SQL generation from QueryIR using sea_query.
+//! All SQL generation via sea-query: DML from QueryIR, DDL from MigrationOps.
 //!
-//! This crate converts QueryIR structures (from oxyde-codec) into dialect-specific
-//! SQL strings with bound parameters. It uses the sea_query library as the SQL AST
-//! builder, providing type-safe SQL generation across PostgreSQL, SQLite, and MySQL.
+//! This is the single crate that renders SQL text. It converts QueryIR
+//! structures (oxyde-codec) into dialect-specific DML with bound parameters,
+//! and MigrationOp lists into DDL statements. Consumers (oxyde-migrate,
+//! oxyde-driver, oxyde-core-py) never touch sea-query's builders themselves.
 //!
-//! # Main Function
+//! # Main Entry Points
 //!
 //! ```rust,ignore
-//! use oxyde_query::{build_sql, Dialect};
+//! use oxyde_sql::{build_sql, Dialect, Migration};
 //!
 //! let (sql, values) = build_sql(&ir, Dialect::Postgres)?;
-//! // sql: "SELECT \"id\", \"name\" FROM \"users\" WHERE \"age\" >= $1"
-//! // values: [Value::Int(18)]
+//! let ddl: Vec<String> = migration.to_sql(Dialect::Postgres)?;
 //! ```
 //!
 //! # Dialect Support
@@ -26,7 +26,9 @@
 //! - `builder` - Main SQL builders for SELECT, INSERT, UPDATE, DELETE
 //! - `filter` - WHERE clause from FilterNode tree (AND/OR/NOT, operators)
 //! - `aggregate` - COUNT, SUM, AVG, MAX, MIN handling
-//! - `utils` - JSON value to sea_query::Value conversion
+//! - `ddl` - DDL rendering for migration operations (+ statement ordering)
+//! - `spec_sql` - ColumnTypeSpec → SQL type string resolution
+//! - `utils` - value binding, casts, identifier quoting
 //! - `error` - QueryError types
 //!
 //! # Supported Features
@@ -46,15 +48,20 @@ use sea_query::Value;
 // Module declarations
 pub mod aggregate;
 pub mod builder;
+pub mod ddl;
 pub mod error;
 pub mod filter;
+pub mod spec_sql;
 pub mod utils;
 
 // Re-exports
+pub use ddl::{Migration, MigrationOpExt};
 pub use error::{QueryError, Result};
+pub use spec_sql::resolve_spec_type;
 
 /// Database dialect
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Dialect {
     Postgres,
     Sqlite,

@@ -27,7 +27,7 @@ Python (oxyde)                    Rust (oxyde-core)
      │  QueryIR (MessagePack)           │
      ├─────────────────────────────────►│
      │                                  ├── oxyde-codec: Deserialize IR
-     │                                  ├── oxyde-query: Generate SQL (sea_query)
+     │                                  ├── oxyde-sql: Generate SQL (sea_query)
      │                                  ├── oxyde-driver: Execute (sqlx pools)
      │                                  │
      │  Results (MessagePack)           │
@@ -40,9 +40,9 @@ Python (oxyde)                    Rust (oxyde-core)
 | Crate | Purpose |
 |-------|---------|
 | `oxyde-codec` | MessagePack IR protocol, query structure validation |
-| `oxyde-query` | IR → SQL conversion using sea_query |
+| `oxyde-sql` | All SQL generation via sea_query: DML from IR + migration DDL |
 | `oxyde-driver` | Connection pools (sqlx), query execution, transactions |
-| `oxyde-migrate` | Schema diff, migration SQL generation |
+| `oxyde-migrate` | Schema diff computation |
 
 ## Exposed Functions
 

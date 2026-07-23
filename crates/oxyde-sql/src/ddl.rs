@@ -1,4 +1,4 @@
-//! SQL generation using sea-query DDL builders.
+//! DDL generation using sea-query builders + migration statement ordering.
 //!
 //! Type mapping is spec-driven (`spec_sql::resolve_spec_type`): semantic kind
 //! from `ColumnTypeSpec`, verbatim user DDL from `FieldDef.db_type`. DDL
@@ -10,9 +10,46 @@ use sea_query::{
     ForeignKeyAction as SeaFkAction, Index as SeaIndex, IndexType, IntoIden, MysqlQueryBuilder,
     PostgresQueryBuilder, SqliteQueryBuilder, Table as SeaTable,
 };
+use serde::{Deserialize, Serialize};
 
-use crate::op::MigrationOp;
-use crate::types::{CheckDef, Dialect, FieldDef, ForeignKeyDef, IndexDef, MigrateError, Result};
+use crate::Dialect;
+use oxyde_codec::{CheckDef, FieldDef, ForeignKeyDef, IndexDef, MigrateError, MigrationOp};
+
+type Result<T> = std::result::Result<T, MigrateError>;
+
+/// Migration file: a named list of operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Migration {
+    pub name: String,
+    pub operations: Vec<MigrationOp>,
+}
+
+impl Migration {
+    /// Generate SQL statements for this migration.
+    ///
+    /// CREATE/DROP/INDEX statements come first, ALTER TABLE statements last.
+    /// This ensures referenced tables exist before FK constraints are added
+    /// (PG/MySQL emit FK as separate ALTER TABLE, not inline in CREATE TABLE).
+    pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
+        let mut all_sql: Vec<(u8, String)> = Vec::new();
+        for op in &self.operations {
+            let sqls = op.to_sql(dialect)?;
+            for sql in sqls {
+                let bucket = match op {
+                    MigrationOp::CreateEnumType { .. } => 0,
+                    MigrationOp::AddEnumValue { .. } => 1,
+                    MigrationOp::DropEnumType { .. } => 4,
+                    MigrationOp::AlterEnumType { .. } => 5,
+                    _ if sql.trim_start().starts_with("ALTER TABLE") => 3,
+                    _ => 2,
+                };
+                all_sql.push((bucket, sql));
+            }
+        }
+        all_sql.sort_by_key(|(bucket, _)| *bucket);
+        Ok(all_sql.into_iter().map(|(_, sql)| sql).collect())
+    }
+}
 
 /// Build SQL string from a sea-query schema statement for the given dialect.
 macro_rules! build_sql {
@@ -256,12 +293,17 @@ fn sqlite_table_rebuild(
 
 // ── MigrationOp::to_sql ────────────────────────────────────────────────────
 
-impl MigrationOp {
+/// SQL rendering for `MigrationOp` (the type itself lives in oxyde-codec).
+pub trait MigrationOpExt {
+    fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>>;
+}
+
+impl MigrationOpExt for MigrationOp {
     /// Generate SQL for this migration operation.
     ///
     /// Returns `Err` for operations not supported by the dialect
     /// (e.g., ALTER COLUMN on SQLite without table schema).
-    pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
+    fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
         match self {
             MigrationOp::CreateEnumType { name, values } => {
                 if dialect != Dialect::Postgres {
@@ -274,7 +316,7 @@ impl MigrationOp {
                     .join(", ");
                 Ok(vec![format!(
                     "CREATE TYPE {} AS ENUM ({})",
-                    crate::spec_sql::quote_postgres_type_name(name),
+                    crate::utils::bind::quote_pg_type_path(name),
                     labels
                 )])
             }
@@ -285,7 +327,7 @@ impl MigrationOp {
                 }
                 Ok(vec![format!(
                     "DROP TYPE {}",
-                    crate::spec_sql::quote_postgres_type_name(name)
+                    crate::utils::bind::quote_pg_type_path(name)
                 )])
             }
 
@@ -311,7 +353,7 @@ impl MigrationOp {
                 }
                 Ok(vec![format!(
                     "ALTER TYPE {} ADD VALUE IF NOT EXISTS {}",
-                    crate::spec_sql::quote_postgres_type_name(name),
+                    crate::utils::bind::quote_pg_type_path(name),
                     crate::spec_sql::quote_sql_string(value)
                 )])
             }

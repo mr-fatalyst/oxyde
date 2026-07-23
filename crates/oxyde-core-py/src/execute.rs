@@ -15,7 +15,7 @@ use oxyde_driver::{
     explain_query, pool_backend as driver_pool_backend, ExplainFormat, ExplainOptions,
     RelationInfo,
 };
-use oxyde_query::{build_sql, emits_returning, Dialect};
+use oxyde_sql::{build_sql, emits_returning, Dialect};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString, PyTuple};

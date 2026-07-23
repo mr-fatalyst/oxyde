@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use oxyde_driver::{DatabaseBackend, PoolSettings as DriverPoolSettings};
-use oxyde_query::Dialect;
+use oxyde_sql::Dialect;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyList, PyString, PyTuple};

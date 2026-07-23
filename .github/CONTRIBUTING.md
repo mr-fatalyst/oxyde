@@ -19,9 +19,9 @@ Oxyde is a hybrid Python/Rust project:
 ┌──────────────────────────────────────────────────────────────┐
 │  Rust Core (crates/)                                         │
 │  • oxyde-codec: IR protocol & validation                     │
-│  • oxyde-query: SQL generation via sea_query                 │
+│  • oxyde-sql: SQL generation via sea_query                 │
 │  • oxyde-driver: Connection pools & execution via sqlx       │
-│  • oxyde-migrate: Schema diff & migration generation         │
+│  • oxyde-migrate: Schema diff computation                    │
 │  • oxyde-core-py: PyO3 bindings (Python ↔ Rust bridge)       │
 └────────────────────────┬─────────────────────────────────────┘
                          │ SQL + parameters
@@ -35,10 +35,10 @@ Oxyde is a hybrid Python/Rust project:
 
 | Crate | Purpose |
 |-------|---------|
-| `oxyde-codec` | MessagePack IR structures (QueryIR, FilterNode, Operation) |
-| `oxyde-query` | Converts IR to database-specific SQL using sea_query |
+| `oxyde-codec` | Serialized contracts: QueryIR, ColumnTypeSpec, migration ops/snapshots |
+| `oxyde-sql` | All SQL generation via sea_query: DML from IR + migration DDL |
 | `oxyde-driver` | Connection pool management (sqlx), query execution |
-| `oxyde-migrate` | Schema snapshots, diff computation, migration SQL |
+| `oxyde-migrate` | Schema diff computation |
 | `oxyde-core-py` | PyO3 async bindings exposing Rust functions to Python |
 
 ### Python Package Structure
@@ -139,7 +139,7 @@ No rebuild needed — changes are immediately available in editable install.
 cargo test --workspace
 
 # Specific crate
-cargo test -p oxyde-query
+cargo test -p oxyde-sql
 
 # With output
 cargo test --workspace -- --nocapture
@@ -231,7 +231,7 @@ print(f"Params: {params}")
    }
    ```
 
-2. **Add SQL generation** (`crates/oxyde-query/src/lib.rs`):
+2. **Add SQL generation** (`crates/oxyde-sql/src/lib.rs`):
    ```rust
    fn build_new_operation(ir: &NewOperationIR) -> Result<...> {
        // Use sea_query to build SQL

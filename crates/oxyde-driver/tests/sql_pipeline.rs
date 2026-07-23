@@ -2,7 +2,7 @@ use oxyde_codec::{Filter, FilterNode, Operation, QueryIR, IR_PROTO_VERSION};
 use oxyde_driver::{
     close_pool, execute_query_columnar, execute_statement, init_pool, PoolSettings,
 };
-use oxyde_query::{build_sql, Dialect};
+use oxyde_sql::{build_sql, Dialect};
 use std::collections::HashMap;
 use uuid::Uuid;
 

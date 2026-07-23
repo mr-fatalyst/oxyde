@@ -13,7 +13,8 @@
 
 use oxyde_codec::ColumnTypeSpec;
 
-use crate::types::Dialect;
+use crate::utils::bind::quote_pg_type_path;
+use crate::Dialect;
 
 /// Resolve the SQL type string for a column.
 ///
@@ -129,7 +130,7 @@ fn canonical_type(spec: &ColumnTypeSpec, dialect: Dialect, is_pk: bool) -> Strin
             D::Sqlite => "TEXT".to_string(),
         },
         S::Enum { name, values } => match dialect {
-            D::Postgres => quote_postgres_type_name(name),
+            D::Postgres => quote_pg_type_path(name),
             D::Mysql => format!(
                 "ENUM({})",
                 values
@@ -149,14 +150,6 @@ fn canonical_type(spec: &ColumnTypeSpec, dialect: Dialect, is_pk: bool) -> Strin
     }
 }
 
-/// Keep in sync with `quote_pg_type_path` in oxyde-query (parity tests).
-pub(crate) fn quote_postgres_type_name(name: &str) -> String {
-    name.split('.')
-        .map(|part| format!("\"{}\"", part.replace('"', "\"\"")))
-        .collect::<Vec<_>>()
-        .join(".")
-}
-
 pub(crate) fn quote_sql_string(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
@@ -167,16 +160,6 @@ mod tests {
 
     fn spec_string(length: Option<u32>) -> ColumnTypeSpec {
         ColumnTypeSpec::String { length }
-    }
-
-    #[test]
-    fn test_quote_postgres_type_name_parity_vectors() {
-        assert_eq!(quote_postgres_type_name("status_enum"), r#""status_enum""#);
-        assert_eq!(
-            quote_postgres_type_name("public.status_enum"),
-            r#""public"."status_enum""#
-        );
-        assert_eq!(quote_postgres_type_name(r#"we"ird"#), r#""we""ird""#);
     }
 
     /// Canonical renderings, pinned directly (the golden DDL suite pins the
