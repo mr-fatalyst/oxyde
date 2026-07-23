@@ -167,14 +167,6 @@ COL_TYPE_CASES = [
     ("db_real", {"kind": "double"}),
     ("db_bytea", {"kind": "blob"}),
     ("db_blob", {"kind": "blob"}),
-    (
-        "db_enum",
-        {
-            "kind": "enum",
-            "name": "post_status_enum",
-            "values": ["draft", "published"],
-        },
-    ),
     ("db_enum_as_text", {"kind": "text"}),
     # Inferred arrays
     ("infer_str_list", {"kind": "array", "item": {"kind": "string"}}),
@@ -201,17 +193,6 @@ COL_TYPE_CASES = [
     ("db_uuid_arr", {"kind": "array", "item": {"kind": "uuid"}}),
     ("db_int_arr", {"kind": "array", "item": {"kind": "big_integer"}}),
     ("db_text_arr", {"kind": "array", "item": {"kind": "text"}}),
-    (
-        "db_enum_arr",
-        {
-            "kind": "array",
-            "item": {
-                "kind": "enum",
-                "name": "post_status_enum",
-                "values": ["draft", "published"],
-            },
-        },
-    ),
     # Annotated inner arrays (inferred from python_type)
     ("ann_str_list", {"kind": "array", "item": {"kind": "string", "length": 100}}),
     ("ann_decimal_list", {"kind": "array", "item": {"kind": "decimal", "precision": 10, "scale": 2}}),
@@ -242,6 +223,14 @@ class TestColTypes:
             # The failed Task stays in _PENDING_MODELS otherwise and re-raises
             # on the next model finalization in an unrelated test.
             clear_registry()
+
+    def test_enum_with_unknown_db_type_is_plain_verbatim_column(self):
+        """Explicit db_type disables enum machinery entirely: unknown type
+        strings mean verbatim DDL + native conversion (no spec), exactly
+        like any other annotation. db_type never names enum types."""
+        column_types = DbTypesModel._db_meta.column_types
+        assert "db_enum" not in column_types
+        assert "db_enum_arr" not in column_types
 
 
 # ── Annotated inner constraints extraction ────────────────────────────

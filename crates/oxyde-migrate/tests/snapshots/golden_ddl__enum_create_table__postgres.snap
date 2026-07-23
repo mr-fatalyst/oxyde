@@ -1,0 +1,9 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE TYPE "post_status_enum" AS ENUM ('draft', 'published');
+
+CREATE TYPE "public"."review_state_enum" AS ENUM ('open', 'closed');
+
+CREATE TABLE "enum_posts" ( "id" BIGSERIAL PRIMARY KEY, "status" "post_status_enum" NOT NULL, "labels" "post_status_enum"[], "review" "public"."review_state_enum" NOT NULL )

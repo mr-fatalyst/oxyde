@@ -1,0 +1,5 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE TABLE "enum_posts" ( "id" INTEGER PRIMARY KEY AUTOINCREMENT, "status" TEXT NOT NULL, "labels" TEXT, "review" TEXT NOT NULL )

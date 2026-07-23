@@ -442,6 +442,18 @@ def sqlmigrate(
             typer.echo(sql)
             typer.echo()
 
+        # Manual ops emit no SQL — surface them so the preview is not empty.
+        for op in operations:
+            if op.get("type") == "alter_enum_type":
+                typer.secho(
+                    f"-- manual migration required: enum {op['name']} "
+                    f"{op['old_values']} -> {op['new_values']} "
+                    "(no automatic SQL; the migration file pairs this with "
+                    "ctx.require_manual(...))",
+                    fg=typer.colors.YELLOW,
+                )
+                typer.echo()
+
     except Exception as e:
         typer.secho(f"❌ Error generating SQL: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)

@@ -219,15 +219,14 @@ def _spec_from_enum_annotation(
     python_type: Any,
     db_type: str | None,
 ) -> ColumnSpec | None:
+    if db_type:
+        # Explicit db_type = plain verbatim column, enum machinery off.
+        return None
     enum_info = _enum_annotation_info(python_type)
     if enum_info is None:
         return None
     enum_type, is_array = enum_info
-    if db_type:
-        db_spec = _spec_from_db_type(db_type)
-        if db_spec is not None:
-            return db_spec
-    spec = _enum_spec(enum_type, _enum_type_name_from_db_type(db_type, is_array))
+    spec = _enum_spec(enum_type)
     return {"kind": "array", "item": spec} if is_array else spec
 
 
@@ -250,23 +249,14 @@ def _enum_annotation_info(python_type: Any) -> tuple[type[Enum], bool] | None:
     return (python_type, False) if _is_enum_type(python_type) else None
 
 
-def _enum_type_name_from_db_type(db_type: str | None, is_array: bool) -> str | None:
-    if db_type is None:
-        return None
-    name = db_type.strip()
-    if is_array and name.upper().endswith("[]"):
-        name = name[:-2].strip()
-    return name
-
-
 def _is_enum_type(value: Any) -> bool:
     return isinstance(value, type) and issubclass(value, Enum)
 
 
-def _enum_spec(enum_type: type[Enum], db_type: str | None = None) -> ColumnSpec:
+def _enum_spec(enum_type: type[Enum]) -> ColumnSpec:
     return {
         "kind": "enum",
-        "name": db_type or _default_enum_type_name(enum_type),
+        "name": _default_enum_type_name(enum_type),
         "values": _enum_values(enum_type),
     }
 

@@ -65,9 +65,8 @@ class TypeModel(Model):
     )
     status: Status = Field(default=Status.DRAFT)
     status_tags: list[Status] | None = Field(default=None, db_nullable=True)
-    custom_status_tags: list[Status] | None = Field(
-        default=None, db_nullable=True, db_type="post_status_enum[]"
-    )
+    # db_type on an enum field = plain verbatim column, enum machinery off
+    text_status: Status = Field(default=Status.DRAFT, db_type="TEXT")
 
     class Meta:
         is_table = True
@@ -249,13 +248,23 @@ def test_postgres_enum_filter_casts_parameter():
     assert params == ["draft"]
 
 
-def test_postgres_custom_enum_array_filter_casts_parameter():
+def test_postgres_enum_array_filter_casts_parameter():
     sql, params = TypeModel.objects.filter(
-        custom_status_tags=[Status.DRAFT],
+        status_tags=[Status.DRAFT],
     ).sql(dialect="postgres", with_types=True)
 
-    assert '$1::"post_status_enum"[]' in sql
+    assert '$1::"status_enum"[]' in sql
     assert params == [("Array", ("String", ["draft"]))]
+
+
+def test_enum_with_db_type_is_not_cast():
+    # Explicit db_type = verbatim storage: value binds as a plain string,
+    # no ::enum cast is emitted.
+    sql, params = TypeModel.objects.filter(text_status=Status.DRAFT).sql(
+        dialect="postgres"
+    )
+    assert "::" not in sql
+    assert params == ["draft"]
 
 
 def test_joined_enum_filter_and_result_columns_are_typed():

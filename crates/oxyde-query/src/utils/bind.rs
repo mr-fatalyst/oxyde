@@ -203,6 +203,7 @@ fn postgres_enum_cast_type(spec: &ColumnTypeSpec) -> Option<String> {
     }
 }
 
+/// Keep in sync with `quote_postgres_type_name` in oxyde-migrate (parity tests).
 fn quote_pg_type_path(name: &str) -> String {
     name.split('.')
         .map(|part| format!("\"{}\"", part.replace('"', "\"\"")))
@@ -256,6 +257,16 @@ mod tests {
 
     fn string_spec() -> ColumnTypeSpec {
         ColumnTypeSpec::String { length: None }
+    }
+
+    #[test]
+    fn test_quote_pg_type_path_parity_vectors() {
+        assert_eq!(quote_pg_type_path("status_enum"), r#""status_enum""#);
+        assert_eq!(
+            quote_pg_type_path("public.status_enum"),
+            r#""public"."status_enum""#
+        );
+        assert_eq!(quote_pg_type_path(r#"we"ird"#), r#""we""ird""#);
     }
 
     fn decimal_spec() -> ColumnTypeSpec {

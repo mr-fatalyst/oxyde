@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 
 def _is_postgres_enum_add_value_sql(sql: str) -> bool:
+    """Detect ALTER TYPE ... ADD VALUE in raw SQL — used only for ctx.execute()."""
     upper = sql.strip().upper()
     return upper.startswith("ALTER TYPE ") and " ADD VALUE " in upper
 
@@ -58,6 +59,8 @@ class MigrationContext:
         self._schema_state = schema_state
         self._operations: list[dict[str, Any]] = []
         self._raw_sql_seen = False
+        self._sql_statements: list[str] = []
+        self._non_transactional_ddl = False
 
     @property
     def dialect(self) -> str:
@@ -107,6 +110,8 @@ class MigrationContext:
         if self._mode == "collect":
             self._operations.append(op)
         else:
+            if self._dialect == "postgres":
+                self._non_transactional_ddl = True
             self._execute_operation(op)
 
     def alter_enum_type(
@@ -484,6 +489,8 @@ class MigrationContext:
             sql: SQL statement to execute
         """
         if self._mode == "execute":
+            if self._dialect == "postgres" and _is_postgres_enum_add_value_sql(sql):
+                self._non_transactional_ddl = True
             self._execute_raw_sql(sql)
         else:
             # Collect mode: schema-neutral, but squash must know about it
@@ -537,9 +544,6 @@ class MigrationContext:
 
         # Collect SQL statements for batch execution
         # They will be executed by the executor after upgrade() completes
-        if not hasattr(self, "_sql_statements"):
-            self._sql_statements: list[str] = []
-
         self._sql_statements.append(sql)
 
     async def _execute_collected_sql(self) -> None:
@@ -557,7 +561,7 @@ class MigrationContext:
         connections to different queries. The Rust transaction API ensures all queries
         in a transaction use the same connection.
         """
-        if not hasattr(self, "_sql_statements"):
+        if not self._sql_statements:
             return
 
         if self._db_conn is None:
@@ -592,14 +596,12 @@ class MigrationContext:
         finally:
             # Clear collected statements
             self._sql_statements = []
+            self._non_transactional_ddl = False
 
     def _should_use_transaction(self) -> bool:
         if self._dialect == "mysql":
             return False
-        if self._dialect == "postgres" and any(
-            _is_postgres_enum_add_value_sql(sql)
-            for sql in getattr(self, "_sql_statements", [])
-        ):
+        if self._non_transactional_ddl:
             return False
         return self._dialect in ("postgres", "sqlite")
 

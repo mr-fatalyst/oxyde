@@ -1,0 +1,7 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+ALTER TABLE "posts" ALTER COLUMN "status" TYPE "post_status_enum" USING "status"::text::"post_status_enum";
+
+ALTER TABLE "posts" ALTER COLUMN "kind" TYPE TEXT USING "kind"::text::TEXT

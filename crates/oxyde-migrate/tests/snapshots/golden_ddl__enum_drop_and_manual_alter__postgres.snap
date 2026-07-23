@@ -1,0 +1,7 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+DROP TABLE "enum_posts";
+
+DROP TYPE "post_status_enum"

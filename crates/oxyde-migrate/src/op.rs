@@ -28,6 +28,7 @@ pub enum MigrationOp {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         fields: Vec<EnumFieldRef>,
     },
+    /// Manual migration: no SQL by design — user writes it, `ctx.require_manual` guards.
     AlterEnumType {
         name: String,
         old_values: Vec<String>,

@@ -449,9 +449,10 @@ impl MigrationOp {
                     );
 
                     if old_sql_type != new_sql_type {
+                        // ::text bridge — universal cast path (PG has no implicit text → enum).
                         stmts.push(format!(
-                            "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" TYPE {}",
-                            table, new_field.name, new_sql_type
+                            "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" TYPE {} USING \"{}\"::text::{}",
+                            table, new_field.name, new_sql_type, new_field.name, new_sql_type
                         ));
                     }
 

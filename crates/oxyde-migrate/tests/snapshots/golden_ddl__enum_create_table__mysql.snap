@@ -1,0 +1,5 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+CREATE TABLE `enum_posts` ( `id` BIGINT PRIMARY KEY AUTO_INCREMENT, `status` ENUM('draft','published') NOT NULL, `labels` JSON, `review` ENUM('open','closed') NOT NULL )

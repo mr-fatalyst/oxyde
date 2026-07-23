@@ -1,0 +1,7 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+ALTER TABLE `posts` MODIFY COLUMN `status` ENUM('draft','published') NOT NULL;
+
+ALTER TABLE `posts` MODIFY COLUMN `kind` TEXT NOT NULL

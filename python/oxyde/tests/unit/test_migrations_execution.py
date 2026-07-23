@@ -569,16 +569,27 @@ class TestDropOpsMinimalPayloadRegression:
 class TestMigrationTransactionMode:
     def test_postgres_enum_add_value_runs_without_transaction(self):
         ctx = MigrationContext(mode="execute", dialect="postgres")
-        ctx._sql_statements = [
-            'ALTER TYPE "post_status_enum" ADD VALUE IF NOT EXISTS \'archived\'',
-            'CREATE INDEX "posts_archived_idx" ON "posts" ("status")',
-        ]
+        ctx.add_enum_value("post_status_enum", "archived")
 
         assert ctx._should_use_transaction() is False
 
     def test_regular_postgres_migration_uses_transaction(self):
         ctx = MigrationContext(mode="execute", dialect="postgres")
-        ctx._sql_statements = ['CREATE TABLE "users" ("id" BIGINT)']
+        ctx.create_enum_type("post_status_enum", ["draft"])
+
+        assert ctx._should_use_transaction() is True
+
+    def test_raw_postgres_add_value_sql_disables_transaction(self):
+        # ctx.execute() carries opaque SQL — the text sniff is the only
+        # signal there, unlike structured add_enum_value().
+        ctx = MigrationContext(mode="execute", dialect="postgres")
+        ctx.execute("ALTER TYPE \"post_status_enum\" ADD VALUE 'archived'")
+
+        assert ctx._should_use_transaction() is False
+
+    def test_sqlite_add_enum_value_keeps_transaction(self):
+        ctx = MigrationContext(mode="execute", dialect="sqlite")
+        ctx.add_enum_value("post_status_enum", "archived")
 
         assert ctx._should_use_transaction() is True
 

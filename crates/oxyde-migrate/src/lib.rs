@@ -71,6 +71,6 @@ mod types;
 
 // Public re-exports (API не меняется)
 pub use diff::{compute_diff, Migration};
-pub use op::MigrationOp;
+pub use op::{EnumFieldRef, MigrationOp};
 pub use spec_sql::resolve_spec_type;
 pub use types::*;

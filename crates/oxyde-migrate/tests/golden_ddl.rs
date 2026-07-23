@@ -27,7 +27,8 @@
 
 use oxyde_codec::ColumnTypeSpec as S;
 use oxyde_migrate::{
-    CheckDef, Dialect, FieldDef, ForeignKeyDef, IndexDef, Migration, MigrationOp, TableDef,
+    CheckDef, Dialect, EnumFieldRef, FieldDef, ForeignKeyDef, IndexDef, Migration, MigrationOp,
+    TableDef,
 };
 
 /// Shorthand: array spec with the given element.
@@ -647,4 +648,135 @@ fn rename_ops() {
         },
     ];
     snap("rename_ops", &ops, ALL_DIALECTS);
+}
+
+// ── 12. Enum type operations ────────────────────────────────────────────────
+
+fn enum_spec(name: &str, values: &[&str]) -> S {
+    S::Enum {
+        name: name.into(),
+        values: values.iter().map(|v| (*v).into()).collect(),
+    }
+}
+
+/// PG: CREATE TYPE (incl. schema-qualified quoting) before CREATE TABLE,
+/// native type name for scalar and `[]` for array columns.
+/// MySQL: no CREATE TYPE, inline ENUM(...); arrays fall back to JSON.
+/// SQLite: TEXT everywhere.
+#[test]
+fn enum_create_table() {
+    let ops = [
+        MigrationOp::CreateEnumType {
+            name: "post_status_enum".into(),
+            values: vec!["draft".into(), "published".into()],
+        },
+        MigrationOp::CreateEnumType {
+            name: "public.review_state_enum".into(),
+            values: vec!["open".into(), "closed".into()],
+        },
+        MigrationOp::CreateTable {
+            table: table(
+                "enum_posts",
+                vec![
+                    field("id", S::BigInteger).pk().auto_inc(),
+                    field(
+                        "status",
+                        enum_spec("post_status_enum", &["draft", "published"]),
+                    ),
+                    field(
+                        "labels",
+                        arr(enum_spec("post_status_enum", &["draft", "published"])),
+                    )
+                    .nullable(),
+                    field(
+                        "review",
+                        enum_spec("public.review_state_enum", &["open", "closed"]),
+                    ),
+                ],
+            ),
+        },
+    ];
+    snap("enum_create_table", &ops, ALL_DIALECTS);
+}
+
+/// Bucket ordering: AddEnumValue lands before other DDL regardless of the
+/// op order in the migration. PG: native ALTER TYPE ... ADD VALUE;
+/// MySQL: progressive MODIFY COLUMN per referencing column; SQLite: nothing.
+#[test]
+fn enum_add_value_ordering() {
+    let ops = [
+        MigrationOp::CreateIndex {
+            table: "enum_posts".into(),
+            index: index("ix_enum_posts_status", &["status"]),
+        },
+        MigrationOp::AddEnumValue {
+            name: "post_status_enum".into(),
+            value: "archived".into(),
+            fields: vec![EnumFieldRef {
+                table: "enum_posts".into(),
+                field: field(
+                    "status",
+                    enum_spec("post_status_enum", &["draft", "published", "archived"]),
+                ),
+            }],
+        },
+    ];
+    snap("enum_add_value_ordering", &ops, ALL_DIALECTS);
+}
+
+/// DROP TYPE comes after DROP TABLE (bucket order). AlterEnumType (value
+/// removal/reorder) intentionally emits NO SQL on any dialect — execution is
+/// guarded by ctx.require_manual() on the Python side; frozen here as-is.
+#[test]
+fn enum_drop_and_manual_alter() {
+    let ops = [
+        MigrationOp::DropEnumType {
+            name: "post_status_enum".into(),
+            values: Some(vec!["draft".into(), "published".into()]),
+        },
+        MigrationOp::DropTable {
+            name: "enum_posts".into(),
+            table: None,
+        },
+        MigrationOp::AlterEnumType {
+            name: "review_state_enum".into(),
+            old_values: vec!["open".into(), "closed".into()],
+            new_values: vec!["open".into()],
+        },
+    ];
+    snap("enum_drop_and_manual_alter", &ops, ALL_DIALECTS);
+}
+
+/// Column type conversion to/from an enum. PG needs the `::text::<target>`
+/// USING bridge (no implicit cast in either direction) — this is the 0.6→0.7
+/// upgrade path for pre-existing str-Enum fields stored as TEXT.
+/// SQLite goes through table rebuild — excluded here.
+#[test]
+fn alter_column_enum() {
+    let ops = [
+        // TEXT → enum (upgrade path)
+        MigrationOp::AlterColumn {
+            table: "posts".into(),
+            old_field: field("status", S::Text),
+            new_field: field(
+                "status",
+                enum_spec("post_status_enum", &["draft", "published"]),
+            ),
+            table_fields: None,
+            table_indexes: None,
+            table_foreign_keys: None,
+            table_checks: None,
+        },
+        // enum → TEXT (user dropped the enum annotation)
+        MigrationOp::AlterColumn {
+            table: "posts".into(),
+            old_field: field("kind", enum_spec("post_kind_enum", &["news", "blog"])),
+            new_field: field("kind", S::Text),
+            table_fields: None,
+            table_indexes: None,
+            table_foreign_keys: None,
+            table_checks: None,
+        },
+    ];
+    snap("alter_column_enum", &ops, PG_MYSQL);
 }

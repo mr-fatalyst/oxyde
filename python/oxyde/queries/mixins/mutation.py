@@ -5,6 +5,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterable
 from enum import Enum
+from functools import cache
 from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin, overload
 
 from pydantic import TypeAdapter
@@ -85,6 +86,11 @@ def _is_enum_annotation(annotation: Any) -> bool:
     return isinstance(annotation, type) and issubclass(annotation, Enum)
 
 
+@cache
+def _enum_type_adapter(python_type: Any) -> TypeAdapter:
+    return TypeAdapter(python_type)
+
+
 def _validate_enum_update_values(
     model_class: type[Model],
     values: dict[str, Any],
@@ -99,7 +105,8 @@ def _validate_enum_update_values(
             if value is None and meta.nullable:
                 validated[field] = None
             else:
-                validated[field] = TypeAdapter(meta.python_type).validate_python(value)
+                adapter = _enum_type_adapter(meta.python_type)
+                validated[field] = adapter.validate_python(value)
     return validated
 
 

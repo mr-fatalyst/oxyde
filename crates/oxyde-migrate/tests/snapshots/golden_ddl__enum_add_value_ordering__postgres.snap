@@ -1,0 +1,7 @@
+---
+source: crates/oxyde-migrate/tests/golden_ddl.rs
+expression: sql
+---
+ALTER TYPE "post_status_enum" ADD VALUE IF NOT EXISTS 'archived';
+
+CREATE INDEX "ix_enum_posts_status" ON "enum_posts" ("status")
