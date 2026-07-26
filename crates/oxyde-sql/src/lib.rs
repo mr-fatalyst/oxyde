@@ -68,21 +68,6 @@ pub enum Dialect {
     Mysql,
 }
 
-impl Dialect {
-    #[must_use]
-    pub fn from_url(url: &str) -> Self {
-        if url.starts_with("postgres") {
-            Dialect::Postgres
-        } else if url.starts_with("sqlite") {
-            Dialect::Sqlite
-        } else if url.starts_with("mysql") {
-            Dialect::Mysql
-        } else {
-            Dialect::Postgres // default
-        }
-    }
-}
-
 /// Whether the generated statement carries a full `RETURNING *` clause —
 /// i.e. the caller asked for rows back (`ir.returning`) and the dialect
 /// supports RETURNING (MySQL does not).

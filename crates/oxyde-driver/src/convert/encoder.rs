@@ -306,6 +306,14 @@ where
                 main_columns.push(col);
             }
         }
+
+        // A relation whose pk column is missing from the result set would
+        // panic on indexing below — fail with a proper error instead.
+        for (group, rel) in rel_groups.iter().zip(rels) {
+            if group.pk_col_idx == usize::MAX {
+                return Err(sqlx::Error::ColumnNotFound(rel.pk_col.clone()));
+            }
+        }
     } else {
         for (idx, col) in all_columns.iter().enumerate() {
             main_indices.push(idx);

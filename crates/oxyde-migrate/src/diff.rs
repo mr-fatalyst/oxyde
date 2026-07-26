@@ -293,8 +293,11 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
         }
     }
 
-    // Find modified tables
-    for (name, new_table) in &new.tables {
+    // Find modified tables (sorted: HashMap order must not leak into files)
+    let mut modified: Vec<&String> = new.tables.keys().collect();
+    modified.sort();
+    for name in modified {
+        let new_table = &new.tables[name];
         if let Some(old_table) = old.tables.get(name) {
             // Compare fields - find added columns
             for new_field in &new_table.fields {
