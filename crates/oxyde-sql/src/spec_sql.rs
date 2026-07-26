@@ -70,7 +70,9 @@ fn canonical_type(spec: &ColumnTypeSpec, dialect: Dialect, is_pk: bool) -> Strin
 
         S::BigInteger => match (dialect, is_pk) {
             (D::Postgres, true) => "BIGSERIAL".to_string(),
-            (D::Postgres, false) => "INTEGER".to_string(),
+            // DDL matches the binding contract: int is always bound as i64.
+            // 4-byte storage stays available via db_type="INTEGER".
+            (D::Postgres, false) => "BIGINT".to_string(),
             (D::Mysql, _) => "BIGINT".to_string(),
             (D::Sqlite, _) => "INTEGER".to_string(),
         },
@@ -170,7 +172,7 @@ mod tests {
         use ColumnTypeSpec as S;
         let cases: Vec<(ColumnTypeSpec, [&str; 3])> = vec![
             // (spec, [postgres, mysql, sqlite])
-            (S::BigInteger, ["INTEGER", "BIGINT", "INTEGER"]),
+            (S::BigInteger, ["BIGINT", "BIGINT", "INTEGER"]),
             (S::Double, ["DOUBLE PRECISION", "DOUBLE", "REAL"]),
             (S::Boolean, ["BOOLEAN", "TINYINT", "INTEGER"]),
             (
