@@ -19,11 +19,13 @@ use crate::Dialect;
 
 /// Convert an rmpv value without a column spec (raw SQL parameters).
 /// Identical to `bind_value(value, &ColumnTypeSpec::Unknown)`.
+#[must_use]
 pub fn rmpv_to_value(value: &rmpv::Value) -> Value {
     bind_value(value, &ColumnTypeSpec::Unknown)
 }
 
 /// Convert an rmpv value to a sea_query Value using the column type spec.
+#[must_use]
 pub fn bind_value(value: &rmpv::Value, spec: &ColumnTypeSpec) -> Value {
     match value {
         rmpv::Value::Nil => typed_null(spec),
@@ -72,6 +74,7 @@ pub fn bind_value(value: &rmpv::Value, spec: &ColumnTypeSpec) -> Value {
     }
 }
 
+#[must_use]
 pub fn typed_value_expr(value: Value, spec: &ColumnTypeSpec, dialect: Dialect) -> SimpleExpr {
     if dialect == Dialect::Postgres {
         if let Some(type_name) = postgres_enum_cast_type(spec) {

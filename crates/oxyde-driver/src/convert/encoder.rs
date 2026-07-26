@@ -210,6 +210,17 @@ pub struct RelationInfo {
 const MSGPACK_NIL: u8 = 0xc0;
 
 /// Encode a single cell into a small buffer (for PK extraction).
+struct RelGroup<'a> {
+    prefix: &'a str,
+    pk_col_idx: usize,
+    col_indices: Vec<usize>,
+    col_metas: Vec<&'a ColumnMeta>,
+    stripped_names: Vec<String>,
+    seen: std::collections::HashSet<Vec<u8>>,
+    data_buf: Vec<u8>,
+    refs_buf: Vec<u8>,
+}
+
 fn encode_pk_cell<E: CellEncoder>(row: &E::Row, col_idx: usize, col_meta: &ColumnMeta) -> Vec<u8> {
     let mut pk_buf = Vec::with_capacity(16);
     E::encode_cell(&mut pk_buf, row, col_idx, col_meta);
@@ -255,17 +266,6 @@ where
 
     let mut main_indices: Vec<usize> = Vec::new();
     let mut main_columns: Vec<&ColumnMeta> = Vec::new();
-
-    struct RelGroup<'a> {
-        prefix: &'a str,
-        pk_col_idx: usize,
-        col_indices: Vec<usize>,
-        col_metas: Vec<&'a ColumnMeta>,
-        stripped_names: Vec<String>,
-        seen: std::collections::HashSet<Vec<u8>>,
-        data_buf: Vec<u8>,
-        refs_buf: Vec<u8>,
-    }
 
     let mut rel_groups: Vec<RelGroup<'_>> = Vec::new();
 
@@ -325,7 +325,7 @@ where
         }
 
         if has_rels {
-            for group in rel_groups.iter_mut() {
+            for group in &mut rel_groups {
                 let pk_bytes =
                     encode_pk_cell::<E>(row, group.pk_col_idx, &all_columns[group.pk_col_idx]);
 
@@ -403,7 +403,7 @@ where
     S: futures::Stream<Item = Result<E::Row, sqlx::Error>> + Unpin,
     <<E::Row as Row>::Database as Database>::Column: Column,
 {
-    let mut num_rows = 0;
+    let mut num_rows: u32 = 0;
 
     let first_row = match stream.next().await {
         Some(Ok(row)) => row,
@@ -442,7 +442,7 @@ where
     let mut buf = Vec::with_capacity(rows_buf.len() + 128);
     write_map_len(&mut buf, 3);
     write_str(&mut buf, "affected");
-    write_u64(&mut buf, num_rows as u64);
+    write_u64(&mut buf, u64::from(num_rows));
     write_str(&mut buf, "columns");
 
     write_array_len(&mut buf, columns.len() as u32);
@@ -451,7 +451,7 @@ where
     }
 
     write_str(&mut buf, "rows");
-    write_array_len(&mut buf, num_rows as u32);
+    write_array_len(&mut buf, num_rows);
     buf.extend_from_slice(&rows_buf);
 
     Ok(buf)

@@ -45,7 +45,7 @@ pub fn build_bulk_update(
         for column in row.values.keys() {
             update_columns.insert(column.clone());
         }
-        let cond = build_bulk_row_condition(row, col_types, dialect)?;
+        let cond = build_bulk_row_condition(row, col_types, dialect);
         row_conditions.push(cond);
     }
 
@@ -107,12 +107,12 @@ fn build_bulk_row_condition(
     row: &BulkUpdateRow,
     col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     dialect: Dialect,
-) -> Result<Cond> {
+) -> Cond {
     let mut cond = Cond::all();
     for (column, value) in &row.filters {
         cond = cond.add(build_match_expression(column, value, col_types, dialect));
     }
-    Ok(cond)
+    cond
 }
 
 /// Build a single column match expression, handling NULL with IS NULL.

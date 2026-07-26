@@ -4,20 +4,13 @@ use crate::error::{DriverError, Result};
 use sea_query::Value;
 
 pub fn cast_u64_to_i64(value: u64, db: &str) -> Result<i64> {
-    if value > i64::MAX as u64 {
-        return Err(DriverError::ExecutionError(format!(
-            "Parameter out of range for {}: {}",
-            db, value
-        )));
-    }
-    Ok(value as i64)
+    i64::try_from(value).map_err(|_| {
+        DriverError::ExecutionError(format!("Parameter out of range for {db}: {value}"))
+    })
 }
 
 pub fn unsupported_param(db: &str, value: &Value) -> DriverError {
-    DriverError::ExecutionError(format!(
-        "Unsupported parameter type for {}: {:?}",
-        db, value
-    ))
+    DriverError::ExecutionError(format!("Unsupported parameter type for {db}: {value:?}"))
 }
 
 /// Convert a sea_query `Value` to a `serde_json::Value` for JSON storage.
@@ -30,12 +23,10 @@ fn sea_value_to_json(val: &Value) -> serde_json::Value {
         Value::Int(Some(v)) => serde_json::Value::Number((*v).into()),
         Value::BigInt(Some(v)) => serde_json::Value::Number((*v).into()),
         Value::Float(Some(v)) => serde_json::Number::from_f64(f64::from(*v))
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
+            .map_or(serde_json::Value::Null, serde_json::Value::Number),
         Value::Double(Some(v)) => serde_json::Number::from_f64(*v)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
-        Value::String(Some(s)) => serde_json::Value::String(s.as_ref().to_string()),
+            .map_or(serde_json::Value::Null, serde_json::Value::Number),
+        Value::String(Some(s)) => serde_json::Value::String(s.as_ref().clone()),
         Value::Uuid(Some(u)) => serde_json::Value::String(u.to_string()),
         Value::Decimal(Some(d)) => serde_json::Value::String(d.to_string()),
         Value::Json(Some(j)) => j.as_ref().clone(),

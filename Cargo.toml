@@ -29,6 +29,17 @@ tracing = "0.1"
 unsafe_code = "warn"
 
 [workspace.lints.clippy]
-all = "warn"
-pedantic = "warn"
-nursery = "warn"
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# nursery is explicitly experimental — too many false positives to gate on
+nursery = { level = "allow", priority = -1 }
+# Doc-prose lints: not worth gating commits on
+doc_markdown = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Style calls this codebase makes deliberately: explicit per-kind match
+# matrices and long match dispatchers read better than merged arms here.
+match_same_arms = "allow"
+too_many_lines = "allow"
+implicit_hasher = "allow"
+struct_excessive_bools = "allow"

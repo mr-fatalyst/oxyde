@@ -167,7 +167,8 @@ fn mysql_column_def(field: &FieldDef) -> String {
         col_def.push_str(" UNIQUE");
     }
     if let Some(default) = &field.default {
-        col_def.push_str(&format!(" DEFAULT {}", default));
+        use std::fmt::Write as _;
+        let _ = write!(col_def, " DEFAULT {default}");
     }
 
     col_def
@@ -229,7 +230,7 @@ fn sqlite_table_rebuild(
     new_field: &FieldDef,
 ) -> Result<Vec<String>> {
     let mut stmts = Vec::new();
-    let temp_table = format!("_new_{}", table);
+    let temp_table = format!("_new_{table}");
 
     stmts.push("PRAGMA foreign_keys=OFF".to_string());
 
@@ -443,7 +444,7 @@ impl MigrationOpExt for MigrationOp {
                         // MySQL CHANGE requires full column definition
                         if let Some(field) = field_def {
                             let mut renamed = field.clone();
-                            renamed.name = new_name.clone();
+                            renamed.name.clone_from(new_name);
                             vec![format!(
                                 "ALTER TABLE `{}` CHANGE `{}` {}",
                                 table,
@@ -592,9 +593,8 @@ impl MigrationOpExt for MigrationOp {
                 if dialect == Dialect::Sqlite {
                     return Err(MigrateError::MigrationError(format!(
                         "SQLite does not support ALTER TABLE ADD FOREIGN KEY. \
-                        To add a foreign key to table '{}', you need to recreate the table. \
-                        Consider using a table rebuild migration.",
-                        table
+                        To add a foreign key to table '{table}', you need to recreate the table. \
+                        Consider using a table rebuild migration."
                     )));
                 }
                 Ok(vec![build_sql!(build_fk_stmt(table, fk), dialect)])
@@ -608,9 +608,8 @@ impl MigrationOpExt for MigrationOp {
                 if dialect == Dialect::Sqlite {
                     return Err(MigrateError::MigrationError(format!(
                         "SQLite does not support ALTER TABLE DROP FOREIGN KEY. \
-                        To remove foreign key '{}' from table '{}', you need to recreate the table. \
-                        Consider using a table rebuild migration.",
-                        name, table
+                        To remove foreign key '{name}' from table '{table}', you need to recreate the table. \
+                        Consider using a table rebuild migration."
                     )));
                 }
 
@@ -623,9 +622,8 @@ impl MigrationOpExt for MigrationOp {
                 if dialect == Dialect::Sqlite {
                     return Err(MigrateError::MigrationError(format!(
                         "SQLite does not support ALTER TABLE ADD CHECK. \
-                        To add a check constraint to table '{}', you need to recreate the table. \
-                        Consider using a table rebuild migration.",
-                        table
+                        To add a check constraint to table '{table}', you need to recreate the table. \
+                        Consider using a table rebuild migration."
                     )));
                 }
                 Ok(vec![format!(
@@ -642,9 +640,8 @@ impl MigrationOpExt for MigrationOp {
                 if dialect == Dialect::Sqlite {
                     return Err(MigrateError::MigrationError(format!(
                         "SQLite does not support ALTER TABLE DROP CHECK. \
-                        To remove check constraint '{}' from table '{}', you need to recreate the table. \
-                        Consider using a table rebuild migration.",
-                        name, table
+                        To remove check constraint '{name}' from table '{table}', you need to recreate the table. \
+                        Consider using a table rebuild migration."
                     )));
                 }
                 Ok(match dialect {

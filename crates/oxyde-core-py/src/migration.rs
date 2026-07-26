@@ -15,20 +15,17 @@ use pyo3::prelude::*;
 pub(crate) fn migration_compute_diff(old_json: &str, new_json: &str) -> PyResult<String> {
     use oxyde_migrate::{compute_diff, Snapshot};
 
-    let old = Snapshot::from_json(old_json).map_err(|e| {
-        PyErr::new::<PyValueError, _>(format!("Failed to parse old snapshot: {}", e))
-    })?;
+    let old = Snapshot::from_json(old_json)
+        .map_err(|e| PyErr::new::<PyValueError, _>(format!("Failed to parse old snapshot: {e}")))?;
 
-    let new = Snapshot::from_json(new_json).map_err(|e| {
-        PyErr::new::<PyValueError, _>(format!("Failed to parse new snapshot: {}", e))
-    })?;
+    let new = Snapshot::from_json(new_json)
+        .map_err(|e| PyErr::new::<PyValueError, _>(format!("Failed to parse new snapshot: {e}")))?;
 
     let ops =
-        compute_diff(&old, &new).map_err(|e| PyErr::new::<PyValueError, _>(format!("{}", e)))?;
+        compute_diff(&old, &new).map_err(|e| PyErr::new::<PyValueError, _>(format!("{e}")))?;
 
-    serde_json::to_string(&ops).map_err(|e| {
-        PyErr::new::<PyValueError, _>(format!("Failed to serialize operations: {}", e))
-    })
+    serde_json::to_string(&ops)
+        .map_err(|e| PyErr::new::<PyValueError, _>(format!("Failed to serialize operations: {e}")))
 }
 
 /// Convert migration operations to SQL statements
@@ -45,7 +42,7 @@ pub(crate) fn migration_to_sql(operations_json: &str, dialect: &str) -> PyResult
     use oxyde_sql::{Dialect, Migration};
 
     let ops: Vec<MigrationOp> = serde_json::from_str(operations_json)
-        .map_err(|e| PyErr::new::<PyValueError, _>(format!("Failed to parse operations: {}", e)))?;
+        .map_err(|e| PyErr::new::<PyValueError, _>(format!("Failed to parse operations: {e}")))?;
 
     let dialect_enum = match dialect {
         "sqlite" => Dialect::Sqlite,
@@ -53,8 +50,7 @@ pub(crate) fn migration_to_sql(operations_json: &str, dialect: &str) -> PyResult
         "mysql" => Dialect::Mysql,
         _ => {
             return Err(PyErr::new::<PyValueError, _>(format!(
-                "Invalid dialect: {}",
-                dialect
+                "Invalid dialect: {dialect}"
             )))
         }
     };
@@ -65,5 +61,5 @@ pub(crate) fn migration_to_sql(operations_json: &str, dialect: &str) -> PyResult
     };
     migration
         .to_sql(dialect_enum)
-        .map_err(|e| PyErr::new::<PyRuntimeError, _>(format!("Migration error: {}", e)))
+        .map_err(|e| PyErr::new::<PyRuntimeError, _>(format!("Migration error: {e}")))
 }

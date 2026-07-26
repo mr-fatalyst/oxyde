@@ -11,7 +11,7 @@ mod tests {
             analyze: false,
             format: ExplainFormat::Text,
         };
-        let sql = build_mysql_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_mysql_explain_sql("SELECT * FROM users", options);
         assert!(sql.contains("EXPLAIN"));
         assert!(sql.contains("SELECT * FROM users"));
     }
@@ -22,7 +22,7 @@ mod tests {
             analyze: true,
             format: ExplainFormat::Text,
         };
-        let sql = build_mysql_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_mysql_explain_sql("SELECT * FROM users", options);
         assert!(sql.contains("ANALYZE"));
     }
 
@@ -32,11 +32,10 @@ mod tests {
             analyze: false,
             format: ExplainFormat::Json,
         };
-        let sql = build_mysql_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_mysql_explain_sql("SELECT * FROM users", options);
         assert!(
             sql.contains("FORMAT=JSON"),
-            "Should contain FORMAT=JSON, got: {}",
-            sql
+            "Should contain FORMAT=JSON, got: {sql}"
         );
         assert!(sql.contains("SELECT * FROM users"));
     }
@@ -47,16 +46,14 @@ mod tests {
             analyze: true,
             format: ExplainFormat::Json,
         };
-        let sql = build_mysql_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_mysql_explain_sql("SELECT * FROM users", options);
         assert!(
             sql.contains("ANALYZE"),
-            "Should contain ANALYZE, got: {}",
-            sql
+            "Should contain ANALYZE, got: {sql}"
         );
         assert!(
             sql.contains("FORMAT=JSON"),
-            "Should contain FORMAT=JSON, got: {}",
-            sql
+            "Should contain FORMAT=JSON, got: {sql}"
         );
     }
 

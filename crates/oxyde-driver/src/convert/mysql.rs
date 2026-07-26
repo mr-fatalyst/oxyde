@@ -9,7 +9,10 @@ use oxyde_codec::ColumnTypeSpec;
 use rust_decimal::Decimal;
 use sqlx::{mysql::MySqlRow, Row};
 
-use super::encoder::*;
+use super::encoder::{
+    write_bin, write_bool, write_f64, write_i64, write_json_value, write_nil, write_str,
+    CellEncoder,
+};
 
 pub struct MySqlEncoder;
 

@@ -131,59 +131,56 @@ impl TransactionRegistry {
 
             guard.retain(|tx_id, tx_arc| {
                 let tx = tx_arc.try_lock();
-                match tx {
-                    Ok(inner) => {
-                        // Transaction successfully locked - check last_activity against pool-specific timeout
-                        let idle_time = now.duration_since(inner.last_activity);
+                if let Ok(inner) = tx {
+                    // Transaction successfully locked - check last_activity against pool-specific timeout
+                    let idle_time = now.duration_since(inner.last_activity);
 
-                        // Get pool-specific timeout or use default
-                        let max_age = pool_timeouts.get(&inner._pool_name)
-                            .copied()
-                            .unwrap_or_else(|| Duration::from_secs(300));
+                    // Get pool-specific timeout or use default
+                    let max_age = pool_timeouts.get(&inner.pool_name)
+                        .copied()
+                        .unwrap_or_else(|| Duration::from_secs(300));
 
-                        if idle_time > max_age && inner.is_active() {
+                    if idle_time > max_age && inner.is_active() {
+                        warn!(
+                            "Marking stale transaction {} for cleanup (idle: {:?}, created: {:?} ago)",
+                            tx_id, idle_time, now.duration_since(inner.created_at)
+                        );
+                        locked_counts.remove(tx_id);
+                        to_cleanup.push((*tx_id, Arc::clone(tx_arc)));
+                        false // Remove from registry
+                    } else {
+                        // Transaction is alive and well, reset locked counter
+                        locked_counts.remove(tx_id);
+                        true
+                    }
+                } else {
+                    // Transaction is locked (actively executing query)
+                    let strong_count = Arc::strong_count(tx_arc);
+                    if strong_count == 1 {
+                        // Only registry holds this Arc, but it's still locked - possible deadlock
+                        let count = locked_counts.entry(*tx_id).or_insert(0);
+                        *count += 1;
+
+                        if *count >= MAX_LOCKED_CYCLES {
                             warn!(
-                                "Marking stale transaction {} for cleanup (idle: {:?}, created: {:?} ago)",
-                                tx_id, idle_time, now.duration_since(inner.created_at)
+                                "Force marking transaction {} for cleanup after {} cycles with no active references",
+                                tx_id, count
                             );
                             locked_counts.remove(tx_id);
                             to_cleanup.push((*tx_id, Arc::clone(tx_arc)));
-                            false // Remove from registry
-                        } else {
-                            // Transaction is alive and well, reset locked counter
-                            locked_counts.remove(tx_id);
-                            true
+                            return false; // Remove from registry
                         }
-                    }
-                    Err(_) => {
-                        // Transaction is locked (actively executing query)
-                        let strong_count = Arc::strong_count(tx_arc);
-                        if strong_count == 1 {
-                            // Only registry holds this Arc, but it's still locked - possible deadlock
-                            let count = locked_counts.entry(*tx_id).or_insert(0);
-                            *count += 1;
 
-                            if *count >= MAX_LOCKED_CYCLES {
-                                warn!(
-                                    "Force marking transaction {} for cleanup after {} cycles with no active references",
-                                    tx_id, count
-                                );
-                                locked_counts.remove(tx_id);
-                                to_cleanup.push((*tx_id, Arc::clone(tx_arc)));
-                                return false; // Remove from registry
-                            }
-
-                            warn!(
-                                "Transaction {} is locked but has no active references. Locked cycle count: {}/{}",
-                                tx_id, count, MAX_LOCKED_CYCLES
-                            );
-                            locked_old_transactions.push(*tx_id);
-                        } else {
-                            // Active transaction - reset counter if exists
-                            locked_counts.remove(tx_id);
-                        }
-                        true // Keep locked transactions
+                        warn!(
+                            "Transaction {} is locked but has no active references. Locked cycle count: {}/{}",
+                            tx_id, count, MAX_LOCKED_CYCLES
+                        );
+                        locked_old_transactions.push(*tx_id);
+                    } else {
+                        // Active transaction - reset counter if exists
+                        locked_counts.remove(tx_id);
                     }
+                    true // Keep locked transactions
                 }
             });
 

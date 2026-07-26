@@ -5,7 +5,7 @@ use crate::explain::postgres::ExplainFormat;
 
 pub fn build_sqlite_explain_sql(
     sql: &str,
-    options: &crate::explain::postgres::ExplainOptions,
+    options: crate::explain::postgres::ExplainOptions,
 ) -> Result<String> {
     if options.analyze {
         return Err(DriverError::ExecutionError(
@@ -17,5 +17,5 @@ pub fn build_sqlite_explain_sql(
             "SQLite EXPLAIN does not support FORMAT JSON".into(),
         ));
     }
-    Ok(format!("EXPLAIN QUERY PLAN {}", sql))
+    Ok(format!("EXPLAIN QUERY PLAN {sql}"))
 }

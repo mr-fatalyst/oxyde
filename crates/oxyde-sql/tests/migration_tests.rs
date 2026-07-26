@@ -142,7 +142,7 @@ fn test_check_constraint_expression_change_generates_drop_and_add() {
             assert_eq!(name, "age_positive");
             assert_eq!(check_def.as_ref().unwrap().expression, "age >= 0");
         }
-        op => panic!("expected DropCheck, got {:?}", op),
+        op => panic!("expected DropCheck, got {op:?}"),
     }
 
     match &ops[1] {
@@ -151,7 +151,7 @@ fn test_check_constraint_expression_change_generates_drop_and_add() {
             assert_eq!(check.name, "age_positive");
             assert_eq!(check.expression, "age > 0");
         }
-        op => panic!("expected AddCheck, got {:?}", op),
+        op => panic!("expected AddCheck, got {op:?}"),
     }
 }
 
@@ -226,7 +226,7 @@ fn test_compute_diff_adds_enum_value_without_altering_column() {
             assert_eq!(fields[0].table, "posts");
             assert_eq!(fields[0].field.name, "status");
         }
-        op => panic!("expected AddEnumValue, got {:?}", op),
+        op => panic!("expected AddEnumValue, got {op:?}"),
     }
 }
 
@@ -327,7 +327,7 @@ fn test_compute_diff_emits_manual_enum_alter_for_value_removal() {
             );
             assert_eq!(new_values, &vec!["draft".to_string()]);
         }
-        op => panic!("expected AlterEnumType, got {:?}", op),
+        op => panic!("expected AlterEnumType, got {op:?}"),
     }
 }
 
@@ -394,23 +394,19 @@ fn test_sqlite_create_table_with_fk_inline() {
     let create_stmt = &sql[0];
     assert!(
         create_stmt.contains(r#"FOREIGN KEY ("author_id") REFERENCES "users" ("id")"#),
-        "FK should be inline: {}",
-        create_stmt
+        "FK should be inline: {create_stmt}"
     );
     assert!(
         create_stmt.contains("ON DELETE CASCADE"),
-        "ON DELETE should be present: {}",
-        create_stmt
+        "ON DELETE should be present: {create_stmt}"
     );
     assert!(
         create_stmt.contains("CHECK (author_id > 0)"),
-        "CHECK should be inline: {}",
-        create_stmt
+        "CHECK should be inline: {create_stmt}"
     );
     assert!(
         !create_stmt.contains("ALTER TABLE"),
-        "Should not contain ALTER TABLE: {}",
-        create_stmt
+        "Should not contain ALTER TABLE: {create_stmt}"
     );
 }
 
@@ -480,8 +476,7 @@ fn test_sqlite_add_foreign_key_returns_error() {
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("SQLite does not support ALTER TABLE ADD FOREIGN KEY"),
-        "Error message should mention limitation: {}",
-        err
+        "Error message should mention limitation: {err}"
     );
 }
 
@@ -502,8 +497,7 @@ fn test_sqlite_add_check_returns_error() {
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("SQLite does not support ALTER TABLE ADD CHECK"),
-        "Error message should mention limitation: {}",
-        err
+        "Error message should mention limitation: {err}"
     );
 }
 
@@ -648,8 +642,7 @@ fn test_sqlite_alter_column_returns_error_without_schema() {
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("SQLite does not support ALTER COLUMN"),
-        "Error should mention SQLite limitation: {}",
-        err
+        "Error should mention SQLite limitation: {err}"
     );
 }
 
@@ -808,33 +801,22 @@ fn test_rename_column_mysql_with_field_def() {
 
     assert_eq!(sql.len(), 1, "Should produce single SQL statement");
     let stmt = &sql[0];
-    assert!(stmt.contains("CHANGE"), "Should use CHANGE: {}", stmt);
+    assert!(stmt.contains("CHANGE"), "Should use CHANGE: {stmt}");
     assert!(
         stmt.contains("old_name"),
-        "Should reference old name: {}",
-        stmt
+        "Should reference old name: {stmt}"
     );
-    assert!(
-        stmt.contains("new_name"),
-        "Should contain new name: {}",
-        stmt
-    );
+    assert!(stmt.contains("new_name"), "Should contain new name: {stmt}");
     assert!(
         stmt.contains("VARCHAR(255)"),
-        "Should preserve type: {}",
-        stmt
+        "Should preserve type: {stmt}"
     );
     assert!(
         stmt.contains("NOT NULL"),
-        "Should preserve NOT NULL: {}",
-        stmt
+        "Should preserve NOT NULL: {stmt}"
     );
-    assert!(stmt.contains("UNIQUE"), "Should preserve UNIQUE: {}", stmt);
-    assert!(
-        stmt.contains("DEFAULT"),
-        "Should preserve DEFAULT: {}",
-        stmt
-    );
+    assert!(stmt.contains("UNIQUE"), "Should preserve UNIQUE: {stmt}");
+    assert!(stmt.contains("DEFAULT"), "Should preserve DEFAULT: {stmt}");
 }
 
 #[test]
@@ -960,7 +942,7 @@ fn test_compute_diff_detects_alter_column() {
             assert!(!old_field.nullable);
             assert!(new_field.nullable);
         }
-        other => panic!("Expected AlterColumn, got {:?}", other),
+        other => panic!("Expected AlterColumn, got {other:?}"),
     }
 }
 
@@ -1139,8 +1121,7 @@ fn test_compute_diff_detects_partial_index_predicate_change() {
                 if index.name == "users_email_idx"
                     && index.where_clause.as_deref() == Some("deleted_at IS NULL")
         ),
-        "predicate changes should rebuild the index, got {:?}",
-        ops
+        "predicate changes should rebuild the index, got {ops:?}"
     );
 }
 
@@ -1404,7 +1385,7 @@ fn test_compute_diff_emits_create_tables_in_topological_order() {
         let mut fks = Vec::new();
         if let Some(r) = ref_table {
             fks.push(ForeignKeyDef {
-                name: format!("fk_{}_{}", name, r),
+                name: format!("fk_{name}_{r}"),
                 columns: vec![format!("{}_id", r)],
                 ref_table: r.to_string(),
                 ref_columns: vec!["id".to_string()],
@@ -1482,7 +1463,7 @@ fn test_compute_diff_rejects_cyclic_foreign_keys() {
             }],
             indexes: vec![],
             foreign_keys: vec![ForeignKeyDef {
-                name: format!("fk_{}_{}", name, ref_table),
+                name: format!("fk_{name}_{ref_table}"),
                 columns: vec![format!("{}_id", ref_table)],
                 ref_table: ref_table.to_string(),
                 ref_columns: vec!["id".into()],
@@ -1506,7 +1487,7 @@ fn test_compute_diff_rejects_cyclic_foreign_keys() {
         err.contains("cyclic foreign key"),
         "error should mention cycle: {err}"
     );
-    assert!(err.contains("a") && err.contains("b"));
+    assert!(err.contains('a') && err.contains('b'));
 }
 
 #[test]
@@ -1515,7 +1496,7 @@ fn test_compute_diff_emits_drop_tables_in_reverse_topological_order() {
         let mut fks = Vec::new();
         if let Some(r) = ref_table {
             fks.push(ForeignKeyDef {
-                name: format!("fk_{}_{}", name, r),
+                name: format!("fk_{name}_{r}"),
                 columns: vec![format!("{}_id", r)],
                 ref_table: r.to_string(),
                 ref_columns: vec!["id".to_string()],
@@ -1598,7 +1579,7 @@ fn cyclic_table(name: &str, fk_refs: &[(&str, &str)]) -> TableDef {
             decimal_places: None,
         });
         foreign_keys.push(ForeignKeyDef {
-            name: format!("fk_{}_{}", name, col),
+            name: format!("fk_{name}_{col}"),
             columns: vec![(*col).to_string()],
             ref_table: (*ref_table).to_string(),
             ref_columns: vec!["id".into()],
@@ -1630,8 +1611,7 @@ fn test_compute_diff_noop_on_cyclic_schema() {
         compute_diff(&snap, &snap).expect("no-op diff on cyclic schema must succeed, not error");
     assert!(
         ops.is_empty(),
-        "no-op diff must produce zero operations, got {:?}",
-        ops
+        "no-op diff must produce zero operations, got {ops:?}"
     );
 }
 
@@ -1664,8 +1644,7 @@ fn test_compute_diff_modify_column_in_cyclic_schema() {
     assert_eq!(
         add_columns,
         vec!["name"],
-        "expected exactly one AddColumn(companies.name), got ops={:?}",
-        ops
+        "expected exactly one AddColumn(companies.name), got ops={ops:?}"
     );
 }
 
@@ -1698,7 +1677,6 @@ fn test_compute_diff_create_table_referencing_cyclic_subset() {
     assert_eq!(
         create_names,
         vec!["orders"],
-        "expected exactly one CreateTable(orders), got ops={:?}",
-        ops
+        "expected exactly one CreateTable(orders), got ops={ops:?}"
     );
 }

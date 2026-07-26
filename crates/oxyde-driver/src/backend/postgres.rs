@@ -10,7 +10,7 @@ mod tests {
             analyze: false,
             format: ExplainFormat::Text,
         };
-        let sql = build_postgres_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_postgres_explain_sql("SELECT * FROM users", options);
         assert!(sql.contains("EXPLAIN"));
         assert!(sql.contains("SELECT * FROM users"));
     }
@@ -21,7 +21,7 @@ mod tests {
             analyze: true,
             format: ExplainFormat::Text,
         };
-        let sql = build_postgres_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_postgres_explain_sql("SELECT * FROM users", options);
         assert!(sql.contains("ANALYZE"));
     }
 
@@ -31,7 +31,7 @@ mod tests {
             analyze: false,
             format: ExplainFormat::Json,
         };
-        let sql = build_postgres_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_postgres_explain_sql("SELECT * FROM users", options);
         assert!(sql.contains("FORMAT JSON"));
     }
 }

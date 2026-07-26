@@ -1,6 +1,5 @@
 //! PostgreSQL EXPLAIN functionality
 
-use crate::error::Result;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,7 +14,7 @@ pub struct ExplainOptions {
     pub format: ExplainFormat,
 }
 
-pub fn build_postgres_explain_sql(sql: &str, options: &ExplainOptions) -> Result<String> {
+pub fn build_postgres_explain_sql(sql: &str, options: ExplainOptions) -> String {
     let mut clauses: Vec<String> = Vec::new();
     if options.analyze {
         clauses.push("ANALYZE TRUE".into());
@@ -24,9 +23,9 @@ pub fn build_postgres_explain_sql(sql: &str, options: &ExplainOptions) -> Result
         clauses.push("FORMAT JSON".into());
     }
     if clauses.is_empty() {
-        Ok(format!("EXPLAIN {}", sql))
+        format!("EXPLAIN {sql}")
     } else {
-        Ok(format!("EXPLAIN ({}) {}", clauses.join(", "), sql))
+        format!("EXPLAIN ({}) {}", clauses.join(", "), sql)
     }
 }
 

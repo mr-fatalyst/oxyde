@@ -139,8 +139,7 @@ pub(crate) fn execute<'py>(
                     if profile {
                         let total_us = total_start.elapsed().as_micros();
                         eprintln!(
-                            "[OXYDE_PROFILE] {} RETURNING: exec={} µs, total={} µs",
-                            op_name, exec_us, total_us
+                            "[OXYDE_PROFILE] {op_name} RETURNING: exec={exec_us} µs, total={total_us} µs"
                         );
                     }
                     result
@@ -158,8 +157,7 @@ pub(crate) fn execute<'py>(
                     if profile {
                         let total_us = total_start.elapsed().as_micros();
                         eprintln!(
-                            "[OXYDE_PROFILE] {} (affected={}): exec={} µs, serialize={} µs, total={} µs, sql={}",
-                            op_name, affected, exec_us, serialize_us, total_us, sql
+                            "[OXYDE_PROFILE] {op_name} (affected={affected}): exec={exec_us} µs, serialize={serialize_us} µs, total={total_us} µs, sql={sql}"
                         );
                     }
                     result
@@ -324,14 +322,13 @@ pub(crate) fn render_sql_debug<'py>(
 
     // Parse dialect name (default to Postgres)
     let dialect = match dialect_name {
-        Some("postgres") | Some("postgresql") => Dialect::Postgres,
+        Some("postgres" | "postgresql") => Dialect::Postgres,
         Some("sqlite") => Dialect::Sqlite,
         Some("mysql") => Dialect::Mysql,
         None => Dialect::Postgres, // Default
         Some(other) => {
             return Err(PyErr::new::<PyValueError, _>(format!(
-                "Unknown dialect '{}'. Use 'postgres', 'sqlite', or 'mysql'",
-                other
+                "Unknown dialect '{other}'. Use 'postgres', 'sqlite', or 'mysql'"
             )))
         }
     };

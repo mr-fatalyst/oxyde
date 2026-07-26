@@ -97,7 +97,7 @@ fn build_select_statement(ir: &QueryIR, dialect: Dialect) -> Result<SelectStatem
     }
 
     if let Some(joins) = &ir.joins {
-        apply_select_joins(&mut query, joins, &table)?;
+        apply_select_joins(&mut query, joins, &table);
     }
 
     // UNION via sea-query (recursive)
@@ -136,11 +136,11 @@ fn build_select_statement(ir: &QueryIR, dialect: Dialect) -> Result<SelectStatem
     }
 
     if let Some(limit) = ir.limit {
-        query.limit(limit as u64);
+        query.limit(u64::try_from(limit).unwrap_or(0));
     }
 
     if let Some(offset) = ir.offset {
-        query.offset(offset as u64);
+        query.offset(u64::try_from(offset).unwrap_or(0));
     }
 
     if let Some(lock_type) = &ir.lock {
@@ -154,7 +154,7 @@ fn build_select_statement(ir: &QueryIR, dialect: Dialect) -> Result<SelectStatem
 }
 
 /// Helper to build SQL string from a `SelectStatement` for the given dialect.
-fn build_query_string(query: SelectStatement, dialect: Dialect) -> (String, Vec<Value>) {
+fn build_query_string(query: &SelectStatement, dialect: Dialect) -> (String, Vec<Value>) {
     let (sql, values) = match dialect {
         Dialect::Postgres => query.build(PostgresQueryBuilder),
         Dialect::Sqlite => query.build(SqliteQueryBuilder),
@@ -190,14 +190,14 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         }
 
         if let Some(joins) = &ir.joins {
-            apply_joins_only(&mut count_query, joins, &table)?;
+            apply_joins_only(&mut count_query, joins, &table);
         }
 
-        return Ok(build_query_string(count_query, dialect));
+        return Ok(build_query_string(&count_query, dialect));
     }
 
     let query = build_select_statement(ir, dialect)?;
-    let (sql, values) = build_query_string(query, dialect);
+    let (sql, values) = build_query_string(&query, dialect);
 
     if ir.exists.unwrap_or(false) {
         return Ok((format!("SELECT EXISTS({sql})"), values));
@@ -211,7 +211,7 @@ fn apply_select_joins(
     query: &mut sea_query::SelectStatement,
     joins: &[JoinSpec],
     base_table: &TableIdent,
-) -> Result<()> {
+) {
     for join in joins {
         let join_alias = Alias::new(join.alias.clone());
         let mut table_ref = sea_query::TableRef::Table(SeaRc::new(TableIdent(join.table.clone())));
@@ -237,7 +237,6 @@ fn apply_select_joins(
             query.expr_as(expr, alias);
         }
     }
-    Ok(())
 }
 
 /// Apply JOINs without adding columns to SELECT (for COUNT queries)
@@ -245,7 +244,7 @@ fn apply_joins_only(
     query: &mut sea_query::SelectStatement,
     joins: &[JoinSpec],
     base_table: &TableIdent,
-) -> Result<()> {
+) {
     for join in joins {
         let join_alias = Alias::new(join.alias.clone());
         let mut table_ref = sea_query::TableRef::Table(SeaRc::new(TableIdent(join.table.clone())));
@@ -267,5 +266,4 @@ fn apply_joins_only(
         query.left_join(table_ref, Expr::col(left_col).equals(right_col));
         // Note: no columns added - only JOIN clause for filtering
     }
-    Ok(())
 }

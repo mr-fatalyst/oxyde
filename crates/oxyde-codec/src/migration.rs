@@ -36,13 +36,14 @@ fn normalize_optional_sql_fragment(value: Option<String>) -> Option<String> {
         .filter(|fragment| !fragment.is_empty())
 }
 
+// serde's skip_serializing_if / serialize_with dictate the &Option<String>
+// signatures below.
+#[allow(clippy::ref_option)]
 fn is_none_or_blank(value: &Option<String>) -> bool {
-    value
-        .as_deref()
-        .map(str::trim)
-        .map_or(true, |fragment| fragment.is_empty())
+    value.as_deref().map(str::trim).map_or(true, str::is_empty)
 }
 
+#[allow(clippy::ref_option)]
 fn serialize_normalized_optional_sql_fragment<S>(
     value: &Option<String>,
     serializer: S,
@@ -124,6 +125,7 @@ impl IndexDef {
             .filter(|fragment| !fragment.is_empty())
     }
 
+    #[must_use]
     pub fn semantically_eq(&self, other: &Self) -> bool {
         self.name == other.name
             && self.fields == other.fields
@@ -173,6 +175,7 @@ pub struct Snapshot {
 
 impl Snapshot {
     /// Create a new empty snapshot
+    #[must_use]
     pub fn new() -> Self {
         Self {
             version: 1,

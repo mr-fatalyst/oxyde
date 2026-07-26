@@ -42,10 +42,7 @@ pub(crate) fn rmpv_to_json(value: &rmpv::Value) -> Option<serde_json::Value> {
         rmpv::Value::Map(pairs) => {
             let mut map = serde_json::Map::new();
             for (k, v) in pairs {
-                let key = k
-                    .as_str()
-                    .map(String::from)
-                    .unwrap_or_else(|| k.to_string());
+                let key = k.as_str().map_or_else(|| k.to_string(), String::from);
                 map.insert(key, rmpv_to_json(v)?);
             }
             serde_json::Value::Object(map)

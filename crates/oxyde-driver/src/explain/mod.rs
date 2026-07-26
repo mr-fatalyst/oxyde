@@ -46,8 +46,7 @@ where
             serde_json::Value::Number(serde_json::Number::from(v))
         } else if let Ok(v) = row.try_get::<f64, _>(name) {
             serde_json::Number::from_f64(v)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null)
+                .map_or(serde_json::Value::Null, serde_json::Value::Number)
         } else if let Ok(v) = row.try_get::<bool, _>(name) {
             serde_json::Value::Bool(v)
         } else if let Ok(v) = row.try_get::<String, _>(name) {
@@ -115,9 +114,9 @@ pub async fn explain_query(
 ) -> Result<serde_json::Value> {
     let backend = crate::pool::api::pool_backend(pool_name).await?;
     let explain_sql = match backend {
-        DatabaseBackend::Postgres => build_postgres_explain_sql(sql, &options)?,
-        DatabaseBackend::MySql => build_mysql_explain_sql(sql, &options)?,
-        DatabaseBackend::Sqlite => build_sqlite_explain_sql(sql, &options)?,
+        DatabaseBackend::Postgres => build_postgres_explain_sql(sql, options),
+        DatabaseBackend::MySql => build_mysql_explain_sql(sql, options),
+        DatabaseBackend::Sqlite => build_sqlite_explain_sql(sql, options)?,
     };
 
     let rows = fetch_explain_rows(pool_name, &explain_sql, params).await?;

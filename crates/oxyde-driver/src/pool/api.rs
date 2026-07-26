@@ -37,14 +37,10 @@ async fn init_pool_inner(
 
     validate_settings(&settings)?;
 
-    let backend = match backend_from_url(url) {
-        Some(backend) => backend,
-        None => {
-            return Err(DriverError::ConnectionError(format!(
-                "Unsupported database URL: {}",
-                url
-            )))
-        }
+    let Some(backend) = backend_from_url(url) else {
+        return Err(DriverError::ConnectionError(format!(
+            "Unsupported database URL: {url}"
+        )));
     };
 
     let pool = match backend {
@@ -55,7 +51,7 @@ async fn init_pool_inner(
                 .connect_with(connect_opts)
                 .await
                 .map(DbPool::Postgres)
-                .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {}", e)))?
+                .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {e}")))?
         }
         DatabaseBackend::MySql => {
             let connect_opts = build_mysql_connect_options(url, &settings)?;
@@ -64,7 +60,7 @@ async fn init_pool_inner(
                 .connect_with(connect_opts)
                 .await
                 .map(DbPool::MySql)
-                .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {}", e)))?
+                .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {e}")))?
         }
         DatabaseBackend::Sqlite => {
             // Clone PRAGMA settings for use in after_connect closure
@@ -85,23 +81,23 @@ async fn init_pool_inner(
                 Box::pin(async move {
                     // journal_mode and synchronous are persistent (saved to DB file)
                     if let Some(mode) = journal_mode {
-                        let pragma = format!("PRAGMA journal_mode = {}", mode);
+                        let pragma = format!("PRAGMA journal_mode = {mode}");
                         sqlx::query(&pragma).execute(&mut *conn).await?;
                     }
 
                     if let Some(sync) = synchronous {
-                        let pragma = format!("PRAGMA synchronous = {}", sync);
+                        let pragma = format!("PRAGMA synchronous = {sync}");
                         sqlx::query(&pragma).execute(&mut *conn).await?;
                     }
 
                     // cache_size and busy_timeout are per-connection (must be set for each connection)
                     if let Some(size) = cache_size {
-                        let pragma = format!("PRAGMA cache_size = {}", size);
+                        let pragma = format!("PRAGMA cache_size = {size}");
                         sqlx::query(&pragma).execute(&mut *conn).await?;
                     }
 
                     if let Some(timeout) = busy_timeout {
-                        let pragma = format!("PRAGMA busy_timeout = {}", timeout);
+                        let pragma = format!("PRAGMA busy_timeout = {timeout}");
                         sqlx::query(&pragma).execute(&mut *conn).await?;
                     }
 
@@ -111,13 +107,13 @@ async fn init_pool_inner(
 
             // Parse URL and enable automatic database file creation
             let connect_opts = SqliteConnectOptions::from_str(url)
-                .map_err(|e| DriverError::ConnectionError(format!("Invalid SQLite URL: {}", e)))?
+                .map_err(|e| DriverError::ConnectionError(format!("Invalid SQLite URL: {e}")))?
                 .create_if_missing(true);
 
             let pool = options
                 .connect_with(connect_opts)
                 .await
-                .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {}", e)))?;
+                .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {e}")))?;
 
             info!("SQLite pool created with PRAGMA settings (create_if_missing=true)");
 

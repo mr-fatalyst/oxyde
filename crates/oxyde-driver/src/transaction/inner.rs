@@ -40,33 +40,33 @@ pub(crate) async fn begin_on_pool(pool: &DbPool, backend: DatabaseBackend) -> Re
             let mut conn = p
                 .acquire()
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {}", e)))?;
+                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {e}")))?;
             conn.as_mut()
                 .execute(begin_sql)
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("{} failed: {}", begin_sql, e)))?;
+                .map_err(|e| DriverError::ExecutionError(format!("{begin_sql} failed: {e}")))?;
             Ok(DbConn::Postgres(conn))
         }
         DbPool::MySql(p) => {
             let mut conn = p
                 .acquire()
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {}", e)))?;
+                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {e}")))?;
             conn.as_mut()
                 .execute(begin_sql)
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("{} failed: {}", begin_sql, e)))?;
+                .map_err(|e| DriverError::ExecutionError(format!("{begin_sql} failed: {e}")))?;
             Ok(DbConn::MySql(conn))
         }
         DbPool::Sqlite(p) => {
             let mut conn = p
                 .acquire()
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {}", e)))?;
+                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {e}")))?;
             conn.as_mut()
                 .execute(begin_sql)
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("{} failed: {}", begin_sql, e)))?;
+                .map_err(|e| DriverError::ExecutionError(format!("{begin_sql} failed: {e}")))?;
             Ok(DbConn::Sqlite(conn))
         }
     }
@@ -79,7 +79,7 @@ pub(crate) enum TransactionState {
 }
 
 pub(crate) struct TransactionInner {
-    pub(crate) _pool_name: String,
+    pub(crate) pool_name: String,
     pub(crate) _backend: DatabaseBackend,
     pub(crate) conn: Option<DbConn>,
     pub(crate) state: TransactionState,
@@ -107,8 +107,8 @@ impl TransactionInner {
                 (&mut **c)
                     .execute("ROLLBACK")
                     .await
-                    .map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {}", e)))
-                    .map(|_| ())?
+                    .map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {e}")))
+                    .map(|_| ())?;
             });
         }
 

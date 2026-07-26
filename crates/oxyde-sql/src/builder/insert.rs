@@ -124,7 +124,7 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                             }
                         }
 
-                        query.on_conflict(conflict.to_owned());
+                        query.on_conflict(conflict.clone());
                     }
                 }
             }
@@ -154,7 +154,7 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                                 ColumnIdent(first_col.clone()),
                                 Expr::col(ColumnIdent(first_col.clone())),
                             );
-                            query.on_conflict(conflict.to_owned());
+                            query.on_conflict(conflict.clone());
                         }
                     }
                     ConflictAction::Update => {
@@ -183,7 +183,7 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                                 );
                             }
                         }
-                        query.on_conflict(conflict.to_owned());
+                        query.on_conflict(conflict.clone());
                     }
                 }
             }

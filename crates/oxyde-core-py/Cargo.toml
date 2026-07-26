@@ -14,6 +14,9 @@ extension-module = ["pyo3/extension-module"]
 mimalloc = ["dep:mimalloc"]
 jemalloc = ["dep:tikv-jemallocator"]
 
+[lints]
+workspace = true
+
 [dependencies]
 tokio.workspace = true
 serde_json.workspace = true

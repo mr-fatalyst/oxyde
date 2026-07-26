@@ -22,6 +22,7 @@ use crate::Dialect;
 /// 1. `db_type` — user-supplied verbatim DDL, translated only for the
 ///    SERIAL family (the user owns the string otherwise);
 /// 2. canonical per-dialect rendering of the spec.
+#[must_use]
 pub fn resolve_spec_type(
     spec: &ColumnTypeSpec,
     db_type: Option<&str>,

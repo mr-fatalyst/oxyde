@@ -52,8 +52,7 @@ pub(crate) fn extract_pool_settings(
 
     let type_name = obj.get_type().name()?.to_string();
     Err(PyErr::new::<PyTypeError, _>(format!(
-        "Pool settings must be a dict or expose to_payload(), got {}",
-        type_name
+        "Pool settings must be a dict or expose to_payload(), got {type_name}"
     )))
 }
 
@@ -104,9 +103,7 @@ pub(crate) fn value_to_py(py: Python<'_>, value: &QueryValue) -> Py<PyAny> {
         QueryValue::Char(None) => py.None(),
         QueryValue::Bytes(Some(bytes)) => PyBytes::new(py, bytes.as_slice()).unbind().into_any(),
         QueryValue::Bytes(None) => py.None(),
-        _ => PyString::new(py, &format!("{:?}", value))
-            .unbind()
-            .into_any(),
+        _ => PyString::new(py, &format!("{value:?}")).unbind().into_any(),
     }
 }
 
@@ -201,13 +198,14 @@ fn value_to_py_tagged<'py>(py: Python<'py>, value: &QueryValue) -> PyResult<Boun
         QueryValue::Array(arr_type, Some(vals)) => {
             let inner = PyList::empty(py);
             for v in vals.iter() {
-                let (_, py_val) = value_to_py_tagged(py, v)
-                    .map(|t| {
+                let (_, py_val) = value_to_py_tagged(py, v).map_or_else(
+                    |_| ("Unknown".to_string(), py.None()),
+                    |t| {
                         let tag: String = t.get_item(0).unwrap().extract().unwrap();
                         let val: Py<PyAny> = t.get_item(1).unwrap().unbind();
                         (tag, val)
-                    })
-                    .unwrap_or_else(|_| ("Unknown".to_string(), py.None()));
+                    },
+                );
                 inner.append(py_val).ok();
             }
             (
@@ -215,7 +213,7 @@ fn value_to_py_tagged<'py>(py: Python<'py>, value: &QueryValue) -> PyResult<Boun
                 PyTuple::new(
                     py,
                     &[
-                        PyString::new(py, &format!("{:?}", arr_type)).into_any(),
+                        PyString::new(py, &format!("{arr_type:?}")).into_any(),
                         inner.into_any(),
                     ],
                 )
@@ -229,7 +227,7 @@ fn value_to_py_tagged<'py>(py: Python<'py>, value: &QueryValue) -> PyResult<Boun
             PyTuple::new(
                 py,
                 &[
-                    PyString::new(py, &format!("{:?}", arr_type)).into_any(),
+                    PyString::new(py, &format!("{arr_type:?}")).into_any(),
                     py.None().into_bound(py).into_any(),
                 ],
             )
@@ -238,7 +236,7 @@ fn value_to_py_tagged<'py>(py: Python<'py>, value: &QueryValue) -> PyResult<Boun
             .into_any(),
         ),
         other => {
-            let repr = format!("{:?}", other);
+            let repr = format!("{other:?}");
             let tag = repr.split('(').next().unwrap_or("Unknown");
             (
                 "Unknown",

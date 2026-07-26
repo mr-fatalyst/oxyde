@@ -1,5 +1,8 @@
 //! Result types for mutation operations, encoded directly to msgpack.
 
+// msgpack container lengths are u32 by format; real counts never approach it.
+#![allow(clippy::cast_possible_truncation)]
+
 use oxyde_driver::{write_array_len, write_map_len, write_rmpv_value, write_str, write_u64};
 
 /// Encode an INSERT result (bulk path: only PKs) to msgpack.

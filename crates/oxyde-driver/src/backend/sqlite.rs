@@ -11,7 +11,7 @@ mod tests {
             analyze: false,
             format: ExplainFormat::Text,
         };
-        let sql = build_sqlite_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_sqlite_explain_sql("SELECT * FROM users", options).unwrap();
         assert!(sql.contains("EXPLAIN"));
         assert!(sql.contains("SELECT * FROM users"));
     }
@@ -22,7 +22,7 @@ mod tests {
             analyze: false,
             format: ExplainFormat::Text,
         };
-        let sql = build_sqlite_explain_sql("SELECT * FROM users", &options).unwrap();
+        let sql = build_sqlite_explain_sql("SELECT * FROM users", options).unwrap();
         assert!(sql.contains("QUERY PLAN"));
     }
 }

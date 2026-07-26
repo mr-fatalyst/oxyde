@@ -1,5 +1,8 @@
 //! INSERT RETURNING execution (pool and transaction paths).
 
+// rows_affected()/last_insert_id() are u64 by sqlx API; real values fit i64.
+#![allow(clippy::cast_possible_wrap)]
+
 use sea_query::Value;
 use sqlx::Row;
 use tracing::{debug, warn};
@@ -50,12 +53,12 @@ pub async fn execute_insert_returning(
             let returning_sql = if has_returning {
                 sql.to_string()
             } else {
-                format!("{} RETURNING \"{}\"", sql, pk_col)
+                format!("{sql} RETURNING \"{pk_col}\"")
             };
 
             let query = bind_postgres(sqlx::query(&returning_sql), params)?;
             let rows = query.fetch_all(&pool).await.map_err(|e| {
-                DriverError::ExecutionError(format!("INSERT RETURNING failed: {}", e))
+                DriverError::ExecutionError(format!("INSERT RETURNING failed: {e}"))
             })?;
 
             let ids: Vec<rmpv::Value> = rows
@@ -75,7 +78,7 @@ pub async fn execute_insert_returning(
             let result = query
                 .execute(&pool)
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {}", e)))?;
+                .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {e}")))?;
 
             let rows_affected = result.rows_affected() as i64;
             let last_id = result.last_insert_id() as i64;
@@ -102,52 +105,50 @@ pub async fn execute_insert_returning(
             let returning_sql = if has_returning {
                 sql.to_string()
             } else {
-                format!("{} RETURNING \"{}\"", sql, pk_col)
+                format!("{sql} RETURNING \"{pk_col}\"")
             };
 
             let query = bind_sqlite(sqlx::query(&returning_sql), params)?;
 
-            match query.fetch_all(&pool).await {
-                Ok(rows) => {
-                    let ids: Vec<rmpv::Value> = rows
-                        .iter()
-                        .filter_map(|row| extract_pk(row, pk_col))
-                        .collect();
+            if let Ok(rows) = query.fetch_all(&pool).await {
+                let ids: Vec<rmpv::Value> = rows
+                    .iter()
+                    .filter_map(|row| extract_pk(row, pk_col))
+                    .collect();
 
-                    debug!(
-                        "INSERT on '{}' (SQLite) returned {} IDs via RETURNING",
-                        pool_name,
-                        ids.len()
-                    );
-                    Ok(ids)
-                }
-                Err(_) => {
-                    warn!(
-                        "SQLite RETURNING not supported (version < 3.35), falling back to last_insert_rowid."
-                    );
+                debug!(
+                    "INSERT on '{}' (SQLite) returned {} IDs via RETURNING",
+                    pool_name,
+                    ids.len()
+                );
+                Ok(ids)
+            } else {
+                warn!(
+                    "SQLite RETURNING not supported (version < 3.35), falling back to last_insert_rowid."
+                );
 
-                    let query = bind_sqlite(sqlx::query(sql), params)?;
-                    let result = query.execute(&pool).await.map_err(|e| {
-                        DriverError::ExecutionError(format!("INSERT failed: {}", e))
-                    })?;
+                let query = bind_sqlite(sqlx::query(sql), params)?;
+                let result = query
+                    .execute(&pool)
+                    .await
+                    .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {e}")))?;
 
-                    let rows_affected = result.rows_affected() as i64;
-                    let last_id = result.last_insert_rowid();
+                let rows_affected = result.rows_affected() as i64;
+                let last_id = result.last_insert_rowid();
 
-                    let ids: Vec<rmpv::Value> = if rows_affected > 0 && last_id > 0 {
-                        (last_id - rows_affected + 1..=last_id)
-                            .map(|id| rmpv::Value::Integer(rmpv::Integer::from(id)))
-                            .collect()
-                    } else {
-                        vec![]
-                    };
+                let ids: Vec<rmpv::Value> = if rows_affected > 0 && last_id > 0 {
+                    (last_id - rows_affected + 1..=last_id)
+                        .map(|id| rmpv::Value::Integer(rmpv::Integer::from(id)))
+                        .collect()
+                } else {
+                    vec![]
+                };
 
-                    debug!(
-                        "INSERT on '{}' (SQLite) affected {} rows, last_id={}, generated {} IDs via fallback",
-                        pool_name, rows_affected, last_id, ids.len()
-                    );
-                    Ok(ids)
-                }
+                debug!(
+                    "INSERT on '{}' (SQLite) affected {} rows, last_id={}, generated {} IDs via fallback",
+                    pool_name, rows_affected, last_id, ids.len()
+                );
+                Ok(ids)
             }
         }
     }
@@ -183,12 +184,12 @@ pub async fn execute_insert_returning_in_transaction(
             let returning_sql = if has_returning {
                 sql.to_string()
             } else {
-                format!("{} RETURNING \"{}\"", sql, pk_col)
+                format!("{sql} RETURNING \"{pk_col}\"")
             };
 
             let query = bind_postgres(sqlx::query(&returning_sql), params)?;
             let rows = query.fetch_all(conn.as_mut()).await.map_err(|e| {
-                DriverError::ExecutionError(format!("INSERT RETURNING failed: {}", e))
+                DriverError::ExecutionError(format!("INSERT RETURNING failed: {e}"))
             })?;
 
             let ids: Vec<rmpv::Value> = rows
@@ -208,7 +209,7 @@ pub async fn execute_insert_returning_in_transaction(
             let result = query
                 .execute(conn.as_mut())
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {}", e)))?;
+                .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {e}")))?;
 
             let rows_affected = result.rows_affected() as i64;
             let last_id = result.last_insert_id() as i64;
@@ -235,52 +236,50 @@ pub async fn execute_insert_returning_in_transaction(
             let returning_sql = if has_returning {
                 sql.to_string()
             } else {
-                format!("{} RETURNING \"{}\"", sql, pk_col)
+                format!("{sql} RETURNING \"{pk_col}\"")
             };
 
             let query = bind_sqlite(sqlx::query(&returning_sql), params)?;
 
-            match query.fetch_all(conn.as_mut()).await {
-                Ok(rows) => {
-                    let ids: Vec<rmpv::Value> = rows
-                        .iter()
-                        .filter_map(|row| extract_pk(row, pk_col))
-                        .collect();
+            if let Ok(rows) = query.fetch_all(conn.as_mut()).await {
+                let ids: Vec<rmpv::Value> = rows
+                    .iter()
+                    .filter_map(|row| extract_pk(row, pk_col))
+                    .collect();
 
-                    debug!(
-                        "INSERT in transaction {} (SQLite) returned {} IDs via RETURNING",
-                        tx_id,
-                        ids.len()
-                    );
-                    Ok(ids)
-                }
-                Err(_) => {
-                    warn!(
-                        "SQLite RETURNING not supported (version < 3.35), falling back to last_insert_rowid."
-                    );
+                debug!(
+                    "INSERT in transaction {} (SQLite) returned {} IDs via RETURNING",
+                    tx_id,
+                    ids.len()
+                );
+                Ok(ids)
+            } else {
+                warn!(
+                    "SQLite RETURNING not supported (version < 3.35), falling back to last_insert_rowid."
+                );
 
-                    let query = bind_sqlite(sqlx::query(sql), params)?;
-                    let result = query.execute(conn.as_mut()).await.map_err(|e| {
-                        DriverError::ExecutionError(format!("INSERT failed: {}", e))
-                    })?;
+                let query = bind_sqlite(sqlx::query(sql), params)?;
+                let result = query
+                    .execute(conn.as_mut())
+                    .await
+                    .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {e}")))?;
 
-                    let rows_affected = result.rows_affected() as i64;
-                    let last_id = result.last_insert_rowid();
+                let rows_affected = result.rows_affected() as i64;
+                let last_id = result.last_insert_rowid();
 
-                    let ids: Vec<rmpv::Value> = if rows_affected > 0 && last_id > 0 {
-                        (last_id - rows_affected + 1..=last_id)
-                            .map(|id| rmpv::Value::Integer(rmpv::Integer::from(id)))
-                            .collect()
-                    } else {
-                        vec![]
-                    };
+                let ids: Vec<rmpv::Value> = if rows_affected > 0 && last_id > 0 {
+                    (last_id - rows_affected + 1..=last_id)
+                        .map(|id| rmpv::Value::Integer(rmpv::Integer::from(id)))
+                        .collect()
+                } else {
+                    vec![]
+                };
 
-                    debug!(
-                        "INSERT in transaction {} (SQLite) affected {} rows, last_id={}, generated {} IDs via fallback",
-                        tx_id, rows_affected, last_id, ids.len()
-                    );
-                    Ok(ids)
-                }
+                debug!(
+                    "INSERT in transaction {} (SQLite) affected {} rows, last_id={}, generated {} IDs via fallback",
+                    tx_id, rows_affected, last_id, ids.len()
+                );
+                Ok(ids)
             }
         }
     }

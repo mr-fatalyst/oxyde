@@ -18,7 +18,7 @@ pub async fn begin_transaction(pool_name: &str) -> Result<u64> {
     let conn = begin_on_pool(&handle.clone_pool(), backend).await?;
 
     let tx_inner = TransactionInner {
-        _pool_name: pool_name.to_string(),
+        pool_name: pool_name.to_string(),
         _backend: backend,
         conn: Some(conn),
         state: TransactionState::Active,
@@ -51,8 +51,8 @@ pub async fn commit_transaction(tx_id: u64) -> Result<()> {
             c.as_mut()
                 .execute("COMMIT")
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("COMMIT failed: {}", e)))
-                .map(|_| ())?
+                .map_err(|e| DriverError::ExecutionError(format!("COMMIT failed: {e}")))
+                .map(|_| ())?;
         });
     }
     tx.state = TransactionState::Committed;
@@ -77,8 +77,8 @@ pub async fn rollback_transaction(tx_id: u64) -> Result<()> {
             c.as_mut()
                 .execute("ROLLBACK")
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {}", e)))
-                .map(|_| ())?
+                .map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {e}")))
+                .map(|_| ())?;
         });
     }
     tx.state = TransactionState::RolledBack;
@@ -102,13 +102,13 @@ pub async fn create_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
         return Err(DriverError::TransactionClosed(tx_id));
     }
     if let Some(conn) = tx.conn.as_mut() {
-        let sql = format!("SAVEPOINT {}", savepoint_name);
+        let sql = format!("SAVEPOINT {savepoint_name}");
         with_conn!(conn, |c| {
             c.as_mut()
                 .execute(sql.as_str())
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("SAVEPOINT failed: {}", e)))
-                .map(|_| ())?
+                .map_err(|e| DriverError::ExecutionError(format!("SAVEPOINT failed: {e}")))
+                .map(|_| ())?;
         });
     }
     Ok(())
@@ -130,15 +130,15 @@ pub async fn rollback_to_savepoint(tx_id: u64, savepoint_name: &str) -> Result<(
         return Err(DriverError::TransactionClosed(tx_id));
     }
     if let Some(conn) = tx.conn.as_mut() {
-        let sql = format!("ROLLBACK TO SAVEPOINT {}", savepoint_name);
+        let sql = format!("ROLLBACK TO SAVEPOINT {savepoint_name}");
         with_conn!(conn, |c| {
             c.as_mut()
                 .execute(sql.as_str())
                 .await
                 .map_err(|e| {
-                    DriverError::ExecutionError(format!("ROLLBACK TO SAVEPOINT failed: {}", e))
+                    DriverError::ExecutionError(format!("ROLLBACK TO SAVEPOINT failed: {e}"))
                 })
-                .map(|_| ())?
+                .map(|_| ())?;
         });
     }
     Ok(())
@@ -160,15 +160,13 @@ pub async fn release_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
         return Err(DriverError::TransactionClosed(tx_id));
     }
     if let Some(conn) = tx.conn.as_mut() {
-        let sql = format!("RELEASE SAVEPOINT {}", savepoint_name);
+        let sql = format!("RELEASE SAVEPOINT {savepoint_name}");
         with_conn!(conn, |c| {
             c.as_mut()
                 .execute(sql.as_str())
                 .await
-                .map_err(|e| {
-                    DriverError::ExecutionError(format!("RELEASE SAVEPOINT failed: {}", e))
-                })
-                .map(|_| ())?
+                .map_err(|e| DriverError::ExecutionError(format!("RELEASE SAVEPOINT failed: {e}")))
+                .map(|_| ())?;
         });
     }
     Ok(())

@@ -5,11 +5,10 @@
 //! - `EXPLAIN FORMAT=JSON SELECT ...` - JSON format (MySQL 5.6+)
 //! - `EXPLAIN ANALYZE SELECT ...` - with execution stats (MySQL 8.0.18+)
 
-use crate::error::Result;
 use crate::explain::postgres::{ExplainFormat, ExplainOptions};
 use std::collections::HashMap;
 
-pub fn build_mysql_explain_sql(sql: &str, options: &ExplainOptions) -> Result<String> {
+pub fn build_mysql_explain_sql(sql: &str, options: ExplainOptions) -> String {
     // MySQL uses FORMAT=value syntax (with =), unlike PostgreSQL's FORMAT value
     let mut parts: Vec<&str> = vec!["EXPLAIN"];
 
@@ -22,7 +21,7 @@ pub fn build_mysql_explain_sql(sql: &str, options: &ExplainOptions) -> Result<St
     }
 
     parts.push(sql);
-    Ok(parts.join(" "))
+    parts.join(" ")
 }
 
 /// Extract JSON plan from MySQL EXPLAIN FORMAT=JSON result

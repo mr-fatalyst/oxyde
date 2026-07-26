@@ -31,9 +31,9 @@ pub fn bind_postgres_value<'q>(query: PgQuery<'q>, value: &'q Value) -> Result<P
         Value::Int(None) => query.bind(Option::<i32>::None),
         Value::BigInt(Some(v)) => query.bind(*v),
         Value::BigInt(None) => query.bind(Option::<i64>::None),
-        Value::TinyUnsigned(Some(v)) => query.bind(*v as i16),
+        Value::TinyUnsigned(Some(v)) => query.bind(i16::from(*v)),
         Value::TinyUnsigned(None) => query.bind(Option::<i16>::None),
-        Value::SmallUnsigned(Some(v)) => query.bind(*v as i32),
+        Value::SmallUnsigned(Some(v)) => query.bind(i32::from(*v)),
         Value::SmallUnsigned(None) => query.bind(Option::<i32>::None),
         Value::Unsigned(Some(v)) => query.bind(cast_u64_to_i64((*v).into(), "Postgres")?),
         Value::Unsigned(None) => query.bind(Option::<i64>::None),
@@ -117,7 +117,7 @@ fn bind_pg_array<'q>(
             let v: Vec<Option<String>> = vals
                 .iter()
                 .map(|v| match v {
-                    Value::String(Some(s)) => Some(s.as_ref().to_string()),
+                    Value::String(Some(s)) => Some(s.as_ref().clone()),
                     _ => None,
                 })
                 .collect();

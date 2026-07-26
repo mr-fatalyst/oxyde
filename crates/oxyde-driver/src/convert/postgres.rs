@@ -14,7 +14,10 @@ use sqlx::{
 };
 use uuid::Uuid;
 
-use super::encoder::*;
+use super::encoder::{
+    write_array_len, write_bin, write_bool, write_f64, write_i32_as_i64, write_i64,
+    write_json_value, write_nil, write_str, CellEncoder,
+};
 
 pub struct PgEncoder;
 

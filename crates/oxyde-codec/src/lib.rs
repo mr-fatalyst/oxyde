@@ -228,7 +228,7 @@ pub enum ConflictAction {
 /// ON CONFLICT specification for UPSERT
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OnConflict {
-    /// Conflict target columns (e.g., ["email"])
+    /// Conflict target columns (e.g., `["email"]`)
     pub columns: Vec<String>,
     /// Action to take on conflict
     pub action: ConflictAction,
@@ -413,7 +413,7 @@ impl QueryIR {
     /// Parse IR from MessagePack bytes
     pub fn from_msgpack(bytes: &[u8]) -> Result<Self> {
         rmp_serde::from_slice(bytes).map_err(|e| {
-            CodecError::DeserializationError(format!("Failed to parse MessagePack: {}", e))
+            CodecError::DeserializationError(format!("Failed to parse MessagePack: {e}"))
         })
     }
 

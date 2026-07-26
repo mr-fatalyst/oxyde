@@ -69,6 +69,7 @@ pub enum Dialect {
 }
 
 impl Dialect {
+    #[must_use]
     pub fn from_url(url: &str) -> Self {
         if url.starts_with("postgres") {
             Dialect::Postgres
@@ -225,7 +226,7 @@ mod tests {
         assert_eq!(params.len(), 1);
         match &params[0] {
             Value::BigInt(Some(v)) => assert_eq!(*v, 42),
-            other => panic!("unexpected param value: {:?}", other),
+            other => panic!("unexpected param value: {other:?}"),
         }
     }
 
@@ -290,7 +291,7 @@ mod tests {
             ..Default::default()
         };
         let (sql, params) = build_sql(&ir, Dialect::Mysql).unwrap();
-        assert!(sql.contains("?"));
+        assert!(sql.contains('?'));
         assert_eq!(params.len(), 1);
     }
 
@@ -303,7 +304,7 @@ mod tests {
             ..Default::default()
         };
         let (sql, params) = build_sql(&ir, Dialect::Sqlite).unwrap();
-        assert!(sql.contains("?"));
+        assert!(sql.contains('?'));
         assert_eq!(params.len(), 1);
     }
 
@@ -321,7 +322,7 @@ mod tests {
         assert_eq!(params.len(), 1);
         match &params[0] {
             Value::String(Some(val)) => assert_eq!(val.as_ref(), "%rust%"),
-            other => panic!("unexpected parameter value {:?}", other),
+            other => panic!("unexpected parameter value {other:?}"),
         }
     }
 
@@ -343,7 +344,7 @@ mod tests {
         assert_eq!(params.len(), 1);
         match &params[0] {
             Value::String(Some(val)) => assert_eq!(val.as_ref(), r"%snake\_case%"),
-            other => panic!("unexpected parameter value {:?}", other),
+            other => panic!("unexpected parameter value {other:?}"),
         }
     }
 
@@ -366,7 +367,7 @@ mod tests {
         assert_eq!(params.len(), 1);
         match &params[0] {
             Value::String(Some(val)) => assert_eq!(val.as_ref(), r"%snake\_case%"),
-            other => panic!("unexpected parameter value {:?}", other),
+            other => panic!("unexpected parameter value {other:?}"),
         }
     }
 
@@ -408,7 +409,7 @@ mod tests {
             ..Default::default()
         };
         let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
-        assert!(sql.contains("\"title_text\""), "unexpected SQL: {}", sql);
+        assert!(sql.contains("\"title_text\""), "unexpected SQL: {sql}");
     }
 
     #[test]
@@ -471,8 +472,7 @@ mod tests {
         let err = result.unwrap_err().to_string();
         assert!(
             err.contains("update_values"),
-            "error should mention update_values: {}",
-            err
+            "error should mention update_values: {err}"
         );
     }
 
@@ -492,8 +492,7 @@ mod tests {
         let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
         assert!(
             sql.contains("product_name") || sql.contains("\"product_name\""),
-            "ILIKE should use column alias 'product_name', got: {}",
-            sql
+            "ILIKE should use column alias 'product_name', got: {sql}"
         );
     }
 
@@ -520,8 +519,7 @@ mod tests {
         let (sql, params) = build_sql(&ir, Dialect::Mysql).unwrap();
         assert!(
             sql.contains("ON DUPLICATE KEY UPDATE"),
-            "MySQL should use ON DUPLICATE KEY UPDATE, got: {}",
-            sql
+            "MySQL should use ON DUPLICATE KEY UPDATE, got: {sql}"
         );
         assert!(params.len() >= 3, "Should have insert params");
     }
@@ -545,8 +543,7 @@ mod tests {
         let (sql, _) = build_sql(&ir, Dialect::Mysql).unwrap();
         assert!(
             sql.contains("ON DUPLICATE KEY UPDATE"),
-            "MySQL DoNothing should use ON DUPLICATE KEY UPDATE (no-op), got: {}",
-            sql
+            "MySQL DoNothing should use ON DUPLICATE KEY UPDATE (no-op), got: {sql}"
         );
     }
 

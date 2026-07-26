@@ -71,9 +71,9 @@ fn topo_sort_table_names(tables: &HashMap<String, TableDef>) -> Result<Vec<Strin
         let mut remaining: Vec<&str> = tables
             .keys()
             .filter(|k| !visited.contains(k.as_str()))
-            .map(|k| k.as_str())
+            .map(std::string::String::as_str)
             .collect();
-        remaining.sort();
+        remaining.sort_unstable();
         return Err(MigrateError::DiffError(format!(
             "cyclic foreign key dependency among tables: {}. \
              Break the cycle by making one FK nullable and adding it in a \
@@ -104,8 +104,7 @@ fn collect_enum_def_from_spec(
             if let Some(existing) = defs.get(name) {
                 if existing != values {
                     return Err(MigrateError::DiffError(format!(
-                        "enum type '{}' has conflicting value sets",
-                        name
+                        "enum type '{name}' has conflicting value sets"
                     )));
                 }
             } else {
@@ -144,8 +143,8 @@ fn column_type_requires_alter(old: &ColumnTypeSpec, new: &ColumnTypeSpec) -> boo
 fn db_type_requires_alter(
     old_type: &ColumnTypeSpec,
     new_type: &ColumnTypeSpec,
-    old_db_type: &Option<String>,
-    new_db_type: &Option<String>,
+    old_db_type: Option<&str>,
+    new_db_type: Option<&str>,
 ) -> bool {
     if !column_type_requires_alter(old_type, new_type) && contains_enum_type(old_type) {
         return false;
@@ -239,7 +238,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
             let new_values = &new_enums[&name];
             if enum_values_are_append_only(old_values, new_values) {
                 for (index, value) in new_values[old_values.len()..].iter().cloned().enumerate() {
-                    let values = &new_values[..old_values.len() + index + 1];
+                    let values = &new_values[..=(old_values.len() + index)];
                     ops.push(MigrationOp::AddEnumValue {
                         name: name.clone(),
                         value,
@@ -328,8 +327,8 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
                             || db_type_requires_alter(
                                 &old_field.column_type,
                                 &new_field.column_type,
-                                &old_field.db_type,
-                                &new_field.db_type,
+                                old_field.db_type.as_deref(),
+                                new_field.db_type.as_deref(),
                             );
 
                     let nullable_changed = old_field.nullable != new_field.nullable;
