@@ -1,27 +1,22 @@
 //! Transaction lifecycle API: begin, commit, rollback, savepoints.
 
-use sqlx::Executor;
 use tracing::info;
 
 use crate::error::{DriverError, Result};
-use crate::transaction::{begin_on_pool, with_conn, TransactionInner, TransactionState};
+use crate::transaction::{begin_on_pool, TransactionInner};
 use crate::{ensure_cleanup_task, registry, transaction_registry};
 
 /// Begin a new transaction on the named pool, returns transaction ID.
 pub async fn begin_transaction(pool_name: &str) -> Result<u64> {
     info!("Beginning transaction on pool '{}'", pool_name);
     let handle = registry().get(pool_name).await?;
-    let backend = handle.backend;
     let now = std::time::Instant::now();
 
-    // Acquire connection and begin transaction
-    let conn = begin_on_pool(&handle.clone_pool(), backend).await?;
+    let tx = begin_on_pool(&handle.clone_pool()).await?;
 
     let tx_inner = TransactionInner {
         pool_name: pool_name.to_string(),
-        _backend: backend,
-        conn: Some(conn),
-        state: TransactionState::Active,
+        tx: Some(tx),
         created_at: now,
         last_activity: now,
     };
@@ -42,22 +37,12 @@ pub async fn commit_transaction(tx_id: u64) -> Result<()> {
         .remove(tx_id)
         .await
         .ok_or(DriverError::TransactionNotFound(tx_id))?;
-    let mut tx = arc.lock().await;
-    if !tx.is_active() {
-        return Err(DriverError::TransactionClosed(tx_id));
-    }
-    if let Some(conn) = tx.conn.as_mut() {
-        with_conn!(conn, |c| {
-            c.as_mut()
-                .execute("COMMIT")
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("COMMIT failed: {e}")))
-                .map(|_| ())?;
-        });
-    }
-    tx.state = TransactionState::Committed;
-    tx.conn.take();
-    Ok(())
+    let mut inner = arc.lock().await;
+    let tx = inner
+        .tx
+        .take()
+        .ok_or(DriverError::TransactionClosed(tx_id))?;
+    tx.commit().await
 }
 
 /// Rollback a transaction and release the connection back to the pool.
@@ -68,22 +53,30 @@ pub async fn rollback_transaction(tx_id: u64) -> Result<()> {
         .remove(tx_id)
         .await
         .ok_or(DriverError::TransactionNotFound(tx_id))?;
-    let mut tx = arc.lock().await;
-    if !tx.is_active() {
-        return Err(DriverError::TransactionClosed(tx_id));
-    }
-    if let Some(conn) = tx.conn.as_mut() {
-        with_conn!(conn, |c| {
-            c.as_mut()
-                .execute("ROLLBACK")
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {e}")))
-                .map(|_| ())?;
-        });
-    }
-    tx.state = TransactionState::RolledBack;
-    tx.conn.take();
-    Ok(())
+    let mut inner = arc.lock().await;
+    let tx = inner
+        .tx
+        .take()
+        .ok_or(DriverError::TransactionClosed(tx_id))?;
+    tx.rollback().await
+}
+
+/// Run a savepoint statement on an active transaction.
+async fn savepoint_stmt(tx_id: u64, sql: &str, label: &str) -> Result<()> {
+    let registry = transaction_registry();
+    let arc = registry
+        .get(tx_id)
+        .await
+        .ok_or(DriverError::TransactionNotFound(tx_id))?;
+    let mut inner = arc.lock().await;
+    inner.update_activity();
+    let tx = inner
+        .tx
+        .as_mut()
+        .ok_or(DriverError::TransactionClosed(tx_id))?;
+    tx.execute_raw(sql)
+        .await
+        .map_err(|e| DriverError::ExecutionError(format!("{label} failed: {e}")))
 }
 
 /// Create a named savepoint within a transaction.
@@ -92,26 +85,8 @@ pub async fn create_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
         "Creating savepoint '{}' in transaction {}",
         savepoint_name, tx_id
     );
-    let registry = transaction_registry();
-    let arc = registry
-        .get(tx_id)
-        .await
-        .ok_or(DriverError::TransactionNotFound(tx_id))?;
-    let mut tx = arc.lock().await;
-    if !tx.is_active() {
-        return Err(DriverError::TransactionClosed(tx_id));
-    }
-    if let Some(conn) = tx.conn.as_mut() {
-        let sql = format!("SAVEPOINT {savepoint_name}");
-        with_conn!(conn, |c| {
-            c.as_mut()
-                .execute(sql.as_str())
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("SAVEPOINT failed: {e}")))
-                .map(|_| ())?;
-        });
-    }
-    Ok(())
+    let sql = format!("SAVEPOINT {savepoint_name}");
+    savepoint_stmt(tx_id, &sql, "SAVEPOINT").await
 }
 
 /// Rollback to a named savepoint, undoing changes since the savepoint.
@@ -120,28 +95,8 @@ pub async fn rollback_to_savepoint(tx_id: u64, savepoint_name: &str) -> Result<(
         "Rolling back to savepoint '{}' in transaction {}",
         savepoint_name, tx_id
     );
-    let registry = transaction_registry();
-    let arc = registry
-        .get(tx_id)
-        .await
-        .ok_or(DriverError::TransactionNotFound(tx_id))?;
-    let mut tx = arc.lock().await;
-    if !tx.is_active() {
-        return Err(DriverError::TransactionClosed(tx_id));
-    }
-    if let Some(conn) = tx.conn.as_mut() {
-        let sql = format!("ROLLBACK TO SAVEPOINT {savepoint_name}");
-        with_conn!(conn, |c| {
-            c.as_mut()
-                .execute(sql.as_str())
-                .await
-                .map_err(|e| {
-                    DriverError::ExecutionError(format!("ROLLBACK TO SAVEPOINT failed: {e}"))
-                })
-                .map(|_| ())?;
-        });
-    }
-    Ok(())
+    let sql = format!("ROLLBACK TO SAVEPOINT {savepoint_name}");
+    savepoint_stmt(tx_id, &sql, "ROLLBACK TO SAVEPOINT").await
 }
 
 /// Release a savepoint, making its changes permanent within the transaction.
@@ -150,24 +105,6 @@ pub async fn release_savepoint(tx_id: u64, savepoint_name: &str) -> Result<()> {
         "Releasing savepoint '{}' in transaction {}",
         savepoint_name, tx_id
     );
-    let registry = transaction_registry();
-    let arc = registry
-        .get(tx_id)
-        .await
-        .ok_or(DriverError::TransactionNotFound(tx_id))?;
-    let mut tx = arc.lock().await;
-    if !tx.is_active() {
-        return Err(DriverError::TransactionClosed(tx_id));
-    }
-    if let Some(conn) = tx.conn.as_mut() {
-        let sql = format!("RELEASE SAVEPOINT {savepoint_name}");
-        with_conn!(conn, |c| {
-            c.as_mut()
-                .execute(sql.as_str())
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("RELEASE SAVEPOINT failed: {e}")))
-                .map(|_| ())?;
-        });
-    }
-    Ok(())
+    let sql = format!("RELEASE SAVEPOINT {savepoint_name}");
+    savepoint_stmt(tx_id, &sql, "RELEASE SAVEPOINT").await
 }

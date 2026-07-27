@@ -133,7 +133,7 @@ pub async fn execute_query_columnar_in_transaction(
     tx.update_activity();
 
     let conn = tx
-        .conn
+        .tx
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
     conn.query_columnar(sql, params, col_types).await
@@ -159,7 +159,7 @@ pub async fn execute_query_columnar_dedup_in_transaction(
     tx.update_activity();
 
     let conn = tx
-        .conn
+        .tx
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
     conn.query_columnar_dedup(sql, params, col_types, relations)
@@ -185,7 +185,7 @@ pub async fn execute_mutation_returning_in_transaction(
     tx.update_activity();
 
     let conn = tx
-        .conn
+        .tx
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
     conn.query_mutation_returning(sql, params, col_types).await
@@ -209,7 +209,7 @@ pub async fn execute_statement_in_transaction(
     tx.update_activity();
 
     let conn = tx
-        .conn
+        .tx
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
     conn.execute(sql, params).await

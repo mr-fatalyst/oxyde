@@ -10,7 +10,7 @@ use tracing::{debug, warn};
 use crate::bind::{bind_mysql, bind_postgres, bind_sqlite};
 use crate::error::{DriverError, Result};
 use crate::pool::DbPool;
-use crate::transaction::DbConn;
+use crate::transaction::DbTx;
 use crate::{registry, transaction_registry};
 
 /// Extract PK value from a row by column name.
@@ -174,12 +174,12 @@ pub async fn execute_insert_returning_in_transaction(
     tx.update_activity();
 
     let conn = tx
-        .conn
+        .tx
         .as_mut()
         .ok_or(DriverError::TransactionClosed(tx_id))?;
 
     match conn {
-        DbConn::Postgres(conn) => {
+        DbTx::Postgres(tx) => {
             let has_returning = sql.to_uppercase().contains("RETURNING");
             let returning_sql = if has_returning {
                 sql.to_string()
@@ -188,7 +188,7 @@ pub async fn execute_insert_returning_in_transaction(
             };
 
             let query = bind_postgres(sqlx::query(&returning_sql), params)?;
-            let rows = query.fetch_all(conn.as_mut()).await.map_err(|e| {
+            let rows = query.fetch_all(&mut **tx).await.map_err(|e| {
                 DriverError::ExecutionError(format!("INSERT RETURNING failed: {e}"))
             })?;
 
@@ -204,10 +204,10 @@ pub async fn execute_insert_returning_in_transaction(
             );
             Ok(ids)
         }
-        DbConn::MySql(conn) => {
+        DbTx::MySql(tx) => {
             let query = bind_mysql(sqlx::query(sql), params)?;
             let result = query
-                .execute(conn.as_mut())
+                .execute(&mut **tx)
                 .await
                 .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {e}")))?;
 
@@ -231,7 +231,7 @@ pub async fn execute_insert_returning_in_transaction(
             );
             Ok(ids)
         }
-        DbConn::Sqlite(conn) => {
+        DbTx::Sqlite(tx) => {
             let has_returning = sql.to_uppercase().contains("RETURNING");
             let returning_sql = if has_returning {
                 sql.to_string()
@@ -241,7 +241,7 @@ pub async fn execute_insert_returning_in_transaction(
 
             let query = bind_sqlite(sqlx::query(&returning_sql), params)?;
 
-            if let Ok(rows) = query.fetch_all(conn.as_mut()).await {
+            if let Ok(rows) = query.fetch_all(&mut **tx).await {
                 let ids: Vec<rmpv::Value> = rows
                     .iter()
                     .filter_map(|row| extract_pk(row, pk_col))
@@ -260,7 +260,7 @@ pub async fn execute_insert_returning_in_transaction(
 
                 let query = bind_sqlite(sqlx::query(sql), params)?;
                 let result = query
-                    .execute(conn.as_mut())
+                    .execute(&mut **tx)
                     .await
                     .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {e}")))?;
 

@@ -15,7 +15,7 @@ use crate::convert::postgres::PgEncoder;
 use crate::convert::sqlite::SqliteEncoder;
 use crate::error::{DriverError, Result};
 use crate::pool::DbPool;
-use crate::transaction::DbConn;
+use crate::transaction::DbTx;
 
 /// Format execution error message (by-value: used as `.map_err(exec_err)`)
 #[allow(clippy::needless_pass_by_value)]
@@ -227,11 +227,11 @@ impl PoolExec for DbPool {
 }
 
 // =============================================================================
-// DbConn implementation (for transactions)
+// DbTx implementation (for transactions)
 // =============================================================================
 
 #[async_trait]
-impl ConnExec for DbConn {
+impl ConnExec for DbTx {
     async fn query_columnar(
         &mut self,
         sql: &str,
@@ -239,23 +239,23 @@ impl ConnExec for DbConn {
         col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<(Vec<u8>, usize)> {
         match self {
-            DbConn::Postgres(conn) => {
+            DbTx::Postgres(tx) => {
                 let query = bind_postgres(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream::<PgEncoder, _>(stream, col_types, None)
                     .await
                     .map_err(exec_err)
             }
-            DbConn::MySql(conn) => {
+            DbTx::MySql(tx) => {
                 let query = bind_mysql(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream::<MySqlEncoder, _>(stream, col_types, None)
                     .await
                     .map_err(exec_err)
             }
-            DbConn::Sqlite(conn) => {
+            DbTx::Sqlite(tx) => {
                 let query = bind_sqlite(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream::<SqliteEncoder, _>(stream, col_types, None)
                     .await
                     .map_err(exec_err)
@@ -271,23 +271,23 @@ impl ConnExec for DbConn {
         relations: &[RelationInfo],
     ) -> Result<(Vec<u8>, usize)> {
         match self {
-            DbConn::Postgres(conn) => {
+            DbTx::Postgres(tx) => {
                 let query = bind_postgres(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream::<PgEncoder, _>(stream, col_types, Some(relations))
                     .await
                     .map_err(exec_err)
             }
-            DbConn::MySql(conn) => {
+            DbTx::MySql(tx) => {
                 let query = bind_mysql(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream::<MySqlEncoder, _>(stream, col_types, Some(relations))
                     .await
                     .map_err(exec_err)
             }
-            DbConn::Sqlite(conn) => {
+            DbTx::Sqlite(tx) => {
                 let query = bind_sqlite(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream::<SqliteEncoder, _>(stream, col_types, Some(relations))
                     .await
                     .map_err(exec_err)
@@ -302,23 +302,23 @@ impl ConnExec for DbConn {
         col_types: Option<&HashMap<String, ColumnTypeSpec>>,
     ) -> Result<Vec<u8>> {
         match self {
-            DbConn::Postgres(conn) => {
+            DbTx::Postgres(tx) => {
                 let query = bind_postgres(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream_mutation_returning::<PgEncoder, _>(stream, col_types)
                     .await
                     .map_err(exec_err)
             }
-            DbConn::MySql(conn) => {
+            DbTx::MySql(tx) => {
                 let query = bind_mysql(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream_mutation_returning::<MySqlEncoder, _>(stream, col_types)
                     .await
                     .map_err(exec_err)
             }
-            DbConn::Sqlite(conn) => {
+            DbTx::Sqlite(tx) => {
                 let query = bind_sqlite(sqlx::query(sql), params)?;
-                let stream = query.fetch(conn.as_mut());
+                let stream = query.fetch(&mut **tx);
                 encode_stream_mutation_returning::<SqliteEncoder, _>(stream, col_types)
                     .await
                     .map_err(exec_err)
@@ -328,19 +328,19 @@ impl ConnExec for DbConn {
 
     async fn execute(&mut self, sql: &str, params: &[Value]) -> Result<u64> {
         match self {
-            DbConn::Postgres(conn) => {
+            DbTx::Postgres(tx) => {
                 let query = bind_postgres(sqlx::query(sql), params)?;
-                let result = query.execute(conn.as_mut()).await.map_err(stmt_err)?;
+                let result = query.execute(&mut **tx).await.map_err(stmt_err)?;
                 Ok(result.rows_affected())
             }
-            DbConn::MySql(conn) => {
+            DbTx::MySql(tx) => {
                 let query = bind_mysql(sqlx::query(sql), params)?;
-                let result = query.execute(conn.as_mut()).await.map_err(stmt_err)?;
+                let result = query.execute(&mut **tx).await.map_err(stmt_err)?;
                 Ok(result.rows_affected())
             }
-            DbConn::Sqlite(conn) => {
+            DbTx::Sqlite(tx) => {
                 let query = bind_sqlite(sqlx::query(sql), params)?;
-                let result = query.execute(conn.as_mut()).await.map_err(stmt_err)?;
+                let result = query.execute(&mut **tx).await.map_err(stmt_err)?;
                 Ok(result.rows_affected())
             }
         }

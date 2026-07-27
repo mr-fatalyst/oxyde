@@ -365,4 +365,59 @@ mod tests {
 
         close_pool("default").await.unwrap();
     }
+
+    /// An abandoned transaction (registry entry dropped without commit or
+    /// rollback) must not leak an open transaction into the pooled
+    /// connection: sqlx rolls it back on drop. With max_connections=1 the
+    /// next query is guaranteed to reuse that same connection.
+    #[tokio::test]
+    async fn abandoned_transaction_rolls_back_on_drop() {
+        let _guard = TEST_MUTEX.lock().await;
+        close_all_pools().await.unwrap();
+
+        init_pool("default", "sqlite::memory:", sqlite_settings())
+            .await
+            .unwrap();
+
+        execute_statement(
+            "default",
+            "CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)",
+            &[],
+        )
+        .await
+        .unwrap();
+
+        let tx_id = begin_transaction("default").await.unwrap();
+        execute_statement_in_transaction(
+            tx_id,
+            "INSERT INTO foo (id, name) VALUES (?, ?)",
+            &[Value::from(1_i64), Value::from(String::from("Ghost"))],
+        )
+        .await
+        .unwrap();
+
+        let abandoned = transaction_registry().remove(tx_id).await.unwrap();
+        drop(abandoned);
+
+        // Uncommitted insert must be gone and the connection usable.
+        let (_bytes, num_rows) = execute_query_columnar(
+            "default",
+            "SELECT name FROM foo WHERE id = ?",
+            &[Value::from(1_i64)],
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(num_rows, 0);
+
+        execute_statement(
+            "default",
+            "INSERT INTO foo (id, name) VALUES (?, ?)",
+            &[Value::from(2_i64), Value::from(String::from("Alive"))],
+        )
+        .await
+        .unwrap();
+
+        close_pool("default").await.unwrap();
+    }
 }

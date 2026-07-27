@@ -1,4 +1,8 @@
-//! Transaction registry for managing active transactions
+//! Transaction registry for managing active transactions.
+//!
+//! Entries hold `sqlx::Transaction` (via `TransactionInner`), so removing an
+//! entry is always safe: if nobody committed it, dropping the value rolls the
+//! transaction back before the connection returns to the pool.
 
 use crate::settings::{PoolSettings, PoolTimeoutSettings};
 use crate::transaction::inner::TransactionInner;
@@ -15,8 +19,6 @@ pub(crate) struct TransactionRegistry {
     transactions: RwLock<HashMap<u64, Arc<Mutex<TransactionInner>>>>,
     /// Per-pool timeout settings to avoid one pool overriding another's timeouts
     pool_settings: RwLock<HashMap<String, PoolTimeoutSettings>>,
-    /// Track how many cleanup cycles a locked transaction has persisted
-    locked_counts: Mutex<HashMap<u64, u32>>,
 }
 
 impl TransactionRegistry {
@@ -24,7 +26,6 @@ impl TransactionRegistry {
         Self {
             transactions: RwLock::new(HashMap::new()),
             pool_settings: RwLock::new(HashMap::new()),
-            locked_counts: Mutex::new(HashMap::new()),
         }
     }
 
@@ -56,10 +57,6 @@ impl TransactionRegistry {
         let id = TRANSACTION_ID.fetch_add(1, Ordering::Relaxed);
         let mut guard = self.transactions.write().await;
         guard.insert(id, Arc::new(Mutex::new(tx)));
-
-        // Start cleanup task if not running (will be called from lib.rs which has static ref)
-        // We don't call it here to avoid lifetime issues
-
         id
     }
 
@@ -73,46 +70,39 @@ impl TransactionRegistry {
         guard.remove(&id)
     }
 
-    /// Rollback and remove all active transactions (for shutdown)
+    /// Rollback and remove all active transactions (for shutdown).
     pub async fn rollback_all(&self) -> usize {
-        let to_rollback: Vec<(u64, Arc<Mutex<TransactionInner>>)> = {
+        let drained: Vec<(u64, Arc<Mutex<TransactionInner>>)> = {
             let mut guard = self.transactions.write().await;
             guard.drain().collect()
         };
 
         let mut count = 0;
-        for (tx_id, tx_arc) in to_rollback {
+        for (tx_id, tx_arc) in drained {
+            count += 1;
             if let Ok(mut inner) = tx_arc.try_lock() {
-                if inner.is_active() {
-                    if let Err(e) = inner.rollback().await {
-                        warn!(
-                            "Failed to rollback transaction {} on shutdown: {}",
-                            tx_id, e
-                        );
-                    } else {
-                        debug!("Rolled back transaction {} on shutdown", tx_id);
-                    }
-                    count += 1;
+                if let Err(e) = inner.rollback().await {
+                    warn!(
+                        "Failed to rollback transaction {} on shutdown: {}",
+                        tx_id, e
+                    );
+                } else {
+                    debug!("Rolled back transaction {} on shutdown", tx_id);
                 }
             } else {
-                warn!(
-                    "Could not acquire lock to rollback transaction {} on shutdown",
+                // In use elsewhere: dropping our Arc leaves rollback to sqlx's
+                // Drop once the current holder finishes.
+                debug!(
+                    "Transaction {} busy on shutdown; sqlx rolls it back on drop",
                     tx_id
                 );
-                count += 1;
             }
         }
-
-        // Clear locked counts
-        self.locked_counts.lock().await.clear();
-
         count
     }
 
+    /// Remove transactions idle past their pool's timeout, rolling them back.
     pub async fn cleanup_stale_transactions(&self) -> usize {
-        const MAX_LOCKED_CYCLES: u32 = 5; // Force cleanup after 5 cleanup cycles
-
-        // Get pool timeouts first
         let pool_timeouts: HashMap<String, Duration> = {
             let pool_settings = self.pool_settings.read().await;
             pool_settings
@@ -121,93 +111,51 @@ impl TransactionRegistry {
                 .collect()
         };
 
-        // Phase 1: Identify transactions to cleanup (hold lock briefly)
-        let to_cleanup: Vec<(u64, Arc<Mutex<TransactionInner>>)> = {
+        // Phase 1: pull stale entries out of the map (hold the write lock briefly).
+        // A locked entry is mid-query — that counts as activity, keep it.
+        let stale: Vec<(u64, Arc<Mutex<TransactionInner>>)> = {
             let mut guard = self.transactions.write().await;
-            let mut locked_counts = self.locked_counts.lock().await;
             let now = Instant::now();
-            let mut to_cleanup = Vec::new();
-            let mut locked_old_transactions = Vec::new();
+            let mut stale = Vec::new();
 
             guard.retain(|tx_id, tx_arc| {
-                let tx = tx_arc.try_lock();
-                if let Ok(inner) = tx {
-                    // Transaction successfully locked - check last_activity against pool-specific timeout
-                    let idle_time = now.duration_since(inner.last_activity);
+                let Ok(inner) = tx_arc.try_lock() else {
+                    return true;
+                };
+                let idle_time = now.duration_since(inner.last_activity);
+                let max_age = pool_timeouts
+                    .get(&inner.pool_name)
+                    .copied()
+                    .unwrap_or_else(|| Duration::from_secs(300));
 
-                    // Get pool-specific timeout or use default
-                    let max_age = pool_timeouts.get(&inner.pool_name)
-                        .copied()
-                        .unwrap_or_else(|| Duration::from_secs(300));
-
-                    if idle_time > max_age && inner.is_active() {
-                        warn!(
-                            "Marking stale transaction {} for cleanup (idle: {:?}, created: {:?} ago)",
-                            tx_id, idle_time, now.duration_since(inner.created_at)
-                        );
-                        locked_counts.remove(tx_id);
-                        to_cleanup.push((*tx_id, Arc::clone(tx_arc)));
-                        false // Remove from registry
-                    } else {
-                        // Transaction is alive and well, reset locked counter
-                        locked_counts.remove(tx_id);
-                        true
-                    }
+                if idle_time > max_age && inner.is_active() {
+                    warn!(
+                        "Marking stale transaction {} for cleanup (idle: {:?}, created: {:?} ago)",
+                        tx_id,
+                        idle_time,
+                        now.duration_since(inner.created_at)
+                    );
+                    stale.push((*tx_id, Arc::clone(tx_arc)));
+                    false
                 } else {
-                    // Transaction is locked (actively executing query)
-                    let strong_count = Arc::strong_count(tx_arc);
-                    if strong_count == 1 {
-                        // Only registry holds this Arc, but it's still locked - possible deadlock
-                        let count = locked_counts.entry(*tx_id).or_insert(0);
-                        *count += 1;
-
-                        if *count >= MAX_LOCKED_CYCLES {
-                            warn!(
-                                "Force marking transaction {} for cleanup after {} cycles with no active references",
-                                tx_id, count
-                            );
-                            locked_counts.remove(tx_id);
-                            to_cleanup.push((*tx_id, Arc::clone(tx_arc)));
-                            return false; // Remove from registry
-                        }
-
-                        warn!(
-                            "Transaction {} is locked but has no active references. Locked cycle count: {}/{}",
-                            tx_id, count, MAX_LOCKED_CYCLES
-                        );
-                        locked_old_transactions.push(*tx_id);
-                    } else {
-                        // Active transaction - reset counter if exists
-                        locked_counts.remove(tx_id);
-                    }
-                    true // Keep locked transactions
+                    true
                 }
             });
 
-            if !locked_old_transactions.is_empty() {
-                debug!(
-                    "Found {} locked transactions with no active references: {:?}",
-                    locked_old_transactions.len(),
-                    locked_old_transactions
-                );
-            }
+            stale
+        };
 
-            to_cleanup
-        }; // Lock released here
-
-        // Phase 2: Rollback transactions (no locks held)
+        // Phase 2: rollback outside the map lock. If somebody grabbed the
+        // entry lock meanwhile, dropping our Arc still guarantees rollback.
         let mut removed = 0;
-        for (tx_id, tx_arc) in to_cleanup {
+        for (tx_id, tx_arc) in stale {
+            removed += 1;
             if let Ok(mut inner) = tx_arc.try_lock() {
                 if let Err(e) = inner.rollback().await {
                     warn!("Failed to rollback stale transaction {}: {}", tx_id, e);
                 } else {
                     debug!("Successfully rolled back stale transaction {}", tx_id);
                 }
-                removed += 1;
-            } else {
-                warn!("Could not acquire lock to rollback transaction {}", tx_id);
-                removed += 1;
             }
         }
 

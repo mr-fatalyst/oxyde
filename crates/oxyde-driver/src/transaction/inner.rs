@@ -1,118 +1,82 @@
-//! Transaction inner state
+//! Transaction inner state.
+//!
+//! Built on `sqlx::Transaction`: dropping an uncommitted transaction rolls
+//! it back before the connection returns to the pool, so no error path can
+//! leak an open transaction into pooled connections.
 
 use sqlx::Executor;
 
 use crate::error::{DriverError, Result};
-use crate::pool::{DatabaseBackend, DbPool};
+use crate::pool::DbPool;
 use std::time::Instant;
 
-pub(crate) enum DbConn {
-    Postgres(sqlx::pool::PoolConnection<sqlx::Postgres>),
-    MySql(sqlx::pool::PoolConnection<sqlx::MySql>),
-    Sqlite(sqlx::pool::PoolConnection<sqlx::Sqlite>),
+pub(crate) enum DbTx {
+    Postgres(sqlx::Transaction<'static, sqlx::Postgres>),
+    MySql(sqlx::Transaction<'static, sqlx::MySql>),
+    Sqlite(sqlx::Transaction<'static, sqlx::Sqlite>),
 }
 
-/// Execute the same code for all database backends.
-/// Usage: `with_conn!(conn, |c| { c.as_mut().execute("...").await })`
-macro_rules! with_conn {
-    ($conn:expr, |$c:ident| $body:expr) => {
-        match $conn {
-            $crate::transaction::DbConn::Postgres($c) => $body,
-            $crate::transaction::DbConn::MySql($c) => $body,
-            $crate::transaction::DbConn::Sqlite($c) => $body,
-        }
-    };
-}
+impl DbTx {
+    pub(crate) async fn commit(self) -> Result<()> {
+        let result = match self {
+            DbTx::Postgres(tx) => tx.commit().await,
+            DbTx::MySql(tx) => tx.commit().await,
+            DbTx::Sqlite(tx) => tx.commit().await,
+        };
+        result.map_err(|e| DriverError::ExecutionError(format!("COMMIT failed: {e}")))
+    }
 
-pub(crate) use with_conn;
+    pub(crate) async fn rollback(self) -> Result<()> {
+        let result = match self {
+            DbTx::Postgres(tx) => tx.rollback().await,
+            DbTx::MySql(tx) => tx.rollback().await,
+            DbTx::Sqlite(tx) => tx.rollback().await,
+        };
+        result.map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {e}")))
+    }
 
-/// Acquire a connection from pool and begin a transaction.
-/// Returns a DbConn with an active transaction.
-pub(crate) async fn begin_on_pool(pool: &DbPool, backend: DatabaseBackend) -> Result<DbConn> {
-    // MySQL uses START TRANSACTION, others use BEGIN
-    let begin_sql = match backend {
-        DatabaseBackend::MySql => "START TRANSACTION",
-        _ => "BEGIN",
-    };
-
-    match pool {
-        DbPool::Postgres(p) => {
-            let mut conn = p
-                .acquire()
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {e}")))?;
-            conn.as_mut()
-                .execute(begin_sql)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("{begin_sql} failed: {e}")))?;
-            Ok(DbConn::Postgres(conn))
-        }
-        DbPool::MySql(p) => {
-            let mut conn = p
-                .acquire()
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {e}")))?;
-            conn.as_mut()
-                .execute(begin_sql)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("{begin_sql} failed: {e}")))?;
-            Ok(DbConn::MySql(conn))
-        }
-        DbPool::Sqlite(p) => {
-            let mut conn = p
-                .acquire()
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("Acquire failed: {e}")))?;
-            conn.as_mut()
-                .execute(begin_sql)
-                .await
-                .map_err(|e| DriverError::ExecutionError(format!("{begin_sql} failed: {e}")))?;
-            Ok(DbConn::Sqlite(conn))
+    /// Execute a raw statement inside the transaction (savepoints).
+    pub(crate) async fn execute_raw(&mut self, sql: &str) -> std::result::Result<(), sqlx::Error> {
+        match self {
+            DbTx::Postgres(tx) => tx.execute(sql).await.map(|_| ()),
+            DbTx::MySql(tx) => tx.execute(sql).await.map(|_| ()),
+            DbTx::Sqlite(tx) => tx.execute(sql).await.map(|_| ()),
         }
     }
 }
 
-pub(crate) enum TransactionState {
-    Active,
-    Committed,
-    RolledBack,
+/// Begin a transaction on a pooled connection (sqlx emits the dialect's BEGIN).
+pub(crate) async fn begin_on_pool(pool: &DbPool) -> Result<DbTx> {
+    let begin_err = |e: sqlx::Error| DriverError::ExecutionError(format!("BEGIN failed: {e}"));
+    match pool {
+        DbPool::Postgres(p) => Ok(DbTx::Postgres(p.begin().await.map_err(begin_err)?)),
+        DbPool::MySql(p) => Ok(DbTx::MySql(p.begin().await.map_err(begin_err)?)),
+        DbPool::Sqlite(p) => Ok(DbTx::Sqlite(p.begin().await.map_err(begin_err)?)),
+    }
 }
 
 pub(crate) struct TransactionInner {
     pub(crate) pool_name: String,
-    pub(crate) _backend: DatabaseBackend,
-    pub(crate) conn: Option<DbConn>,
-    pub(crate) state: TransactionState,
+    /// `None` after commit/rollback. Dropping a `Some` rolls back via sqlx.
+    pub(crate) tx: Option<DbTx>,
     pub(crate) created_at: Instant,
     pub(crate) last_activity: Instant,
 }
 
 impl TransactionInner {
     pub fn is_active(&self) -> bool {
-        matches!(self.state, TransactionState::Active)
+        self.tx.is_some()
     }
 
     pub fn update_activity(&mut self) {
         self.last_activity = Instant::now();
     }
 
-    /// Rollback transaction and mark as rolled back
+    /// Rollback explicitly; a no-op if already committed or rolled back.
     pub async fn rollback(&mut self) -> Result<()> {
-        if !self.is_active() {
-            return Ok(()); // Already committed or rolled back
+        match self.tx.take() {
+            Some(tx) => tx.rollback().await,
+            None => Ok(()),
         }
-
-        if let Some(conn) = self.conn.as_mut() {
-            with_conn!(conn, |c| {
-                (&mut **c)
-                    .execute("ROLLBACK")
-                    .await
-                    .map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {e}")))
-                    .map(|_| ())?;
-            });
-        }
-
-        self.state = TransactionState::RolledBack;
-        Ok(())
     }
 }
