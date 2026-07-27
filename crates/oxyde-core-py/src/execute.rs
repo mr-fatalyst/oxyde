@@ -51,7 +51,7 @@ pub(crate) fn execute<'py>(
         // Stage 3: Get backend/dialect
         let backend = driver_pool_backend(&pool_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         let dialect = backend_to_dialect(backend);
 
         // Stage 4: Build SQL
@@ -78,11 +78,11 @@ pub(crate) fn execute<'py>(
                         &relations,
                     )
                     .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    .map_err(|e| crate::errors::driver_err(&e))?
                 } else {
                     execute_query_columnar(&pool_name, &sql, &params, ir.column_types.as_ref())
                         .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                        .map_err(|e| crate::errors::driver_err(&e))?
                 };
                 let exec_us = exec_start.elapsed().as_micros();
 
@@ -103,13 +103,13 @@ pub(crate) fn execute<'py>(
                 if emits_returning(&ir, dialect) {
                     execute_mutation_returning(&pool_name, &sql, &params, ir.column_types.as_ref())
                         .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                        .map_err(|e| crate::errors::driver_err(&e))?
                 } else {
                     // Bulk insert: return only PKs
                     let pk_column = ir.pk_column.as_deref();
                     let ids = execute_insert_returning(&pool_name, &sql, &params, pk_column)
                         .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                        .map_err(|e| crate::errors::driver_err(&e))?;
 
                     encode_insert_result(ids.len(), &ids)
                 }
@@ -133,7 +133,7 @@ pub(crate) fn execute<'py>(
                         ir.column_types.as_ref(),
                     )
                     .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                    .map_err(|e| crate::errors::driver_err(&e))?;
                     let exec_us = exec_start.elapsed().as_micros();
 
                     if profile {
@@ -147,7 +147,7 @@ pub(crate) fn execute<'py>(
                     let exec_start = Instant::now();
                     let affected = execute_statement(&pool_name, &sql, &params)
                         .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                        .map_err(|e| crate::errors::driver_err(&e))?;
                     let exec_us = exec_start.elapsed().as_micros();
 
                     let serialize_start = Instant::now();
@@ -188,7 +188,7 @@ pub(crate) fn execute_in_transaction<'py>(
 
         let backend = driver_pool_backend(&pool_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         let dialect = backend_to_dialect(backend);
 
         let (sql, params) =
@@ -213,7 +213,7 @@ pub(crate) fn execute_in_transaction<'py>(
                         &relations,
                     )
                     .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    .map_err(|e| crate::errors::driver_err(&e))?
                 } else {
                     execute_query_columnar_in_transaction(
                         tx_id,
@@ -222,7 +222,7 @@ pub(crate) fn execute_in_transaction<'py>(
                         ir.column_types.as_ref(),
                     )
                     .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    .map_err(|e| crate::errors::driver_err(&e))?
                 };
                 result
             }
@@ -235,13 +235,13 @@ pub(crate) fn execute_in_transaction<'py>(
                         ir.column_types.as_ref(),
                     )
                     .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    .map_err(|e| crate::errors::driver_err(&e))?
                 } else {
                     let pk_column = ir.pk_column.as_deref();
                     let ids =
                         execute_insert_returning_in_transaction(tx_id, &sql, &params, pk_column)
                             .await
-                            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                            .map_err(|e| crate::errors::driver_err(&e))?;
 
                     encode_insert_result(ids.len(), &ids)
                 }
@@ -255,11 +255,11 @@ pub(crate) fn execute_in_transaction<'py>(
                         ir.column_types.as_ref(),
                     )
                     .await
-                    .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?
+                    .map_err(|e| crate::errors::driver_err(&e))?
                 } else {
                     let affected = execute_statement_in_transaction(tx_id, &sql, &params)
                         .await
-                        .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+                        .map_err(|e| crate::errors::driver_err(&e))?;
 
                     encode_mutation_result(affected)
                 }
@@ -286,7 +286,7 @@ pub(crate) fn render_sql<'py>(
 
         let backend = driver_pool_backend(&pool_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         let dialect = backend_to_dialect(backend);
 
         let (sql, params) =
@@ -374,7 +374,7 @@ pub(crate) fn explain<'py>(
 
         let backend = driver_pool_backend(&pool_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         let dialect = backend_to_dialect(backend);
 
         let (sql, params) =
@@ -382,7 +382,7 @@ pub(crate) fn explain<'py>(
 
         let plan = explain_query(&pool_name, &sql, &params, explain_options)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
 
         Python::attach(|py| json_to_py(py, &plan))
     })

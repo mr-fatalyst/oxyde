@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 
 from oxyde import F
-from oxyde.exceptions import MultipleObjectsReturned, NotFoundError
+from oxyde.exceptions import (
+    IntegrityError,
+    MultipleObjectsReturned,
+    NotFoundError,
+    UniqueViolationError,
+)
 from oxyde.queries import execute_raw
 
 from .conftest import Author, Post, Product, create_author
@@ -39,6 +44,20 @@ class TestCreate:
             title="No Category", author_id=1, using=db.name
         )
         assert post.category_id is None
+
+    @pytest.mark.asyncio
+    async def test_duplicate_unique_raises_typed_integrity_error(self, db):
+        """Constraint violations are classified by the driver (sqlx ErrorKind),
+        so all dialects raise UniqueViolationError — a subclass of
+        IntegrityError — without any error-message matching."""
+        await Author.objects.create(
+            name="Dup", email="dup@test.com", using=db.name
+        )
+        with pytest.raises(UniqueViolationError) as exc_info:
+            await Author.objects.create(
+                name="Dup2", email="dup@test.com", using=db.name
+            )
+        assert isinstance(exc_info.value, IntegrityError)
 
 
 class TestBulkCreate:

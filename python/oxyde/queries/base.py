@@ -53,10 +53,19 @@ from typing import (
 
 from pydantic import TypeAdapter
 
+from oxyde.core import wrapper as _core
 from oxyde.db.pool import AsyncDatabase
 from oxyde.db.registry import get_connection
 from oxyde.db.transaction import AsyncTransaction, get_active_transaction
-from oxyde.exceptions import FieldLookupError, ManagerError
+from oxyde.exceptions import (
+    CheckViolationError,
+    FieldLookupError,
+    ForeignKeyViolationError,
+    IntegrityError,
+    ManagerError,
+    NotNullViolationError,
+    UniqueViolationError,
+)
 from oxyde.models.metadata import ColumnMeta
 from oxyde.models.registry import registered_tables
 from oxyde.models.serializers import _get_virtual_fields
@@ -68,6 +77,28 @@ if TYPE_CHECKING:
 # Global cache for TypeAdapter instances (thread-safe)
 _TYPE_ADAPTER_CACHE: dict[type, TypeAdapter] = {}
 _TYPE_ADAPTER_LOCK = threading.Lock()
+
+# Core exception → oxyde exception, most specific first (core classes form
+# the same hierarchy, so IntegrityError must be checked last).
+_CORE_ERROR_MAP: tuple[tuple[type[BaseException], type[IntegrityError]], ...] = (
+    (_core.UniqueViolationError, UniqueViolationError),
+    (_core.ForeignKeyViolationError, ForeignKeyViolationError),
+    (_core.NotNullViolationError, NotNullViolationError),
+    (_core.CheckViolationError, CheckViolationError),
+    (_core.IntegrityError, IntegrityError),
+)
+
+
+def _translate_core_error(exc: BaseException) -> ManagerError | None:
+    """Map a Rust-core exception onto the oxyde hierarchy, if it is one.
+
+    Classification is done by the driver (sqlx ErrorKind) — no message-text
+    matching happens anywhere on the Python side.
+    """
+    for core_cls, oxyde_cls in _CORE_ERROR_MAP:
+        if isinstance(exc, core_cls):
+            return oxyde_cls(str(exc))
+    return None
 
 
 def _model_key(model_class: type[Model]) -> str:

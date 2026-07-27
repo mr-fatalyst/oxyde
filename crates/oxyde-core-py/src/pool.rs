@@ -10,7 +10,6 @@ use oxyde_driver::{
     rollback_to_savepoint as driver_rollback_to_savepoint,
     rollback_transaction as driver_rollback_transaction, DatabaseBackend,
 };
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
 /// Initialize a named connection pool → Coroutine.
@@ -25,7 +24,7 @@ pub(crate) fn init_pool<'py>(
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_init_pool(&name, &url, pool_settings)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }
@@ -42,7 +41,7 @@ pub(crate) fn init_pool_overwrite<'py>(
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_init_pool_overwrite(&name, &url, pool_settings)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }
@@ -53,7 +52,7 @@ pub(crate) fn close_pool(py: Python<'_>, name: String) -> PyResult<Bound<'_, PyA
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_close_pool(&name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }
@@ -64,7 +63,7 @@ pub(crate) fn close_all_pools(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_close_all_pools()
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }
@@ -75,7 +74,7 @@ pub(crate) fn begin_transaction(py: Python<'_>, pool_name: String) -> PyResult<B
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         let id = driver_begin_transaction(&pool_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(id)
     })
 }
@@ -86,7 +85,7 @@ pub(crate) fn commit_transaction(py: Python<'_>, tx_id: u64) -> PyResult<Bound<'
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_commit_transaction(tx_id)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }
@@ -97,7 +96,7 @@ pub(crate) fn rollback_transaction(py: Python<'_>, tx_id: u64) -> PyResult<Bound
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_rollback_transaction(tx_id)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }
@@ -112,7 +111,7 @@ pub(crate) fn create_savepoint(
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_create_savepoint(tx_id, &savepoint_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }
@@ -127,7 +126,7 @@ pub(crate) fn rollback_to_savepoint(
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_rollback_to_savepoint(tx_id, &savepoint_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }
@@ -139,7 +138,7 @@ pub(crate) fn pool_backend(py: Python<'_>, pool_name: String) -> PyResult<Bound<
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         let backend = driver_pool_backend(&pool_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(match backend {
             DatabaseBackend::Postgres => "postgres",
             DatabaseBackend::MySql => "mysql",
@@ -158,7 +157,7 @@ pub(crate) fn release_savepoint(
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         driver_release_savepoint(tx_id, &savepoint_name)
             .await
-            .map_err(|e| PyErr::new::<PyRuntimeError, _>(e.to_string()))?;
+            .map_err(|e| crate::errors::driver_err(&e))?;
         Ok(())
     })
 }

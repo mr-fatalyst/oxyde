@@ -15,7 +15,11 @@ Exception hierarchy:
     └── ManagerError              - Query execution errors
         ├── NotFoundError         - get() returned no rows
         ├── MultipleObjectsReturned - get() returned multiple rows
-        └── IntegrityError        - Constraint violation (PK, FK, UNIQUE)
+        └── IntegrityError        - Constraint violation
+            ├── UniqueViolationError     - UNIQUE / PK constraint
+            ├── ForeignKeyViolationError - FOREIGN KEY constraint
+            ├── NotNullViolationError    - NOT NULL constraint
+            └── CheckViolationError      - CHECK constraint
 """
 
 from __future__ import annotations
@@ -53,6 +57,22 @@ class IntegrityError(ManagerError):
     """Raised when database integrity constraints are violated."""
 
 
+class UniqueViolationError(IntegrityError):
+    """Raised when a UNIQUE (or PRIMARY KEY) constraint is violated."""
+
+
+class ForeignKeyViolationError(IntegrityError):
+    """Raised when a FOREIGN KEY constraint is violated."""
+
+
+class NotNullViolationError(IntegrityError):
+    """Raised when a NOT NULL constraint is violated."""
+
+
+class CheckViolationError(IntegrityError):
+    """Raised when a CHECK constraint is violated."""
+
+
 __all__ = [
     "OxydeError",
     "FieldError",
@@ -62,4 +82,8 @@ __all__ = [
     "NotFoundError",
     "MultipleObjectsReturned",
     "IntegrityError",
+    "UniqueViolationError",
+    "ForeignKeyViolationError",
+    "NotNullViolationError",
+    "CheckViolationError",
 ]

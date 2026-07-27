@@ -76,7 +76,7 @@ async fn savepoint_stmt(tx_id: u64, sql: &str, label: &str) -> Result<()> {
         .ok_or(DriverError::TransactionClosed(tx_id))?;
     tx.execute_raw(sql)
         .await
-        .map_err(|e| DriverError::ExecutionError(format!("{label} failed: {e}")))
+        .map_err(|e| DriverError::db(format!("{label} failed"), e))
 }
 
 /// Create a named savepoint within a transaction.

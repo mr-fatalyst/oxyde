@@ -54,9 +54,10 @@ pub async fn execute_insert_returning(
     match handle.clone_pool() {
         DbPool::Postgres(pool) => {
             let query = bind_postgres(sqlx::query(sql), params)?;
-            let rows = query.fetch_all(&pool).await.map_err(|e| {
-                DriverError::ExecutionError(format!("INSERT RETURNING failed: {e}"))
-            })?;
+            let rows = query
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DriverError::db("INSERT RETURNING failed", e))?;
 
             let ids: Vec<rmpv::Value> = rows
                 .iter()
@@ -75,7 +76,7 @@ pub async fn execute_insert_returning(
             let result = query
                 .execute(&pool)
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {e}")))?;
+                .map_err(|e| DriverError::db("INSERT failed", e))?;
 
             let rows_affected = result.rows_affected() as i64;
             let last_id = result.last_insert_id() as i64;
@@ -99,9 +100,10 @@ pub async fn execute_insert_returning(
         }
         DbPool::Sqlite(pool) => {
             let query = bind_sqlite(sqlx::query(sql), params)?;
-            let rows = query.fetch_all(&pool).await.map_err(|e| {
-                DriverError::ExecutionError(format!("INSERT RETURNING failed: {e}"))
-            })?;
+            let rows = query
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| DriverError::db("INSERT RETURNING failed", e))?;
 
             let ids: Vec<rmpv::Value> = rows
                 .iter()
@@ -147,9 +149,10 @@ pub async fn execute_insert_returning_in_transaction(
     match conn {
         DbTx::Postgres(tx) => {
             let query = bind_postgres(sqlx::query(sql), params)?;
-            let rows = query.fetch_all(&mut **tx).await.map_err(|e| {
-                DriverError::ExecutionError(format!("INSERT RETURNING failed: {e}"))
-            })?;
+            let rows = query
+                .fetch_all(&mut **tx)
+                .await
+                .map_err(|e| DriverError::db("INSERT RETURNING failed", e))?;
 
             let ids: Vec<rmpv::Value> = rows
                 .iter()
@@ -168,7 +171,7 @@ pub async fn execute_insert_returning_in_transaction(
             let result = query
                 .execute(&mut **tx)
                 .await
-                .map_err(|e| DriverError::ExecutionError(format!("INSERT failed: {e}")))?;
+                .map_err(|e| DriverError::db("INSERT failed", e))?;
 
             let rows_affected = result.rows_affected() as i64;
             let last_id = result.last_insert_id() as i64;
@@ -192,9 +195,10 @@ pub async fn execute_insert_returning_in_transaction(
         }
         DbTx::Sqlite(tx) => {
             let query = bind_sqlite(sqlx::query(sql), params)?;
-            let rows = query.fetch_all(&mut **tx).await.map_err(|e| {
-                DriverError::ExecutionError(format!("INSERT RETURNING failed: {e}"))
-            })?;
+            let rows = query
+                .fetch_all(&mut **tx)
+                .await
+                .map_err(|e| DriverError::db("INSERT RETURNING failed", e))?;
 
             let ids: Vec<rmpv::Value> = rows
                 .iter()

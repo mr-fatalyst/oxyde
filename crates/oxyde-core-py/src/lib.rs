@@ -73,6 +73,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod convert;
+mod errors;
 mod execute;
 mod migration;
 mod pool;
@@ -108,6 +109,29 @@ fn _oxyde_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Migration functions
     m.add_function(wrap_pyfunction!(migration::migration_compute_diff, m)?)?;
     m.add_function(wrap_pyfunction!(migration::migration_to_sql, m)?)?;
+
+    // Exception classes (constraint classification comes from the driver)
+    m.add("DatabaseError", m.py().get_type::<errors::DatabaseError>())?;
+    m.add(
+        "IntegrityError",
+        m.py().get_type::<errors::IntegrityError>(),
+    )?;
+    m.add(
+        "UniqueViolationError",
+        m.py().get_type::<errors::UniqueViolationError>(),
+    )?;
+    m.add(
+        "ForeignKeyViolationError",
+        m.py().get_type::<errors::ForeignKeyViolationError>(),
+    )?;
+    m.add(
+        "NotNullViolationError",
+        m.py().get_type::<errors::NotNullViolationError>(),
+    )?;
+    m.add(
+        "CheckViolationError",
+        m.py().get_type::<errors::CheckViolationError>(),
+    )?;
 
     Ok(())
 }

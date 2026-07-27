@@ -179,6 +179,40 @@ explain_query = _exports["explain_query"]
 migration_compute_diff = _exports["migration_compute_diff"]
 migration_to_sql = _exports["migration_to_sql"]
 
+# ── Core exception classes ────────────────────────────────────────────────
+# Raised by the Rust core; constraint classification happens in the driver
+# (sqlx ErrorKind), never by matching error message text. Stubs keep
+# isinstance() checks working when the extension is unavailable.
+try:
+    from _oxyde_core import (  # type: ignore[import-untyped, import-not-found, unused-ignore]
+        CheckViolationError,
+        DatabaseError,
+        ForeignKeyViolationError,
+        IntegrityError,
+        NotNullViolationError,
+        UniqueViolationError,
+    )
+except ImportError:  # pragma: no cover - extension missing
+
+    class DatabaseError(RuntimeError):  # type: ignore[no-redef]
+        """Stub: Rust core module not available."""
+
+    class IntegrityError(DatabaseError):  # type: ignore[no-redef]
+        """Stub: Rust core module not available."""
+
+    class UniqueViolationError(IntegrityError):  # type: ignore[no-redef]
+        """Stub: Rust core module not available."""
+
+    class ForeignKeyViolationError(IntegrityError):  # type: ignore[no-redef]
+        """Stub: Rust core module not available."""
+
+    class NotNullViolationError(IntegrityError):  # type: ignore[no-redef]
+        """Stub: Rust core module not available."""
+
+    class CheckViolationError(IntegrityError):  # type: ignore[no-redef]
+        """Stub: Rust core module not available."""
+
+
 __all__ = [
     "execute",
     "execute_in_transaction",
@@ -199,4 +233,10 @@ __all__ = [
     "explain_query",
     "migration_compute_diff",
     "migration_to_sql",
+    "DatabaseError",
+    "IntegrityError",
+    "UniqueViolationError",
+    "ForeignKeyViolationError",
+    "NotNullViolationError",
+    "CheckViolationError",
 ]

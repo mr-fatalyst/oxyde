@@ -17,15 +17,13 @@ use crate::error::{DriverError, Result};
 use crate::pool::DbPool;
 use crate::transaction::DbTx;
 
-/// Format execution error message (by-value: used as `.map_err(exec_err)`)
-#[allow(clippy::needless_pass_by_value)]
+/// Wrap a database error, preserving the source for classification.
 fn exec_err(e: sqlx::Error) -> DriverError {
-    DriverError::ExecutionError(format!("Query failed: {e}"))
+    DriverError::db("Query failed", e)
 }
 
-#[allow(clippy::needless_pass_by_value)]
 fn stmt_err(e: sqlx::Error) -> DriverError {
-    DriverError::ExecutionError(format!("Statement failed: {e}"))
+    DriverError::db("Statement failed", e)
 }
 
 /// Trait for executing queries on a database pool.

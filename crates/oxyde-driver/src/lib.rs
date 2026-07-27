@@ -135,7 +135,7 @@ pub(crate) fn ensure_cleanup_task() {
 // ── Public re-exports (preserves crate API) ────────────────────────────────
 
 // Types
-pub use error::{DriverError, Result};
+pub use error::{DbErrorKind, DriverError, Result};
 pub use explain::{ExplainFormat, ExplainOptions};
 pub use pool::{DatabaseBackend, DbPool};
 pub use settings::PoolSettings;
@@ -362,6 +362,47 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(num_rows, 0);
+
+        close_pool("default").await.unwrap();
+    }
+
+    /// Constraint violations classify via sqlx ErrorKind — never via
+    /// message-text matching.
+    #[tokio::test]
+    async fn unique_violation_is_classified() {
+        let _guard = TEST_MUTEX.lock().await;
+        close_all_pools().await.unwrap();
+
+        init_pool("default", "sqlite::memory:", sqlite_settings())
+            .await
+            .unwrap();
+
+        execute_statement(
+            "default",
+            "CREATE TABLE foo (id INTEGER PRIMARY KEY, email TEXT UNIQUE)",
+            &[],
+        )
+        .await
+        .unwrap();
+
+        execute_statement(
+            "default",
+            "INSERT INTO foo (email) VALUES (?)",
+            &[Value::from(String::from("a@b.c"))],
+        )
+        .await
+        .unwrap();
+
+        let err = execute_statement(
+            "default",
+            "INSERT INTO foo (email) VALUES (?)",
+            &[Value::from(String::from("a@b.c"))],
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.db_kind(), Some(DbErrorKind::UniqueViolation));
+        assert!(err.sqlstate().is_some());
 
         close_pool("default").await.unwrap();
     }

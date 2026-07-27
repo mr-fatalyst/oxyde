@@ -13,7 +13,7 @@ from pydantic import TypeAdapter
 from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.db.registry import get_connection
-from oxyde.exceptions import IntegrityError, ManagerError
+from oxyde.exceptions import ManagerError
 from oxyde.models.serializers import (
     _dump_insert_data,
     _normalize_instance,
@@ -26,6 +26,7 @@ from oxyde.queries.base import (
     _map_values_to_columns,
     _model_key,
     _resolve_execution_client,
+    _translate_core_error,
 )
 from oxyde.queries.expressions import F, _Expression, _serialize_value_for_ir
 from oxyde.queries.insert import InsertQuery
@@ -356,11 +357,11 @@ class MutationMixin:
             result = await query.execute(client)
         except ManagerError:
             raise
-        except Exception as exc:  # pragma: no cover - driver specific issues
-            message = str(exc)
-            if "constraint" in message.lower():
-                raise IntegrityError(message) from exc
-            raise ManagerError(message) from exc
+        except Exception as exc:
+            translated = _translate_core_error(exc)
+            if translated is not None:
+                raise translated from exc
+            raise ManagerError(str(exc)) from exc
         if not isinstance(result, dict):
             raise ManagerError("Mutation response must be a dict")
         return result

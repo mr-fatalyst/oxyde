@@ -23,7 +23,7 @@ impl DbTx {
             DbTx::MySql(tx) => tx.commit().await,
             DbTx::Sqlite(tx) => tx.commit().await,
         };
-        result.map_err(|e| DriverError::ExecutionError(format!("COMMIT failed: {e}")))
+        result.map_err(|e| DriverError::db("COMMIT failed", e))
     }
 
     pub(crate) async fn rollback(self) -> Result<()> {
@@ -32,7 +32,7 @@ impl DbTx {
             DbTx::MySql(tx) => tx.rollback().await,
             DbTx::Sqlite(tx) => tx.rollback().await,
         };
-        result.map_err(|e| DriverError::ExecutionError(format!("ROLLBACK failed: {e}")))
+        result.map_err(|e| DriverError::db("ROLLBACK failed", e))
     }
 
     /// Execute a raw statement inside the transaction (savepoints).
@@ -47,7 +47,7 @@ impl DbTx {
 
 /// Begin a transaction on a pooled connection (sqlx emits the dialect's BEGIN).
 pub(crate) async fn begin_on_pool(pool: &DbPool) -> Result<DbTx> {
-    let begin_err = |e: sqlx::Error| DriverError::ExecutionError(format!("BEGIN failed: {e}"));
+    let begin_err = |e: sqlx::Error| DriverError::db("BEGIN failed", e);
     match pool {
         DbPool::Postgres(p) => Ok(DbTx::Postgres(p.begin().await.map_err(begin_err)?)),
         DbPool::MySql(p) => Ok(DbTx::MySql(p.begin().await.map_err(begin_err)?)),

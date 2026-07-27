@@ -64,14 +64,18 @@ from oxyde.db import (
     register_connection,
 )
 from oxyde.exceptions import (
+    CheckViolationError,
     FieldError,
     FieldLookupError,
     FieldLookupValueError,
+    ForeignKeyViolationError,
     IntegrityError,
     ManagerError,
     MultipleObjectsReturned,
     NotFoundError,
+    NotNullViolationError,
     OxydeError,
+    UniqueViolationError,
 )
 from oxyde.models import Check, Field, Index, Model
 from oxyde.queries import (
@@ -128,6 +132,10 @@ __all__ = [
     "NotFoundError",
     "MultipleObjectsReturned",
     "IntegrityError",
+    "UniqueViolationError",
+    "ForeignKeyViolationError",
+    "NotNullViolationError",
+    "CheckViolationError",
     "atomic",
     "F",
     "Q",
