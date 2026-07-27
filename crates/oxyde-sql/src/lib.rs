@@ -709,12 +709,12 @@ mod tests {
         assert!(!emits_returning(&ir, Dialect::Postgres));
     }
 
-    /// Guard against predicate/builder desync: for every mutation op and
-    /// dialect, the built SQL contains RETURNING iff the predicate says so.
-    ///
-    /// NOTE: when pk-only `RETURNING "id"` moves into the insert builder
-    /// (SQLite-fallback removal PR), the INSERT case here must be updated
-    /// consciously — that is the point of this test.
+    /// Guard against predicate/builder desync. The contract:
+    /// - `RETURNING *` appears iff `emits_returning` says so;
+    /// - INSERT on Postgres/SQLite always carries at least pk-only
+    ///   `RETURNING "<pk>"` (the driver reads generated PKs from rows);
+    /// - UPDATE/DELETE and everything on MySQL carry RETURNING only when
+    ///   the predicate is true (i.e. never on MySQL).
     #[test]
     fn test_emits_returning_matches_builder_output() {
         let ops: Vec<QueryIR> = vec![
@@ -745,10 +745,22 @@ mod tests {
                     let mut ir = base.clone();
                     ir.returning = returning;
                     let (sql, _) = build_sql(&ir, dialect).unwrap();
+                    let full = emits_returning(&ir, dialect);
                     assert_eq!(
-                        emits_returning(&ir, dialect),
-                        sql.contains("RETURNING"),
+                        full,
+                        sql.contains("RETURNING *"),
                         "predicate/builder desync: op={:?} returning={:?} dialect={:?} sql={}",
+                        ir.op,
+                        returning,
+                        dialect,
+                        sql
+                    );
+                    let pk_only_insert = ir.op == Operation::Insert
+                        && matches!(dialect, Dialect::Postgres | Dialect::Sqlite);
+                    assert_eq!(
+                        full || pk_only_insert,
+                        sql.contains("RETURNING"),
+                        "pk-RETURNING desync: op={:?} returning={:?} dialect={:?} sql={}",
                         ir.op,
                         returning,
                         dialect,
@@ -757,6 +769,26 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_insert_carries_pk_returning() {
+        let mut ir = QueryIR {
+            op: Operation::Insert,
+            table: "t".into(),
+            values: Some(HashMap::from([("name".into(), rmpv_str("a"))])),
+            ..Default::default()
+        };
+
+        let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.ends_with(r#"RETURNING "id""#), "{sql}");
+
+        ir.pk_column = Some("uuid".into());
+        let (sql, _) = build_sql(&ir, Dialect::Sqlite).unwrap();
+        assert!(sql.ends_with(r#"RETURNING "uuid""#), "{sql}");
+
+        let (sql, _) = build_sql(&ir, Dialect::Mysql).unwrap();
+        assert!(!sql.contains("RETURNING"), "{sql}");
     }
 
     #[test]

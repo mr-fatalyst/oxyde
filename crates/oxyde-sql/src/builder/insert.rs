@@ -190,9 +190,15 @@ pub fn build_insert(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
         }
     }
 
-    // Add RETURNING clause for Postgres/SQLite
+    // RETURNING for Postgres/SQLite: full rows when the caller asked for
+    // them, otherwise pk-only so the driver reads generated PKs from rows
+    // instead of appending to SQL text. Routing (emits_returning) stays
+    // false for the pk-only form by design.
     if crate::emits_returning(ir, dialect) {
         query.returning_all();
+    } else if matches!(dialect, Dialect::Postgres | Dialect::Sqlite) {
+        let pk = ir.pk_column.as_deref().unwrap_or("id");
+        query.returning_col(ColumnIdent(pk.to_string()));
     }
 
     let (sql, values) = match dialect {
