@@ -93,6 +93,14 @@ def normalize_field_dict(field: dict) -> dict:
     from oxyde.core.column_types import compute_column_type, spec_from_legacy_name
 
     db_type = field.get("db_type")
+    if not field.get("python_type") and not db_type:
+        raise ValueError(
+            f"Migration field {field.get('name', '?')!r} defines neither "
+            "'column_type' nor legacy 'python_type'/'db_type' — the column "
+            "type would silently degrade to TEXT. Use the current format "
+            "(column_type={'kind': ...}) or regenerate the migration with "
+            "'oxyde makemigrations'."
+        )
     spec = None
     if db_type:
         # db_type wins for the semantic kind, same as compute_column_type

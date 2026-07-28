@@ -83,6 +83,25 @@ Show SQL for a migration without running it:
 oxyde sqlmigrate 0001_initial
 ```
 
+Operations that cannot be generated automatically produce no SQL; they are printed as a marker instead of silently disappearing:
+
+```
+-- manual migration required: enum post_status_enum ['draft', 'published'] -> ['published'] (no automatic SQL; the migration file pairs this with ctx.require_manual(...))
+```
+
+### migrations squash
+
+Replace the whole migration history with a single initial migration:
+
+```bash
+oxyde migrations squash
+
+# Custom name suffix and no confirmation prompt
+oxyde migrations squash --name baseline --yes
+```
+
+See [Squashing Migration History](#squashing-migration-history).
+
 ## Migration Files
 
 Migrations are Python files in the `migrations/` directory:
@@ -95,6 +114,8 @@ migrations/
 ```
 
 ### Migration Structure
+
+Migration files are normally produced by `oxyde makemigrations`; hand-editing them (or writing a data migration by hand) follows the same format:
 
 ```python
 # 0001_initial.py
@@ -111,12 +132,31 @@ def upgrade(ctx):
     ctx.create_table(
         "users",
         fields=[
-            {"name": "id", "field_type": "INTEGER", "primary_key": True},
-            {"name": "name", "field_type": "TEXT", "nullable": False},
-            {"name": "email", "field_type": "TEXT", "unique": True},
+            {
+                "name": "id",
+                "column_type": {"kind": "big_integer"},
+                "nullable": False,
+                "primary_key": True,
+                "unique": False,
+                "auto_increment": True,
+            },
+            {
+                "name": "name",
+                "column_type": {"kind": "text"},
+                "nullable": False,
+                "primary_key": False,
+                "unique": False,
+            },
+            {
+                "name": "email",
+                "column_type": {"kind": "string", "length": 255},
+                "nullable": False,
+                "primary_key": False,
+                "unique": True,
+            },
         ],
         indexes=[
-            {"name": "ix_users_email", "columns": ["email"]},
+            {"name": "ix_users_email", "fields": ["email"], "unique": False},
         ],
     )
 
@@ -125,6 +165,40 @@ def downgrade(ctx):
     """Revert migration."""
     ctx.drop_table("users")
 ```
+
+### Field Dicts
+
+Every field dict carries the semantic column type in `column_type` — a tagged
+dict whose `kind` decides the DDL type per dialect:
+
+| `kind` | Extra keys | Python type |
+|--------|------------|-------------|
+| `big_integer` | — | `int` |
+| `double` | — | `float` |
+| `boolean` | — | `bool` |
+| `text` | — | `str` (no `max_length`) |
+| `string` | `length` | `str` with `max_length` |
+| `blob` | — | `bytes` |
+| `date_time`, `date_time_utc`, `date`, `time` | — | `datetime`, `date`, `time` |
+| `timedelta` | — | `timedelta` |
+| `uuid` | — | `UUID` |
+| `decimal` | `precision`, `scale` | `Decimal` |
+| `json`, `json_binary` | — | `dict` / `list` |
+| `enum` | `name`, `values` | `enum.Enum` subclass |
+| `array` | `item` (nested spec) | `list[...]` |
+
+`name`, `column_type`, `nullable`, `primary_key` and `unique` are required;
+`default`, `auto_increment` and `db_type` are optional. `db_type` is verbatim
+DDL that overrides the type rendered from `column_type` (e.g. `"JSONB"`,
+`"CITEXT"`).
+
+Index dicts use `name`, `fields` (column names) and `unique`; `method` and
+`where` are optional.
+
+!!! note "Legacy field format"
+    Files written before `ColumnTypeSpec` use `"python_type": "int"` instead of
+    `column_type`. They still replay, with a `FutureWarning` — see
+    [Squashing Migration History](#squashing-migration-history).
 
 ## Supported Operations
 
@@ -136,12 +210,24 @@ All operations are called on the `ctx` (MigrationContext) object passed to `upgr
 ctx.create_table(
     "users",
     fields=[
-        {"name": "id", "field_type": "INTEGER", "primary_key": True},
-        {"name": "name", "field_type": "TEXT", "nullable": False},
-        {"name": "email", "field_type": "TEXT", "unique": True},
+        {
+            "name": "id",
+            "column_type": {"kind": "big_integer"},
+            "nullable": False,
+            "primary_key": True,
+            "unique": False,
+            "auto_increment": True,
+        },
+        {
+            "name": "email",
+            "column_type": {"kind": "string", "length": 255},
+            "nullable": False,
+            "primary_key": False,
+            "unique": True,
+        },
     ],
     indexes=[
-        {"name": "ix_users_email", "columns": ["email"]},
+        {"name": "ix_users_email", "fields": ["email"], "unique": False},
     ],
 )
 ```
@@ -163,8 +249,10 @@ ctx.rename_table("old_name", "new_name")
 ```python
 ctx.add_column("users", {
     "name": "age",
-    "field_type": "INTEGER",
+    "column_type": {"kind": "big_integer"},
     "nullable": True,
+    "primary_key": False,
+    "unique": False,
 })
 ```
 
@@ -183,15 +271,24 @@ ctx.rename_column("users", "old_name", "new_name")
 ### Alter Column
 
 ```python
-ctx.alter_column("users", "name", nullable=False, type="VARCHAR(255)")
+ctx.alter_column(
+    "users",
+    "name",
+    column_type={"kind": "string", "length": 255},
+    nullable=False,
+)
 ```
+
+Accepted keyword arguments mirror the optional field keys: `column_type`,
+`db_type`, `nullable`, `default`, `unique`, `max_length`, `max_digits`,
+`decimal_places`.
 
 ### Create Index
 
 ```python
 ctx.create_index("users", {
     "name": "ix_users_email",
-    "columns": ["email"],
+    "fields": ["email"],
     "unique": True,
 })
 ```
@@ -308,8 +405,9 @@ oxyde migrate
 ### PostgreSQL
 
 - Full ALTER TABLE support
-- Transactional DDL
+- Transactional DDL — except migrations containing `ALTER TYPE ... ADD VALUE`, which PostgreSQL forbids inside a transaction (see [Enum Migrations](#enum-migrations))
 - Concurrent index creation
+- Type changes emit a `USING "col"::text::<type>` clause, so conversions such as text ↔ enum work
 
 ### SQLite
 
@@ -342,9 +440,28 @@ def upgrade(ctx):
     ctx.create_table(
         "posts",
         fields=[
-            {"name": "id", "field_type": "INTEGER", "primary_key": True},
-            {"name": "title", "field_type": "TEXT", "nullable": False},
-            {"name": "author_id", "field_type": "INTEGER", "nullable": False},
+            {
+                "name": "id",
+                "column_type": {"kind": "big_integer"},
+                "nullable": False,
+                "primary_key": True,
+                "unique": False,
+                "auto_increment": True,
+            },
+            {
+                "name": "title",
+                "column_type": {"kind": "text"},
+                "nullable": False,
+                "primary_key": False,
+                "unique": False,
+            },
+            {
+                "name": "author_id",
+                "column_type": {"kind": "big_integer"},
+                "nullable": False,
+                "primary_key": False,
+                "unique": False,
+            },
         ],
     )
     ctx.add_foreign_key(
@@ -372,6 +489,128 @@ When `makemigrations` generates `create_table` / `drop_table` operations it topo
 - ties at the same level are broken alphabetically for stable output.
 
 If the schema contains a cyclic FK dependency, `makemigrations` fails with an error listing the tables involved. Break the cycle by making one side of the FK nullable and adding it in a separate migration step (e.g. create the tables first, then `add_foreign_key` afterwards).
+
+## Enum Migrations
+
+Enum fields (see [Fields — Enum Fields](fields.md#enum-fields)) are tracked by `makemigrations`. What happens depends on *how* the value list changed.
+
+### Creating an Enum Type
+
+A new enum type produces `ctx.create_enum_type(...)`, which emits `CREATE TYPE ... AS ENUM (...)` on PostgreSQL and nothing on MySQL/SQLite (the values live in the column definition there):
+
+```python
+def upgrade(ctx):
+    """Apply migration."""
+    ctx.create_enum_type("post_status_enum", ["draft", "published"])
+```
+
+### Appending Values — Automatic
+
+Adding values **at the end** of the enum is handled for you — one operation per new value:
+
+```python
+def upgrade(ctx):
+    """Apply migration."""
+    ctx.add_enum_value(
+        "post_status_enum",
+        "archived",
+        fields=[...],   # columns using the type, for the MySQL path
+    )
+```
+
+| Dialect | Generated SQL |
+|---------|---------------|
+| PostgreSQL | `ALTER TYPE "post_status_enum" ADD VALUE IF NOT EXISTS 'archived'` |
+| MySQL | `ALTER TABLE ... MODIFY COLUMN ...` with the widened `ENUM(...)` for every column using the type |
+| SQLite | nothing — the column is plain `TEXT` |
+
+!!! warning "PostgreSQL runs this migration without a transaction"
+    PostgreSQL forbids `ALTER TYPE ... ADD VALUE` inside a transaction block. When a migration contains such an operation, Oxyde executes the **entire** migration without a transaction, so a failure halfway through leaves the already-executed statements applied.
+
+    Keep enum value additions in their own migration so the non-transactional window stays as small as possible:
+
+    ```bash
+    oxyde makemigrations --name "add_archived_status"
+    ```
+
+### Removing or Reordering Values — Manual
+
+Removing a value, renaming it, or changing the declaration order cannot be automated: existing rows may hold the value, and PostgreSQL has no `DROP VALUE`. `makemigrations` still records the change, but pairs it with a guard that fails until you write the SQL:
+
+```python
+def upgrade(ctx):
+    """Apply migration."""
+    ctx.alter_enum_type(
+        "post_status_enum",
+        old_values=[
+            'draft',
+            'published',
+            'archived',
+        ],
+        new_values=[
+            'draft',
+            'published',
+        ],
+    )
+    ctx.require_manual("Manual enum migration required for post_status_enum: ...")
+```
+
+- `ctx.alter_enum_type(...)` emits **no SQL** — it only updates the schema state used by migration replay, so later `makemigrations` runs see the new value list.
+- `ctx.require_manual(...)` raises at execution time. Replace it with the `ctx.execute(...)` statements that perform the change, and keep `ctx.alter_enum_type(...)`.
+
+A typical hand-written PostgreSQL replacement:
+
+```python
+def upgrade(ctx):
+    """Apply migration."""
+    ctx.alter_enum_type(
+        "post_status_enum",
+        old_values=['draft', 'published', 'archived'],
+        new_values=['draft', 'published'],
+    )
+    ctx.execute("UPDATE posts SET status = 'draft' WHERE status = 'archived'")
+    ctx.execute('ALTER TYPE "post_status_enum" RENAME TO "post_status_enum_old"')
+    ctx.execute('CREATE TYPE "post_status_enum" AS ENUM (\'draft\', \'published\')')
+    ctx.execute(
+        'ALTER TABLE "posts" ALTER COLUMN "status" TYPE "post_status_enum" '
+        'USING "status"::text::"post_status_enum"'
+    )
+    ctx.execute('DROP TYPE "post_status_enum_old"')
+```
+
+`oxyde sqlmigrate` prints a `-- manual migration required` marker for these operations instead of an empty preview.
+
+## Squashing Migration History
+
+`oxyde migrations squash` replays the whole history in memory, computes the final schema, and replaces every migration file with a single `0001_<name>.py` written in the current format:
+
+```bash
+oxyde migrations squash
+```
+
+```
+Will squash 14 migration file(s) into one:
+  • 0001_initial.py
+  ...
+
+Delete these files and write a new 0001 migration? [y/N]: y
+✅ Created 0001_squashed.py (9 table(s)), deleted 14 file(s).
+```
+
+What to know before running it:
+
+- **Old files are deleted.** Version control is the backup. The new file is rendered into a temporary directory first, so a generation failure cannot lose the history.
+- **Raw SQL is not carried over.** `ctx.execute()` statements are schema-neutral and are dropped; the affected file names are printed so you can move the logic manually.
+- **Already-deployed databases** must record the new initial migration without executing it:
+
+    ```bash
+    oxyde migrate --fake      # fresh databases: just `oxyde migrate`
+    ```
+
+    Tracker records of the old migration names are harmless — pending migrations are computed as files minus applied.
+
+!!! note "Legacy migration format"
+    Migration files written before the `ColumnTypeSpec` format (field dicts with `python_type`) still replay, but emit a `FutureWarning` pointing to this command. Support for the legacy format is removed in 1.0 — squash converts them.
 
 ## Programmatic Schema Management
 

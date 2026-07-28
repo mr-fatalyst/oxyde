@@ -68,7 +68,7 @@ class Example(Model):
 
 | Python Type | PostgreSQL | SQLite | MySQL |
 |-------------|------------|--------|-------|
-| `int` | INTEGER | INTEGER | BIGINT |
+| `int` | BIGINT | INTEGER | BIGINT |
 | `int` (PK) | BIGSERIAL | INTEGER AUTOINCREMENT | BIGINT AUTO_INCREMENT |
 | `str` | VARCHAR(255) | VARCHAR(255) | VARCHAR(255) |
 | `float` | DOUBLE PRECISION | REAL | DOUBLE |
@@ -81,12 +81,16 @@ class Example(Model):
 | `bytes` | BYTEA | BLOB | LONGBLOB |
 | `dict` | JSONB | TEXT | JSON |
 | `list[T]` | T[] | TEXT | JSON |
+| `Enum` (str values) | native enum type | TEXT | ENUM(...) |
 
 !!! tip "Custom string length"
     `str` fields default to `VARCHAR(255)`. Use `max_length` to change: `Field(max_length=500)` → `VARCHAR(500)`.
 
 !!! tip "Decimal precision"
     Use `max_digits` and `decimal_places` for precise numeric columns: `Field(max_digits=10, decimal_places=2)` → `NUMERIC(10,2)` / `DECIMAL(10,2)`.
+
+!!! tip "Enums"
+    A string-valued `Enum` annotation maps to a native enum type on PostgreSQL/MySQL. See [Fields — Enum Fields](fields.md#enum-fields).
 
 ## Primary Keys
 

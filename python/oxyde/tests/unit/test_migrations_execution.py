@@ -354,6 +354,15 @@ class TestMigrationValidation:
         for name in invalid_names:
             assert not re.match(pattern, name), f"{name} should be invalid"
 
+    def test_typeless_field_dict_is_rejected(self):
+        """A field dict without column_type/python_type/db_type (e.g. the
+        phantom 'field_type' key that once lived in the docs) must fail
+        loudly instead of silently degrading the column to TEXT."""
+        from oxyde.migrations.utils import normalize_field_dict
+
+        with pytest.raises(ValueError, match="defines neither"):
+            normalize_field_dict({"name": "id", "field_type": "INTEGER"})
+
     def test_validate_table_name(self):
         """Test table name validation."""
         import re

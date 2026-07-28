@@ -60,21 +60,30 @@ python/oxyde/
 │   ├── expressions.py  # F expressions (arithmetic)
 │   ├── aggregates.py   # Count, Sum, Avg, Max, Min
 │   └── mixins/         # Query method mixins
+├── core/
+│   ├── wrapper.py      # Bridge to the compiled _oxyde_core module
+│   ├── ir.py           # IR builders (query state → dict for msgpack)
+│   ├── column_types.py # THE single Python → ColumnTypeSpec mapping point
+│   └── types.py        # Value serialization for msgpack
 ├── db/
 │   ├── pool.py         # AsyncDatabase, PoolSettings
 │   ├── transaction.py  # atomic() context manager
 │   └── registry.py     # Connection registry
-└── migrations/
-    ├── cli.py          # makemigrations, migrate commands
-    └── ...
+├── migrations/         # Detection, generation, replay, squash, execution
+└── cli/
+    └── migrations.py   # makemigrations / migrate / sqlmigrate / squash
 ```
 
 ## Prerequisites
 
-- **Rust** 1.75+ ([rustup.rs](https://rustup.rs))
+- **Rust** via [rustup.rs](https://rustup.rs) — the exact toolchain is pinned in
+  `rust-toolchain.toml` and rustup installs it automatically on first `cargo` use.
+  CI uses the same pinned version, so a floating local stable may show clippy
+  warnings CI does not (or vice versa) — always build through rustup.
 - **Python** 3.10+
 - **maturin** (`pip install maturin`)
-- **Database** (PostgreSQL/MySQL/SQLite for testing)
+- **Docker** — integration tests spin up PostgreSQL/MySQL via testcontainers;
+  without Docker they are skipped and only unit/smoke tests run.
 
 ## Development Setup
 
@@ -113,17 +122,24 @@ cd ..
 
 ## Development Workflow
 
+Day-to-day commands are `make` targets (see the `Makefile` at the repo root):
+
+| Command | What it does |
+|---|---|
+| `make build-core` | Rebuild the Rust extension (`maturin develop --release`) |
+| `make test-rust` | All Rust tests (`cargo test --workspace`) |
+| `make test` | All Python tests (integration auto-skips without Docker) |
+| `make test-unit` / `test-smoke` / `test-integration` | One Python suite |
+| `make coverage` | Python tests with coverage |
+| `make lint` | Everything CI checks: ruff, mypy, cargo fmt/check/clippy |
+| `make format` | Format both languages (ruff format + cargo fmt) |
+
 ### When Modifying Rust Code
 
 After changing any Rust code, rebuild the Python extension:
 
 ```bash
-# Quick rebuild (debug mode)
-cd crates/oxyde-core-py
-maturin develop
-
-# Or with optimizations (release mode)
-maturin develop --release
+make build-core
 ```
 
 ### When Modifying Python Code
@@ -135,58 +151,55 @@ No rebuild needed — changes are immediately available in editable install.
 ### Rust Tests
 
 ```bash
-# All crates
-cargo test --workspace
+make test-rust
 
-# Specific crate
+# Narrower runs go through cargo directly:
 cargo test -p oxyde-sql
-
-# With output
 cargo test --workspace -- --nocapture
 ```
 
-### Python Tests
+#### Golden DDL snapshots
+
+`crates/oxyde-sql/tests/golden_ddl.rs` freezes the generated DDL byte-exact
+(via [insta](https://insta.rs)). If your change alters generated SQL, the test
+fails with a diff — review it and accept **consciously**:
 
 ```bash
-cd python
+cargo test -p oxyde-sql --test golden_ddl   # shows the diff
+cargo insta review                          # accept/reject interactively
+```
 
-# All tests
-pytest
+An accepted snapshot diff must be part of the same PR and called out in its
+description: changed DDL bytes are a feature decision, never a side effect.
 
-# Specific file
-pytest oxyde/tests/test_query.py
+### Python Tests
 
-# Verbose
-pytest -v
+Tests are split into suites under `python/oxyde/tests/`:
 
-# With coverage
-pytest --cov=oxyde
+- `unit/` — no database needed
+- `smoke/` — quick end-to-end sanity on SQLite
+- `integration/` — real PostgreSQL/MySQL via testcontainers (needs Docker)
+- `typecheck/` — mypy against generated stubs
+
+```bash
+make test          # all (integration is skipped automatically without Docker)
+make test-unit     # or test-smoke / test-integration
+make coverage
+
+# A single file goes through pytest directly:
+cd python && pytest oxyde/tests/unit/test_query.py
 ```
 
 ## Code Style
 
-### Rust
-
 ```bash
-# Format
-cargo fmt
-
-# Lint
-cargo clippy --workspace
+make lint
 ```
 
-### Python
-
-```bash
-cd python
-
-# Format and lint (using ruff)
-ruff check --fix .
-ruff format .
-
-# Or run pre-commit
-pre-commit run --all-files
-```
+This runs every check CI runs (ruff, mypy, cargo fmt/check/clippy). Run it
+before pushing — CI enforces `cargo clippy -- -D warnings` with the `pedantic`
+lint group enabled, so a clean local `make lint` is the only reliable way to
+avoid a red pipeline. `make format` applies formatting to both languages.
 
 ## Debugging
 
@@ -204,7 +217,7 @@ RUST_LOG=oxyde_driver=debug python your_script.py
 import msgpack
 
 query = User.objects.filter(age__gte=18)
-ir_dict = query._build_ir().to_dict()
+ir_dict = query.to_ir()
 ir_bytes = msgpack.packb(ir_dict)
 print(f"IR size: {len(ir_bytes)} bytes")
 print(f"IR structure: {ir_dict}")
@@ -254,16 +267,33 @@ print(f"Params: {params}")
 
 5. **Rebuild extension**:
    ```bash
-   cd crates/oxyde-core-py && maturin develop --release
+   make build-core
    ```
 
 6. **Add tests** for both Rust and Python.
+
+### Adding a New Column Type
+
+Column type semantics live in exactly two places — keep it that way:
+
+1. **Add a variant to `ColumnTypeSpec`** (`crates/oxyde-codec/src/lib.rs`) —
+   the tagged enum that travels from Python to Rust.
+2. **Map it in Rust** (`crates/oxyde-sql/`):
+   - `src/spec_sql.rs` — DDL type string per dialect (`resolve_spec_type`);
+   - `src/utils/bind.rs` — value binding + typed NULL for the new kind;
+   - `crates/oxyde-driver/src/convert/{postgres,mysql,sqlite}.rs` — row decoding.
+3. **Map it in Python** (`python/oxyde/core/column_types.py`) — the single
+   Python-side classification point (`compute_column_type`). Nothing else in
+   the Python layer may classify types.
+4. **Freeze the DDL**: extend `crates/oxyde-sql/tests/golden_ddl.rs` and record
+   the snapshots (see the golden workflow above), plus binding cases in
+   `bind.rs` tests and `python/oxyde/tests/unit/test_db_types.py`.
 
 ## Common Pitfalls
 
 ### Forgetting to Rebuild After Rust Changes
 
-Python won't see Rust changes until `maturin develop` is run. Symptom: old behavior persists.
+Python won't see Rust changes until `make build-core` is run. Symptom: old behavior persists.
 
 ### GIL-Related Performance Issues
 
@@ -279,11 +309,11 @@ SQLite doesn't benefit from large connection pools. Use `max_connections=1` or r
 
 ## Pull Request Guidelines
 
-1. **Build the Rust core from source** before submitting a fix. The `oxyde-core` package on PyPI may be behind `main` — your issue might already be fixed. Always run `cd crates/oxyde-core-py && maturin develop --release` first.
+1. **Build the Rust core from source** before submitting a fix. The `oxyde-core` package on PyPI may be behind `main` — your issue might already be fixed. Always run `make build-core` first.
 2. **Create a branch** from `main`
 3. **Write tests** for new functionality
-4. **Run all tests** before submitting
-5. **Format code** with `cargo fmt` and `ruff`
+4. **Run `make test-rust`, `make test` and `make lint`** before submitting — CI runs exactly these
+5. **Format code** with `make format`
 6. **Update documentation** if needed
 7. **Keep commits atomic** — one logical change per commit
 

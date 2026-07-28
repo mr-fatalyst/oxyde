@@ -37,20 +37,20 @@ class TestMigrationGenerator:
                     "fields": [
                         {
                             "name": "id",
-                            "field_type": "INTEGER",
+                            "column_type": {"kind": "big_integer"},
                             "primary_key": True,
                             "nullable": False,
                             "auto_increment": True,
                         },
                         {
                             "name": "email",
-                            "field_type": "VARCHAR(255)",
+                            "column_type": {"kind": "string", "length": 255},
                             "nullable": False,
                             "unique": True,
                         },
                         {
                             "name": "name",
-                            "field_type": "VARCHAR(100)",
+                            "column_type": {"kind": "string", "length": 100},
                             "nullable": True,
                         },
                     ],
@@ -82,7 +82,11 @@ class TestMigrationGenerator:
             {
                 "type": "add_column",
                 "table": "users",
-                "field": {"name": "age", "field_type": "INTEGER", "nullable": True},
+                "field": {
+                    "name": "age",
+                    "column_type": {"kind": "big_integer"},
+                    "nullable": True,
+                },
             }
         ]
 
@@ -106,11 +110,15 @@ class TestMigrationGenerator:
                     "fields": [
                         {
                             "name": "id",
-                            "field_type": "INTEGER",
+                            "column_type": {"kind": "big_integer"},
                             "primary_key": True,
                             "nullable": False,
                         },
-                        {"name": "value", "field_type": "TEXT", "nullable": True},
+                        {
+                            "name": "value",
+                            "column_type": {"kind": "text"},
+                            "nullable": True,
+                        },
                     ],
                     "indexes": [],
                 },
@@ -170,7 +178,7 @@ class TestMigrationGenerator:
                 "table": "users",
                 "index": {
                     "name": "idx_users_email",
-                    "columns": ["email"],
+                    "fields": ["email"],
                     "unique": True,
                 },
             }
@@ -231,8 +239,8 @@ class TestMigrationReplay:
                 "table": {
                     "name": "users",
                     "fields": [
-                        {"name": "id", "field_type": "INTEGER", "primary_key": True},
-                        {"name": "name", "field_type": "TEXT"},
+                        {"name": "id", "column_type": {"kind": "big_integer"}, "primary_key": True},
+                        {"name": "name", "column_type": {"kind": "text"}},
                     ],
                     "indexes": [],
                 },
@@ -258,7 +266,7 @@ class TestMigrationReplay:
         state = SchemaState()
         state.tables["users"] = {
             "name": "users",
-            "fields": [{"name": "id", "field_type": "INTEGER"}],
+            "fields": [{"name": "id", "column_type": {"kind": "big_integer"}}],
             "indexes": [],
         }
 
@@ -266,7 +274,7 @@ class TestMigrationReplay:
             {
                 "type": "add_column",
                 "table": "users",
-                "field": {"name": "email", "field_type": "TEXT"},
+                "field": {"name": "email", "column_type": {"kind": "text"}},
             }
         )
 
@@ -280,8 +288,8 @@ class TestMigrationReplay:
         state.tables["users"] = {
             "name": "users",
             "fields": [
-                {"name": "id", "field_type": "INTEGER"},
-                {"name": "legacy", "field_type": "TEXT"},
+                {"name": "id", "column_type": {"kind": "big_integer"}},
+                {"name": "legacy", "column_type": {"kind": "text"}},
             ],
             "indexes": [],
         }
@@ -322,7 +330,7 @@ class TestMigrationReplay:
         state = SchemaState()
         state.tables["users"] = {
             "name": "users",
-            "fields": [{"name": "old_col", "field_type": "TEXT"}],
+            "fields": [{"name": "old_col", "column_type": {"kind": "text"}}],
             "indexes": [],
         }
 
@@ -349,7 +357,7 @@ class TestMigrationReplay:
             {
                 "type": "create_index",
                 "table": "users",
-                "index": {"name": "idx_email", "columns": ["email"], "unique": True},
+                "index": {"name": "idx_email", "fields": ["email"], "unique": True},
             }
         )
 
@@ -363,7 +371,7 @@ class TestMigrationReplay:
         state.tables["users"] = {
             "name": "users",
             "fields": [],
-            "indexes": [{"name": "idx_email", "columns": ["email"]}],
+            "indexes": [{"name": "idx_email", "fields": ["email"]}],
         }
 
         state.apply_operation(
@@ -382,7 +390,7 @@ class TestMigrationReplay:
         state = SchemaState()
         state.tables["users"] = {
             "name": "users",
-            "fields": [{"name": "id", "field_type": "INTEGER"}],
+            "fields": [{"name": "id", "column_type": {"kind": "big_integer"}}],
             "indexes": [],
         }
 
@@ -492,7 +500,7 @@ depends_on = None
 
 def upgrade(ctx):
     ctx.create_table("users", fields=[
-        {"name": "id", "field_type": "INTEGER", "primary_key": True},
+        {"name": "id", "column_type": {"kind": "big_integer"}, "primary_key": True},
     ])
 
 def downgrade(ctx):
@@ -507,7 +515,7 @@ def downgrade(ctx):
 depends_on = "0001_users"
 
 def upgrade(ctx):
-    ctx.add_column("users", {"name": "email", "field_type": "TEXT"})
+    ctx.add_column("users", {"name": "email", "column_type": {"kind": "text"}})
 
 def downgrade(ctx):
     ctx.drop_column("users", "email")
@@ -538,7 +546,7 @@ class TestMigrationContext:
         ctx.create_table(
             "users",
             fields=[
-                {"name": "id", "field_type": "INTEGER", "primary_key": True},
+                {"name": "id", "column_type": {"kind": "big_integer"}, "primary_key": True},
             ],
         )
 
@@ -551,7 +559,7 @@ class TestMigrationContext:
         """Test collecting add_column operation."""
 
         ctx = MigrationContext(mode="collect")
-        ctx.add_column("users", {"name": "email", "field_type": "TEXT"})
+        ctx.add_column("users", {"name": "email", "column_type": {"kind": "text"}})
 
         ops = ctx.get_collected_operations()
         assert len(ops) == 1
@@ -574,8 +582,8 @@ class TestMigrationContext:
 
         ctx = MigrationContext(mode="collect")
         ctx.create_table("users", fields=[])
-        ctx.add_column("users", {"name": "email", "field_type": "TEXT"})
-        ctx.create_index("users", {"name": "idx_email", "columns": ["email"]})
+        ctx.add_column("users", {"name": "email", "column_type": {"kind": "text"}})
+        ctx.create_index("users", {"name": "idx_email", "fields": ["email"]})
 
         ops = ctx.get_collected_operations()
         assert len(ops) == 3
@@ -776,7 +784,7 @@ class TestDropOperationReversibility:
                 "field": "legacy_field",
                 "field_def": {
                     "name": "legacy_field",
-                    "field_type": "VARCHAR(100)",
+                    "column_type": {"kind": "string", "length": 100},
                     "nullable": True,
                     "default": "'unknown'",
                 },
@@ -804,7 +812,7 @@ class TestDropOperationReversibility:
                 "name": "idx_email",
                 "index_def": {
                     "name": "idx_email",
-                    "columns": ["email"],
+                    "fields": ["email"],
                     "unique": True,
                 },
             }

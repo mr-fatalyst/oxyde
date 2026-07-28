@@ -121,8 +121,6 @@ async with transaction.atomic():
 | SQLite     | 3.35+ | Full | RETURNING, UPSERT, WAL mode by default |
 | MySQL      | 8.0+ | Full | UPSERT via ON DUPLICATE KEY, FOR UPDATE/SHARE |
 
-> **SQLite < 3.35**: Falls back to `last_insert_rowid()` which may return incorrect IDs with concurrent inserts.
->
 > **MySQL**: No RETURNING clause — uses `last_insert_id()`. Bulk INSERT returns calculated ID range which may be incorrect with concurrent inserts.
 
 ## Ecosystem

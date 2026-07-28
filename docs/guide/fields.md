@@ -157,6 +157,85 @@ prices: list[Annotated[Decimal, Field(max_digits=10, decimal_places=2)]] | None 
 
 On MySQL and SQLite arrays fall back to `JSON` / `TEXT`, so inner constraints only affect DDL on PostgreSQL.
 
+## Enum Fields
+
+A field annotated with a string-valued `Enum` becomes a database enum column:
+
+```python
+from enum import Enum
+from oxyde import Model, Field
+
+class PostStatus(str, Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
+class Post(Model):
+    id: int | None = Field(default=None, db_pk=True)
+    title: str
+    status: PostStatus = Field(default=PostStatus.DRAFT)
+
+    class Meta:
+        is_table = True
+```
+
+Both enum members and their raw string values work in queries:
+
+```python
+await Post.objects.filter(status=PostStatus.PUBLISHED).all()
+await Post.objects.filter(status="published").all()          # same thing
+await Post.objects.filter(id=1).update(status=PostStatus.ARCHIVED)
+```
+
+Only the *values* must be strings — subclassing `str` is idiomatic but not required.
+
+### Per-Dialect Behavior
+
+| | PostgreSQL | MySQL | SQLite |
+|---|---|---|---|
+| Column type | native type, `CREATE TYPE "post_status_enum" AS ENUM (...)` | inline `ENUM('draft','published','archived')` | `TEXT` |
+| Query parameters | cast to the type: `$1::"post_status_enum"` | plain string | plain string |
+| `list[PostStatus]` | `"post_status_enum"[]` | `JSON` | `TEXT` (JSON-encoded) |
+| Database-level enforcement | yes | yes | **none** |
+| `ORDER BY` on the column | declaration order | declaration order | lexicographic |
+
+### Type Naming and Collisions
+
+The enum type name is always derived from the class name: `PostStatus` → `post_status_enum`. It cannot be chosen explicitly.
+
+Two enum classes in different modules that produce the same name (e.g. two `Status` classes) share one database type:
+
+- identical value sets — the type is shared, no error;
+- different value sets — `makemigrations` fails with `enum type 'status_enum' has conflicting value sets`.
+
+Rename one of the classes, or opt one of them out of the enum machinery with `db_type` (see below).
+
+### db_type on Enum Fields
+
+Setting **any** `db_type` on an enum field turns it into a plain column with that verbatim storage type and disables the whole enum machinery — no `CREATE TYPE`, no parameter casts, no tracking of added values:
+
+```python
+# Stored as TEXT everywhere; Pydantic still validates the value.
+status: PostStatus = Field(default=PostStatus.DRAFT, db_type="TEXT")
+```
+
+`db_type` never names an enum type — the native type name is always the auto-generated one.
+
+### Validation
+
+- Values are validated by Pydantic on the model and on `update()` — an unknown value is rejected before reaching the database.
+- A non-string enum (`IntEnum`, or any member whose value is not a `str`) raises `TypeError` at model definition time:
+
+    ```
+    Enum field 'Priority' must define string values. Use a str-valued Enum for
+    database enum columns, or annotate the field as int for integer storage.
+    ```
+
+!!! warning "SQLite has no enum enforcement"
+    On SQLite the column is plain `TEXT` and no `CHECK` constraint is generated — a raw SQL write can store any string. Validation happens in Pydantic only. Sorting also differs: `ORDER BY status` follows declaration order on PostgreSQL/MySQL but is lexicographic on SQLite.
+
+See [Migrations — Enum Migrations](migrations.md#enum-migrations) for how enum changes are applied.
+
 ## Foreign Keys
 
 Foreign keys are defined by type annotation:

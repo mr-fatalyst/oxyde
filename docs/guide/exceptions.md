@@ -26,6 +26,10 @@ OxydeError (base)
     ├── NotFoundError         - get() returned no rows
     ├── MultipleObjectsReturned - get() returned multiple rows
     └── IntegrityError        - Constraint violation
+        ├── UniqueViolationError     - UNIQUE / PRIMARY KEY constraint
+        ├── ForeignKeyViolationError - FOREIGN KEY constraint
+        ├── NotNullViolationError    - NOT NULL constraint
+        └── CheckViolationError      - CHECK constraint
 ```
 
 ## Base Exception
@@ -272,6 +276,33 @@ user, created = await User.objects.get_or_create(
 )
 ```
 
+### Constraint-Specific Errors
+
+`IntegrityError` has four subclasses, one per constraint kind:
+
+```python
+class UniqueViolationError(IntegrityError):     # UNIQUE / PRIMARY KEY
+class ForeignKeyViolationError(IntegrityError): # FOREIGN KEY
+class NotNullViolationError(IntegrityError):    # NOT NULL
+class CheckViolationError(IntegrityError):      # CHECK
+```
+
+The kind is reported by the Rust driver through sqlx's cross-dialect error kinds — no error-message text is parsed — so the classification works the same on PostgreSQL, MySQL and SQLite.
+
+```python
+from oxyde import UniqueViolationError, ForeignKeyViolationError
+
+try:
+    await User.objects.create(email="alice@example.com")
+except UniqueViolationError:
+    raise HTTPException(409, "Email already registered")
+except ForeignKeyViolationError:
+    raise HTTPException(400, "Referenced record does not exist")
+```
+
+!!! note "Existing code keeps working"
+    All four are subclasses of `IntegrityError`, so `except IntegrityError` still catches every constraint violation.
+
 ## Error Handling Patterns
 
 ### API Endpoint Pattern
@@ -348,6 +379,10 @@ from oxyde import (
     NotFoundError,
     MultipleObjectsReturned,
     IntegrityError,
+    UniqueViolationError,
+    ForeignKeyViolationError,
+    NotNullViolationError,
+    CheckViolationError,
 )
 ```
 
@@ -363,6 +398,10 @@ from oxyde.exceptions import (
     NotFoundError,
     MultipleObjectsReturned,
     IntegrityError,
+    UniqueViolationError,
+    ForeignKeyViolationError,
+    NotNullViolationError,
+    CheckViolationError,
 )
 ```
 
