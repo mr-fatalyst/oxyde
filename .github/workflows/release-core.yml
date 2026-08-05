@@ -26,6 +26,7 @@ jobs:
       - name: Build sdist
         uses: PyO3/maturin-action@v1.51.0
         with:
+          maturin-version: v1.14.1
           command: sdist
           args: -m crates/oxyde-core-py/Cargo.toml --out dist
 
@@ -90,15 +91,10 @@ jobs:
         uses: PyO3/maturin-action@v1.51.0
         with:
           target: ${{ matrix.platform.target }}
+          maturin-version: v1.14.1
           args: --release --locked --out dist -m crates/oxyde-core-py/Cargo.toml --find-interpreter
           sccache: 'true'
           manylinux: ${{ matrix.platform.manylinux }}
-
-      - name: Set up Python 3.13t (macOS/Windows)
-        if: runner.os != 'Linux'
-        uses: actions/setup-python@v6.2.0
-        with:
-          python-version: '3.13t'
 
       - name: Set up Python 3.14t (macOS/Windows)
         if: runner.os != 'Linux'
@@ -110,7 +106,8 @@ jobs:
         uses: PyO3/maturin-action@v1.51.0
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --locked --out dist -m crates/oxyde-core-py/Cargo.toml -i 3.13t 3.14t
+          maturin-version: v1.14.1
+          args: --release --locked --out dist -m crates/oxyde-core-py/Cargo.toml -i 3.14t
           sccache: 'true'
           manylinux: ${{ matrix.platform.manylinux }}
 
