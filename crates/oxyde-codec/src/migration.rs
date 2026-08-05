@@ -40,7 +40,7 @@ fn normalize_optional_sql_fragment(value: Option<String>) -> Option<String> {
 // signatures below.
 #[allow(clippy::ref_option)]
 fn is_none_or_blank(value: &Option<String>) -> bool {
-    value.as_deref().map(str::trim).map_or(true, str::is_empty)
+    value.as_deref().map(str::trim).is_none_or(str::is_empty)
 }
 
 #[allow(clippy::ref_option)]
