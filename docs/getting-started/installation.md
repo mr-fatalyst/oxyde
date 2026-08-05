@@ -3,7 +3,7 @@
 ## Requirements
 
 - Python 3.10+
-- Rust 1.75+ (for building from source)
+- Rust 1.88+ (for building from source)
 
 ## Install from PyPI
 
