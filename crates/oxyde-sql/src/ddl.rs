@@ -27,21 +27,38 @@ pub struct Migration {
 impl Migration {
     /// Generate SQL statements for this migration.
     ///
-    /// CREATE/DROP/INDEX statements come first, ALTER TABLE statements last.
-    /// This ensures referenced tables exist before FK constraints are added
-    /// (PG/MySQL emit FK as separate ALTER TABLE, not inline in CREATE TABLE).
+    /// Statements are ordered by schema dependency: constraints being removed
+    /// come first, enum types and tables are created before their dependants,
+    /// new constraints come after structural changes, and tables/types are
+    /// dropped last.
     pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
         let mut all_sql: Vec<(u8, String)> = Vec::new();
         for op in &self.operations {
             let sqls = op.to_sql(dialect)?;
             for sql in sqls {
                 let bucket = match op {
-                    MigrationOp::CreateEnumType { .. } => 0,
+                    MigrationOp::DropForeignKey { .. }
+                    | MigrationOp::DropCheck { .. }
+                    | MigrationOp::DropIndex { .. } => 0,
+                    MigrationOp::CreateEnumType { .. } => 1,
                     MigrationOp::AddEnumValue { .. } => 1,
-                    MigrationOp::DropEnumType { .. } => 4,
-                    MigrationOp::AlterEnumType { .. } => 5,
-                    _ if sql.trim_start().starts_with("ALTER TABLE") => 3,
-                    _ => 2,
+                    MigrationOp::CreateTable { .. }
+                        if sql.trim_start().starts_with("CREATE TABLE") =>
+                    {
+                        2
+                    }
+                    MigrationOp::AddColumn { .. }
+                    | MigrationOp::DropColumn { .. }
+                    | MigrationOp::RenameColumn { .. }
+                    | MigrationOp::RenameTable { .. }
+                    | MigrationOp::AlterColumn { .. } => 3,
+                    MigrationOp::CreateTable { .. }
+                    | MigrationOp::CreateIndex { .. }
+                    | MigrationOp::AddForeignKey { .. }
+                    | MigrationOp::AddCheck { .. } => 4,
+                    MigrationOp::DropTable { .. } => 5,
+                    MigrationOp::DropEnumType { .. } => 6,
+                    MigrationOp::AlterEnumType { .. } => 7,
                 };
                 all_sql.push((bucket, sql));
             }

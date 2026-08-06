@@ -22,9 +22,7 @@ use pyo3::types::{PyBytes, PyString, PyTuple};
 
 /// Check if profiling is enabled via OXYDE_PROFILE env var
 fn is_profiling_enabled() -> bool {
-    std::env::var("OXYDE_PROFILE")
-        .map(|v| v == "1")
-        .unwrap_or(false)
+    std::env::var("OXYDE_PROFILE").is_ok_and(|v| v == "1")
 }
 
 /// Execute a query: deserialize IR → validate → build SQL → execute → msgpack bytes → Coroutine[bytes].

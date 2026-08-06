@@ -168,6 +168,59 @@ fn test_migration_create_table_generates_sql() {
 }
 
 #[test]
+fn test_migration_orders_check_after_table_create() {
+    let migration = Migration {
+        name: "create_users".into(),
+        operations: vec![
+            MigrationOp::AddCheck {
+                table: "users".into(),
+                check: CheckDef {
+                    name: "chk_users_id".into(),
+                    expression: "id > 0".into(),
+                },
+            },
+            MigrationOp::CreateTable {
+                table: sample_table(),
+            },
+        ],
+    };
+
+    let sql = migration.to_sql(Dialect::Postgres).unwrap();
+    let create_position = sql
+        .iter()
+        .position(|statement| statement.starts_with("CREATE TABLE"))
+        .unwrap();
+    let check_position = sql
+        .iter()
+        .position(|statement| statement.contains("ADD CONSTRAINT chk_users_id"))
+        .unwrap();
+
+    assert!(create_position < check_position);
+}
+
+#[test]
+fn test_migration_orders_constraint_drop_before_table_drop() {
+    let migration = Migration {
+        name: "drop_users".into(),
+        operations: vec![
+            MigrationOp::DropCheck {
+                table: "users".into(),
+                name: "chk_users_id".into(),
+                check_def: None,
+            },
+            MigrationOp::DropTable {
+                name: "users".into(),
+                table: None,
+            },
+        ],
+    };
+
+    let sql = migration.to_sql(Dialect::Postgres).unwrap();
+    assert!(sql[0].contains("DROP CONSTRAINT chk_users_id"));
+    assert!(sql[1].starts_with("DROP TABLE"));
+}
+
+#[test]
 fn test_postgres_enum_type_is_created_before_table() {
     let migration = Migration {
         name: "enum".into(),
