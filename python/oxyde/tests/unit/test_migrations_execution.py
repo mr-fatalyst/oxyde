@@ -626,6 +626,55 @@ class TestMigrationExecutionOrdering:
         assert executed_sql[1].startswith("DROP TABLE")
 
     @pytest.mark.asyncio
+    async def test_execute_mode_preserves_table_replacement_order(self):
+        executed_sql = []
+
+        class StubDatabase:
+            name = "default"
+
+            async def execute(self, ir):
+                executed_sql.append(ir["sql"])
+
+        ctx = MigrationContext(
+            mode="execute",
+            dialect="mysql",
+            db_conn=StubDatabase(),
+        )
+        ctx.drop_table("users")
+        ctx.create_table(
+            "users",
+            fields=[_field("id", python_type="int", primary_key=True)],
+        )
+
+        await ctx._execute_collected_sql()
+
+        assert executed_sql[0].startswith("DROP TABLE")
+        assert executed_sql[1].startswith("CREATE TABLE")
+
+    @pytest.mark.asyncio
+    async def test_execute_mode_preserves_rename_before_new_table_operation(self):
+        executed_sql = []
+
+        class StubDatabase:
+            name = "default"
+
+            async def execute(self, ir):
+                executed_sql.append(ir["sql"])
+
+        ctx = MigrationContext(
+            mode="execute",
+            dialect="mysql",
+            db_conn=StubDatabase(),
+        )
+        ctx.rename_table("users_old", "users")
+        ctx.drop_check("users", "chk_users_id")
+
+        await ctx._execute_collected_sql()
+
+        assert executed_sql[0].startswith("RENAME TABLE")
+        assert executed_sql[1].startswith("ALTER TABLE")
+
+    @pytest.mark.asyncio
     async def test_execute_mode_preserves_raw_sql_ordering_barrier(self):
         executed_sql = []
 

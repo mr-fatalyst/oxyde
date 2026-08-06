@@ -203,14 +203,14 @@ fn test_migration_orders_constraint_drop_before_table_drop() {
     let migration = Migration {
         name: "drop_users".into(),
         operations: vec![
+            MigrationOp::DropTable {
+                name: "users".into(),
+                table: None,
+            },
             MigrationOp::DropCheck {
                 table: "users".into(),
                 name: "chk_users_id".into(),
                 check_def: None,
-            },
-            MigrationOp::DropTable {
-                name: "users".into(),
-                table: None,
             },
         ],
     };
@@ -218,6 +218,71 @@ fn test_migration_orders_constraint_drop_before_table_drop() {
     let sql = migration.to_sql(Dialect::Postgres).unwrap();
     assert!(sql[0].contains("DROP CONSTRAINT chk_users_id"));
     assert!(sql[1].starts_with("DROP TABLE"));
+}
+
+#[test]
+fn test_migration_preserves_drop_then_create_for_table_replacement() {
+    let migration = Migration {
+        name: "replace_users".into(),
+        operations: vec![
+            MigrationOp::DropTable {
+                name: "users".into(),
+                table: None,
+            },
+            MigrationOp::CreateTable {
+                table: sample_table(),
+            },
+        ],
+    };
+
+    let sql = migration.to_sql(Dialect::Postgres).unwrap();
+    assert!(sql[0].starts_with("DROP TABLE"));
+    assert!(sql[1].starts_with("CREATE TABLE"));
+}
+
+#[test]
+fn test_migration_preserves_rename_before_operation_on_new_table_name() {
+    let migration = Migration {
+        name: "rename_users".into(),
+        operations: vec![
+            MigrationOp::RenameTable {
+                old_name: "users_old".into(),
+                new_name: "users".into(),
+            },
+            MigrationOp::DropCheck {
+                table: "users".into(),
+                name: "chk_users_id".into(),
+                check_def: None,
+            },
+        ],
+    };
+
+    let sql = migration.to_sql(Dialect::Postgres).unwrap();
+    assert!(sql[0].starts_with("ALTER TABLE \"users_old\" RENAME TO \"users\""));
+    assert!(sql[1].contains("DROP CONSTRAINT chk_users_id"));
+}
+
+#[test]
+fn test_migration_orders_constraint_drop_before_column_drop() {
+    let migration = Migration {
+        name: "drop_user_id".into(),
+        operations: vec![
+            MigrationOp::DropColumn {
+                table: "users".into(),
+                field: "id".into(),
+                field_def: None,
+            },
+            MigrationOp::DropCheck {
+                table: "users".into(),
+                name: "chk_users_id".into(),
+                check_def: None,
+            },
+        ],
+    };
+
+    let sql = migration.to_sql(Dialect::Postgres).unwrap();
+    assert!(sql[0].contains("DROP CONSTRAINT chk_users_id"));
+    assert!(sql[1].contains("DROP COLUMN \"id\""));
 }
 
 #[test]
