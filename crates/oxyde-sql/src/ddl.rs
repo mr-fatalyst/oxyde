@@ -78,6 +78,8 @@ fn is_destructive_table_change(op: &MigrationOp) -> bool {
     )
 }
 
+/// Whether a create separates two operations that use the same table name.
+/// Such a boundary means the operations may belong to different table lifetimes.
 fn has_table_create_between(
     operations: &[MigrationOp],
     table: &str,
@@ -97,6 +99,8 @@ fn has_table_create_between(
     )
 }
 
+/// Whether a drop separates two operations that use the same table name.
+/// Such a boundary means the operations may belong to different table lifetimes.
 fn has_table_drop_between(
     operations: &[MigrationOp],
     table: &str,
@@ -188,9 +192,11 @@ fn add_dependency(
 
 /// Return a stable topological order for migration operations.
 ///
-/// Authored order is the tie-breaker. Dependencies are added only when two
-/// operations act on the same schema object, so unrelated operations are never
-/// moved merely because one happens to render as `ALTER TABLE`.
+/// Authored order is the tie-breaker between dependency-valid operations.
+/// Dependencies encode concrete schema relationships instead of globally
+/// grouping operations by their rendered SQL type. This also covers dialects
+/// that emit relationships such as foreign keys as separate `ALTER TABLE`
+/// statements instead of including them in `CREATE TABLE`.
 fn order_operations(operations: &[MigrationOp]) -> Result<Vec<usize>> {
     let mut outgoing = vec![BTreeSet::new(); operations.len()];
     let mut in_degree = vec![0usize; operations.len()];
@@ -367,9 +373,9 @@ fn order_operations(operations: &[MigrationOp]) -> Result<Vec<usize>> {
 impl Migration {
     /// Generate SQL statements for this migration.
     ///
-    /// Operations are stably ordered by their concrete schema dependencies.
-    /// Unrelated operations retain their authored order, and the statements
-    /// emitted by one operation remain contiguous and in renderer order.
+    /// Operations are stably ordered by their concrete schema dependencies,
+    /// with authored order used to break ties. Statements emitted by one
+    /// operation remain contiguous and in renderer order.
     pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
         let mut all_sql = Vec::new();
         for index in order_operations(&self.operations)? {

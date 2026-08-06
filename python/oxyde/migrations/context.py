@@ -526,9 +526,9 @@ class MigrationContext:
 
         op = normalize_op_fields(op)
 
-        # Render the whole batch together at execution time. The Rust migration
-        # renderer orders CREATE statements before dependent ALTER statements;
-        # rendering each operation separately bypasses that ordering.
+        # Render the whole batch together so the Rust migration renderer can
+        # enforce cross-operation dependencies. Rendering operations individually
+        # bypasses migration-wide ordering.
         self._pending_operations.append(op)
 
     def _flush_pending_operations(self) -> None:
@@ -536,6 +536,7 @@ class MigrationContext:
         if not self._pending_operations:
             return
 
+        # Convert the queued operations to SQL using Rust.
         operations_json = json.dumps(self._pending_operations)
         sql_statements = migration_to_sql(operations_json, self._dialect)
         self._sql_statements.extend(sql_statements)
@@ -553,6 +554,9 @@ class MigrationContext:
         # Raw SQL is an explicit ordering barrier. Render structured operations
         # seen so far, then preserve the hand-written statement in its position.
         self._flush_pending_operations()
+
+        # Collect SQL statements for batch execution.
+        # They will be executed by the executor after upgrade() completes.
         self._sql_statements.append(sql)
 
     async def _execute_collected_sql(self) -> None:
@@ -584,6 +588,7 @@ class MigrationContext:
             if use_transaction:
                 tx_id = await begin_transaction(self._db_conn.name)
 
+            # Execute each SQL statement in the collected batch.
             for sql in self._sql_statements:
                 sql_ir = build_raw_sql_ir(sql=sql)
                 if tx_id is not None:
