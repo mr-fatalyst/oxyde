@@ -575,7 +575,136 @@ class TestDropOpsMinimalPayloadRegression:
         assert any("idx_users_email" in s for s in sqls)
 
 
+class TestMigrationExecutionOrdering:
+    @pytest.mark.asyncio
+    async def test_execute_mode_orders_check_after_table_create(self):
+        executed_sql = []
+
+        class StubDatabase:
+            name = "default"
+
+            async def execute(self, ir):
+                executed_sql.append(ir["sql"])
+
+        ctx = MigrationContext(
+            mode="execute",
+            dialect="mysql",
+            db_conn=StubDatabase(),
+        )
+        ctx.add_check("users", "chk_users_id", "id > 0")
+        ctx.create_table(
+            "users",
+            fields=[_field("id", python_type="int", primary_key=True)],
+        )
+
+        await ctx._execute_collected_sql()
+
+        assert executed_sql[0].startswith("CREATE TABLE")
+        assert executed_sql[1].startswith("ALTER TABLE")
+
+    @pytest.mark.asyncio
+    async def test_execute_mode_orders_constraint_drop_before_table_drop(self):
+        executed_sql = []
+
+        class StubDatabase:
+            name = "default"
+
+            async def execute(self, ir):
+                executed_sql.append(ir["sql"])
+
+        ctx = MigrationContext(
+            mode="execute",
+            dialect="mysql",
+            db_conn=StubDatabase(),
+        )
+        ctx.drop_check("users", "chk_users_id")
+        ctx.drop_table("users")
+
+        await ctx._execute_collected_sql()
+
+        assert executed_sql[0].startswith("ALTER TABLE")
+        assert executed_sql[1].startswith("DROP TABLE")
+
+    @pytest.mark.asyncio
+    async def test_execute_mode_preserves_table_replacement_order(self):
+        executed_sql = []
+
+        class StubDatabase:
+            name = "default"
+
+            async def execute(self, ir):
+                executed_sql.append(ir["sql"])
+
+        ctx = MigrationContext(
+            mode="execute",
+            dialect="mysql",
+            db_conn=StubDatabase(),
+        )
+        ctx.drop_table("users")
+        ctx.create_table(
+            "users",
+            fields=[_field("id", python_type="int", primary_key=True)],
+        )
+
+        await ctx._execute_collected_sql()
+
+        assert executed_sql[0].startswith("DROP TABLE")
+        assert executed_sql[1].startswith("CREATE TABLE")
+
+    @pytest.mark.asyncio
+    async def test_execute_mode_preserves_rename_before_new_table_operation(self):
+        executed_sql = []
+
+        class StubDatabase:
+            name = "default"
+
+            async def execute(self, ir):
+                executed_sql.append(ir["sql"])
+
+        ctx = MigrationContext(
+            mode="execute",
+            dialect="mysql",
+            db_conn=StubDatabase(),
+        )
+        ctx.rename_table("users_old", "users")
+        ctx.drop_check("users", "chk_users_id")
+
+        await ctx._execute_collected_sql()
+
+        assert executed_sql[0].startswith("RENAME TABLE")
+        assert executed_sql[1].startswith("ALTER TABLE")
+
+    @pytest.mark.asyncio
+    async def test_execute_mode_preserves_raw_sql_ordering_barrier(self):
+        executed_sql = []
+
+        class StubDatabase:
+            name = "default"
+
+            async def execute(self, ir):
+                executed_sql.append(ir["sql"])
+
+        ctx = MigrationContext(
+            mode="execute",
+            dialect="mysql",
+            db_conn=StubDatabase(),
+        )
+        ctx.create_table(
+            "users",
+            fields=[_field("id", python_type="int", primary_key=True)],
+        )
+        ctx.execute("INSERT INTO users (id) VALUES (1)")
+        ctx.add_check("users", "chk_users_id", "id > 0")
+
+        await ctx._execute_collected_sql()
+
+        assert executed_sql[0].startswith("CREATE TABLE")
+        assert executed_sql[1] == "INSERT INTO users (id) VALUES (1)"
+        assert executed_sql[2].startswith("ALTER TABLE")
+
+
 class TestMigrationTransactionMode:
+
     def test_postgres_enum_add_value_runs_without_transaction(self):
         ctx = MigrationContext(mode="execute", dialect="postgres")
         ctx.add_enum_value("post_status_enum", "archived")

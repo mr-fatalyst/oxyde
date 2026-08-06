@@ -173,7 +173,7 @@ fn check(name: &str, expression: &str) -> CheckDef {
 // ── Rendering + snapshot helpers ───────────────────────────────────────────
 
 /// Render ops through the production entry point (`Migration::to_sql`),
-/// which also applies the "ALTER statements last" ordering.
+/// which also applies dependency-aware statement ordering.
 fn render(ops: &[MigrationOp], dialect: Dialect) -> String {
     let migration = Migration {
         name: "golden".into(),
@@ -329,7 +329,7 @@ fn create_table_db_type_overrides() {
     snap("create_table_db_type_overrides", &ops, ALL_DIALECTS);
 }
 
-// ── 4. CreateTable with FK / CHECK / index (+ ALTER-last ordering) ─────────
+// ── 4. CreateTable with FK / CHECK / index (+ constraints after CREATE) ────
 
 #[test]
 fn create_table_with_fk() {

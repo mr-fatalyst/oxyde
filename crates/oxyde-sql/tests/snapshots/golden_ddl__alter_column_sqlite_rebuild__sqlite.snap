@@ -10,8 +10,8 @@ INSERT INTO "_new_users" (id, name, age) SELECT id, name, age FROM "users";
 
 DROP TABLE "users";
 
+ALTER TABLE "_new_users" RENAME TO "users";
+
 CREATE INDEX "ix_users_name" ON "users" ("name");
 
-PRAGMA foreign_keys=ON;
-
-ALTER TABLE "_new_users" RENAME TO "users"
+PRAGMA foreign_keys=ON
