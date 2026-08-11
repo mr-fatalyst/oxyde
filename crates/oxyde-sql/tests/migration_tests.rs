@@ -56,6 +56,33 @@ fn sample_table() -> TableDef {
     }
 }
 
+fn table_with_fields(name: &str, fields: &[&str]) -> TableDef {
+    TableDef {
+        name: name.into(),
+        fields: fields.iter().map(|field| sample_field(field)).collect(),
+        indexes: vec![],
+        foreign_keys: vec![],
+        checks: vec![],
+        comment: None,
+    }
+}
+
+fn sample_foreign_key(
+    name: &str,
+    columns: &[&str],
+    ref_table: &str,
+    ref_columns: &[&str],
+) -> ForeignKeyDef {
+    ForeignKeyDef {
+        name: name.into(),
+        columns: columns.iter().map(|column| (*column).into()).collect(),
+        ref_table: ref_table.into(),
+        ref_columns: ref_columns.iter().map(|column| (*column).into()).collect(),
+        on_delete: None,
+        on_update: None,
+    }
+}
+
 fn enum_spec(values: &[&str]) -> ColumnTypeSpec {
     ColumnTypeSpec::Enum {
         name: "post_status_enum".into(),
@@ -168,49 +195,18 @@ fn test_migration_create_table_generates_sql() {
 }
 
 #[test]
-fn test_migration_orders_check_after_table_create() {
-    let migration = Migration {
-        name: "create_users".into(),
-        operations: vec![
-            MigrationOp::AddCheck {
-                table: "users".into(),
-                check: CheckDef {
-                    name: "chk_users_id".into(),
-                    expression: "id > 0".into(),
-                },
-            },
-            MigrationOp::CreateTable {
-                table: sample_table(),
-            },
-        ],
-    };
-
-    let sql = migration.to_sql(Dialect::Postgres).unwrap();
-    let create_position = sql
-        .iter()
-        .position(|statement| statement.starts_with("CREATE TABLE"))
-        .unwrap();
-    let check_position = sql
-        .iter()
-        .position(|statement| statement.contains("ADD CONSTRAINT chk_users_id"))
-        .unwrap();
-
-    assert!(create_position < check_position);
-}
-
-#[test]
-fn test_migration_orders_constraint_drop_before_table_drop() {
+fn test_migration_preserves_authored_operation_order() {
     let migration = Migration {
         name: "drop_users".into(),
         operations: vec![
-            MigrationOp::DropTable {
-                name: "users".into(),
-                table: None,
-            },
             MigrationOp::DropCheck {
                 table: "users".into(),
                 name: "chk_users_id".into(),
                 check_def: None,
+            },
+            MigrationOp::DropTable {
+                name: "users".into(),
+                table: None,
             },
         ],
     };
@@ -221,68 +217,37 @@ fn test_migration_orders_constraint_drop_before_table_drop() {
 }
 
 #[test]
-fn test_migration_preserves_drop_then_create_for_table_replacement() {
+fn test_migration_keeps_each_operation_statements_contiguous() {
+    let old_field = sample_field("email");
+    let mut new_field = old_field.clone();
+    new_field.nullable = true;
+
+    let mut replacement = sample_table();
+    replacement.name = "replacement_users".into();
+    replacement.indexes.clear();
+
+    let operations = vec![
+        MigrationOp::AlterColumn {
+            table: "users".into(),
+            old_field,
+            new_field,
+            table_fields: Some(sample_table().fields),
+            table_indexes: Some(sample_table().indexes),
+            table_foreign_keys: Some(vec![]),
+            table_checks: Some(vec![]),
+        },
+        MigrationOp::CreateTable { table: replacement },
+    ];
+    let expected = operations
+        .iter()
+        .flat_map(|op| op.to_sql(Dialect::Sqlite).unwrap())
+        .collect::<Vec<_>>();
     let migration = Migration {
-        name: "replace_users".into(),
-        operations: vec![
-            MigrationOp::DropTable {
-                name: "users".into(),
-                table: None,
-            },
-            MigrationOp::CreateTable {
-                table: sample_table(),
-            },
-        ],
+        name: "rebuild_then_create".into(),
+        operations,
     };
 
-    let sql = migration.to_sql(Dialect::Postgres).unwrap();
-    assert!(sql[0].starts_with("DROP TABLE"));
-    assert!(sql[1].starts_with("CREATE TABLE"));
-}
-
-#[test]
-fn test_migration_preserves_rename_before_operation_on_new_table_name() {
-    let migration = Migration {
-        name: "rename_users".into(),
-        operations: vec![
-            MigrationOp::RenameTable {
-                old_name: "users_old".into(),
-                new_name: "users".into(),
-            },
-            MigrationOp::DropCheck {
-                table: "users".into(),
-                name: "chk_users_id".into(),
-                check_def: None,
-            },
-        ],
-    };
-
-    let sql = migration.to_sql(Dialect::Postgres).unwrap();
-    assert!(sql[0].starts_with("ALTER TABLE \"users_old\" RENAME TO \"users\""));
-    assert!(sql[1].contains("DROP CONSTRAINT chk_users_id"));
-}
-
-#[test]
-fn test_migration_orders_constraint_drop_before_column_drop() {
-    let migration = Migration {
-        name: "drop_user_id".into(),
-        operations: vec![
-            MigrationOp::DropColumn {
-                table: "users".into(),
-                field: "id".into(),
-                field_def: None,
-            },
-            MigrationOp::DropCheck {
-                table: "users".into(),
-                name: "chk_users_id".into(),
-                check_def: None,
-            },
-        ],
-    };
-
-    let sql = migration.to_sql(Dialect::Postgres).unwrap();
-    assert!(sql[0].contains("DROP CONSTRAINT chk_users_id"));
-    assert!(sql[1].contains("DROP COLUMN \"id\""));
+    assert_eq!(migration.to_sql(Dialect::Sqlite).unwrap(), expected);
 }
 
 #[test]
@@ -393,26 +358,25 @@ fn test_mysql_multiple_enum_value_append_modifies_inline_enum_columns_progressiv
 }
 
 #[test]
-fn test_postgres_enum_value_is_added_before_dependent_ddl() {
+fn test_compute_diff_adds_postgres_enum_value_before_dependent_ddl() {
+    let mut old = Snapshot::new();
+    old.add_table(enum_table(&["draft", "published"]));
+
+    let mut new_table = enum_table(&["draft", "published", "archived"]);
+    new_table.indexes.push(IndexDef {
+        name: "posts_archived_idx".into(),
+        fields: vec!["status".into()],
+        unique: false,
+        method: Some("btree".into()),
+        where_clause: Some("status = 'archived'".into()),
+    });
+    let mut new = Snapshot::new();
+    new.add_table(new_table);
+
+    let operations = compute_diff(&old, &new).unwrap();
     let migration = Migration {
         name: "enum_value".into(),
-        operations: vec![
-            MigrationOp::CreateIndex {
-                table: "posts".into(),
-                index: IndexDef {
-                    name: "posts_archived_idx".into(),
-                    fields: vec!["status".into()],
-                    unique: false,
-                    method: Some("btree".into()),
-                    where_clause: Some("status = 'archived'".into()),
-                },
-            },
-            MigrationOp::AddEnumValue {
-                name: "post_status_enum".into(),
-                value: "archived".into(),
-                fields: vec![],
-            },
-        ],
+        operations,
     };
 
     let sql = migration.to_sql(Dialect::Postgres).unwrap();
@@ -1184,6 +1148,194 @@ fn test_compute_diff_detects_dropped_column() {
             assert!(field_def.is_some());
         }
         _ => panic!("Expected DropColumn"),
+    }
+}
+
+#[test]
+fn test_compute_diff_drops_column_dependencies_before_the_column() {
+    let parent = table_with_fields("parents", &["id"]);
+    let mut old_users = table_with_fields("users", &["id", "age"]);
+    old_users.indexes.push(IndexDef {
+        name: "ix_users_age".into(),
+        fields: vec!["age".into()],
+        unique: false,
+        method: None,
+        where_clause: None,
+    });
+    old_users.foreign_keys.push(sample_foreign_key(
+        "fk_users_age",
+        &["age"],
+        "parents",
+        &["id"],
+    ));
+    old_users.checks.push(CheckDef {
+        name: "chk_users_age".into(),
+        expression: "age IS NOT NULL".into(),
+    });
+
+    let mut old = Snapshot::new();
+    old.add_table(parent.clone());
+    old.add_table(old_users);
+
+    let mut new = Snapshot::new();
+    new.add_table(parent);
+    new.add_table(table_with_fields("users", &["id"]));
+
+    let operations = compute_diff(&old, &new).unwrap();
+    for dialect in [Dialect::Postgres, Dialect::Mysql] {
+        let sql = Migration {
+            name: "drop_age".into(),
+            operations: operations.clone(),
+        }
+        .to_sql(dialect)
+        .unwrap();
+        let drop_column = sql
+            .iter()
+            .position(|statement| statement.contains("DROP COLUMN"))
+            .unwrap();
+
+        for dependency in ["ix_users_age", "fk_users_age", "chk_users_age"] {
+            let dependency_drop = sql
+                .iter()
+                .position(|statement| statement.contains(dependency))
+                .unwrap();
+            assert!(
+                dependency_drop < drop_column,
+                "{dependency} must be dropped before the column for {dialect:?}: {sql:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_compute_diff_drops_fk_before_its_referenced_column() {
+    let old_parent = table_with_fields("a_parent", &["id", "code"]);
+    let mut old_child = table_with_fields("z_child", &["id", "parent_code"]);
+    old_child.foreign_keys.push(sample_foreign_key(
+        "fk_child_parent_code",
+        &["parent_code"],
+        "a_parent",
+        &["code"],
+    ));
+
+    let mut old = Snapshot::new();
+    old.add_table(old_parent);
+    old.add_table(old_child);
+
+    let mut new = Snapshot::new();
+    new.add_table(table_with_fields("a_parent", &["id"]));
+    new.add_table(table_with_fields("z_child", &["id", "parent_code"]));
+
+    let operations = compute_diff(&old, &new).unwrap();
+    for dialect in [Dialect::Postgres, Dialect::Mysql] {
+        let sql = Migration {
+            name: "drop_parent_code".into(),
+            operations: operations.clone(),
+        }
+        .to_sql(dialect)
+        .unwrap();
+        let drop_fk = sql
+            .iter()
+            .position(|statement| statement.contains("fk_child_parent_code"))
+            .unwrap();
+        let drop_column = sql
+            .iter()
+            .position(|statement| statement.contains("DROP COLUMN"))
+            .unwrap();
+
+        assert!(
+            drop_fk < drop_column,
+            "the FK must be dropped before its referenced column for {dialect:?}: {sql:?}"
+        );
+    }
+}
+
+#[test]
+fn test_compute_diff_drops_fk_before_its_referenced_table() {
+    let parent = table_with_fields("a_parent", &["id"]);
+    let mut old_child = table_with_fields("z_child", &["id", "parent_id"]);
+    old_child.foreign_keys.push(sample_foreign_key(
+        "fk_child_parent",
+        &["parent_id"],
+        "a_parent",
+        &["id"],
+    ));
+
+    let mut old = Snapshot::new();
+    old.add_table(parent);
+    old.add_table(old_child);
+
+    let mut new = Snapshot::new();
+    new.add_table(table_with_fields("z_child", &["id", "parent_id"]));
+
+    let operations = compute_diff(&old, &new).unwrap();
+    for dialect in [Dialect::Postgres, Dialect::Mysql] {
+        let sql = Migration {
+            name: "drop_parent".into(),
+            operations: operations.clone(),
+        }
+        .to_sql(dialect)
+        .unwrap();
+        let drop_fk = sql
+            .iter()
+            .position(|statement| statement.contains("fk_child_parent"))
+            .unwrap();
+        let drop_table = sql
+            .iter()
+            .position(|statement| statement.starts_with("DROP TABLE"))
+            .unwrap();
+
+        assert!(
+            drop_fk < drop_table,
+            "the FK must be dropped before its referenced table for {dialect:?}: {sql:?}"
+        );
+    }
+}
+
+#[test]
+fn test_compute_diff_adds_local_and_referenced_columns_before_fk() {
+    let mut old = Snapshot::new();
+    old.add_table(table_with_fields("a_child", &["id"]));
+    old.add_table(table_with_fields("z_parent", &["id"]));
+
+    let mut new_child = table_with_fields("a_child", &["id", "parent_code"]);
+    new_child.foreign_keys.push(sample_foreign_key(
+        "fk_child_parent_code",
+        &["parent_code"],
+        "z_parent",
+        &["code"],
+    ));
+    let mut new = Snapshot::new();
+    new.add_table(new_child);
+    new.add_table(table_with_fields("z_parent", &["id", "code"]));
+
+    let operations = compute_diff(&old, &new).unwrap();
+    for dialect in [Dialect::Postgres, Dialect::Mysql] {
+        let sql = Migration {
+            name: "add_parent_code_fk".into(),
+            operations: operations.clone(),
+        }
+        .to_sql(dialect)
+        .unwrap();
+        let add_local_column = sql
+            .iter()
+            .position(|statement| statement.contains("ADD COLUMN") && statement.contains("a_child"))
+            .unwrap();
+        let add_referenced_column = sql
+            .iter()
+            .position(|statement| {
+                statement.contains("ADD COLUMN") && statement.contains("z_parent")
+            })
+            .unwrap();
+        let add_fk = sql
+            .iter()
+            .position(|statement| statement.contains("fk_child_parent_code"))
+            .unwrap();
+
+        assert!(
+            add_local_column < add_fk && add_referenced_column < add_fk,
+            "both FK columns must exist before the FK for {dialect:?}: {sql:?}"
+        );
     }
 }
 

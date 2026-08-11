@@ -5,8 +5,6 @@
 //! structure (CREATE/ALTER/DROP TABLE, indexes, foreign keys) uses sea-query
 //! for dialect-specific syntax and identifier quoting.
 
-use std::collections::BTreeSet;
-
 use sea_query::{
     Alias, ColumnDef as SeaColumnDef, Expr, ForeignKey as SeaForeignKey,
     ForeignKeyAction as SeaFkAction, Index as SeaIndex, IndexType, IntoIden, MysqlQueryBuilder,
@@ -15,9 +13,7 @@ use sea_query::{
 use serde::{Deserialize, Serialize};
 
 use crate::Dialect;
-use oxyde_codec::{
-    CheckDef, ColumnTypeSpec, FieldDef, ForeignKeyDef, IndexDef, MigrateError, MigrationOp,
-};
+use oxyde_codec::{CheckDef, FieldDef, ForeignKeyDef, IndexDef, MigrateError, MigrationOp};
 
 type Result<T> = std::result::Result<T, MigrateError>;
 
@@ -28,358 +24,15 @@ pub struct Migration {
     pub operations: Vec<MigrationOp>,
 }
 
-fn operation_table(op: &MigrationOp) -> Option<&str> {
-    match op {
-        MigrationOp::CreateTable { table } => Some(&table.name),
-        MigrationOp::DropTable { name, .. } => Some(name),
-        MigrationOp::AddColumn { table, .. }
-        | MigrationOp::DropColumn { table, .. }
-        | MigrationOp::RenameColumn { table, .. }
-        | MigrationOp::AlterColumn { table, .. }
-        | MigrationOp::CreateIndex { table, .. }
-        | MigrationOp::DropIndex { table, .. }
-        | MigrationOp::AddForeignKey { table, .. }
-        | MigrationOp::DropForeignKey { table, .. }
-        | MigrationOp::AddCheck { table, .. }
-        | MigrationOp::DropCheck { table, .. } => Some(table),
-        MigrationOp::CreateEnumType { .. }
-        | MigrationOp::DropEnumType { .. }
-        | MigrationOp::AddEnumValue { .. }
-        | MigrationOp::AlterEnumType { .. }
-        | MigrationOp::RenameTable { .. } => None,
-    }
-}
-
-fn requires_created_table(op: &MigrationOp) -> bool {
-    matches!(
-        op,
-        MigrationOp::AddColumn { .. }
-            | MigrationOp::AlterColumn { .. }
-            | MigrationOp::RenameColumn { .. }
-            | MigrationOp::CreateIndex { .. }
-            | MigrationOp::AddForeignKey { .. }
-            | MigrationOp::AddCheck { .. }
-    )
-}
-
-fn is_constraint_drop(op: &MigrationOp) -> bool {
-    matches!(
-        op,
-        MigrationOp::DropForeignKey { .. }
-            | MigrationOp::DropCheck { .. }
-            | MigrationOp::DropIndex { .. }
-    )
-}
-
-fn is_destructive_table_change(op: &MigrationOp) -> bool {
-    matches!(
-        op,
-        MigrationOp::DropColumn { .. } | MigrationOp::DropTable { .. }
-    )
-}
-
-/// Whether a create separates two operations that use the same table name.
-/// Such a boundary means the operations may belong to different table lifetimes.
-fn has_table_create_between(
-    operations: &[MigrationOp],
-    table: &str,
-    first: usize,
-    second: usize,
-) -> bool {
-    let (start, end) = if first < second {
-        (first, second)
-    } else {
-        (second, first)
-    };
-    if start + 1 >= end {
-        return false;
-    }
-    operations[start + 1..end].iter().any(
-        |op| matches!(op, MigrationOp::CreateTable { table: created } if created.name == table),
-    )
-}
-
-/// Whether a drop separates two operations that use the same table name.
-/// Such a boundary means the operations may belong to different table lifetimes.
-fn has_table_drop_between(
-    operations: &[MigrationOp],
-    table: &str,
-    first: usize,
-    second: usize,
-) -> bool {
-    let (start, end) = if first < second {
-        (first, second)
-    } else {
-        (second, first)
-    };
-    if start + 1 >= end {
-        return false;
-    }
-    operations[start + 1..end]
-        .iter()
-        .any(|op| matches!(op, MigrationOp::DropTable { name, .. } if name == table))
-}
-
-fn contains_enum(spec: &ColumnTypeSpec, enum_name: &str) -> bool {
-    match spec {
-        ColumnTypeSpec::Enum { name, .. } => name == enum_name,
-        ColumnTypeSpec::Array { item } => contains_enum(item, enum_name),
-        _ => false,
-    }
-}
-
-fn operation_uses_enum(op: &MigrationOp, enum_name: &str) -> bool {
-    match op {
-        MigrationOp::CreateTable { table } => table
-            .fields
-            .iter()
-            .any(|field| contains_enum(&field.column_type, enum_name)),
-        MigrationOp::AddColumn { field, .. } => contains_enum(&field.column_type, enum_name),
-        MigrationOp::AlterColumn { new_field, .. } => {
-            contains_enum(&new_field.column_type, enum_name)
-        }
-        MigrationOp::AddEnumValue { name, .. } => name == enum_name,
-        _ => false,
-    }
-}
-
-fn operation_may_release_enum(op: &MigrationOp, enum_name: &str) -> bool {
-    match op {
-        MigrationOp::DropTable {
-            table: Some(table), ..
-        } => table
-            .fields
-            .iter()
-            .any(|field| contains_enum(&field.column_type, enum_name)),
-        MigrationOp::DropTable { table: None, .. } => true,
-        MigrationOp::DropColumn {
-            field_def: Some(field),
-            ..
-        } => contains_enum(&field.column_type, enum_name),
-        MigrationOp::DropColumn {
-            field_def: None, ..
-        } => true,
-        MigrationOp::AlterColumn {
-            old_field,
-            new_field,
-            ..
-        } => {
-            contains_enum(&old_field.column_type, enum_name)
-                && !contains_enum(&new_field.column_type, enum_name)
-        }
-        _ => false,
-    }
-}
-
-fn add_enum_value_targets_table(op: &MigrationOp, table: &str) -> bool {
-    matches!(
-        op,
-        MigrationOp::AddEnumValue { fields, .. }
-            if fields.iter().any(|field| field.table == table)
-    )
-}
-
-fn add_dependency(
-    outgoing: &mut [BTreeSet<usize>],
-    in_degree: &mut [usize],
-    before: usize,
-    after: usize,
-) {
-    if before != after && outgoing[before].insert(after) {
-        in_degree[after] += 1;
-    }
-}
-
-/// Return a stable topological order for migration operations.
-///
-/// Authored order is the tie-breaker between dependency-valid operations.
-/// Dependencies encode concrete schema relationships instead of globally
-/// grouping operations by their rendered SQL type. This also covers dialects
-/// that emit relationships such as foreign keys as separate `ALTER TABLE`
-/// statements instead of including them in `CREATE TABLE`.
-fn order_operations(operations: &[MigrationOp]) -> Result<Vec<usize>> {
-    let mut outgoing = vec![BTreeSet::new(); operations.len()];
-    let mut in_degree = vec![0usize; operations.len()];
-
-    for (create_index, create_op) in operations.iter().enumerate() {
-        let MigrationOp::CreateTable { table } = create_op else {
-            continue;
-        };
-
-        for (op_index, op) in operations.iter().enumerate() {
-            if requires_created_table(op)
-                && operation_table(op) == Some(table.name.as_str())
-                && !has_table_drop_between(operations, &table.name, create_index, op_index)
-            {
-                add_dependency(&mut outgoing, &mut in_degree, create_index, op_index);
-            }
-
-            if let MigrationOp::AddForeignKey { fk, .. } = op {
-                if fk.ref_table == table.name
-                    && !has_table_drop_between(operations, &table.name, create_index, op_index)
-                {
-                    add_dependency(&mut outgoing, &mut in_degree, create_index, op_index);
-                }
-            }
-
-            if let MigrationOp::AddEnumValue { fields, .. } = op {
-                if fields.iter().any(|field| field.table == table.name)
-                    && !has_table_drop_between(operations, &table.name, create_index, op_index)
-                {
-                    add_dependency(&mut outgoing, &mut in_degree, create_index, op_index);
-                }
-            }
-
-            if let MigrationOp::DropTable { name, .. } = op {
-                if name == &table.name {
-                    if op_index < create_index {
-                        add_dependency(&mut outgoing, &mut in_degree, op_index, create_index);
-                    } else {
-                        add_dependency(&mut outgoing, &mut in_degree, create_index, op_index);
-                    }
-                }
-            }
-        }
-    }
-
-    for (drop_index, drop_op) in operations.iter().enumerate() {
-        if !is_constraint_drop(drop_op) {
-            continue;
-        }
-        let Some(table) = operation_table(drop_op) else {
-            continue;
-        };
-
-        for (destructive_index, destructive_op) in operations.iter().enumerate() {
-            if is_destructive_table_change(destructive_op)
-                && operation_table(destructive_op) == Some(table)
-                && !has_table_create_between(operations, table, drop_index, destructive_index)
-            {
-                add_dependency(&mut outgoing, &mut in_degree, drop_index, destructive_index);
-            }
-        }
-    }
-
-    for (column_index, column_op) in operations.iter().enumerate() {
-        let MigrationOp::DropColumn { table, .. } = column_op else {
-            continue;
-        };
-        for (table_index, table_op) in operations.iter().enumerate() {
-            if matches!(table_op, MigrationOp::DropTable { name, .. } if name == table)
-                && !has_table_create_between(operations, table, column_index, table_index)
-            {
-                add_dependency(&mut outgoing, &mut in_degree, column_index, table_index);
-            }
-        }
-    }
-
-    for (rename_index, rename_op) in operations.iter().enumerate() {
-        let MigrationOp::RenameTable { old_name, new_name } = rename_op else {
-            continue;
-        };
-        for (op_index, op) in operations.iter().enumerate() {
-            let targets_old_name =
-                operation_table(op) == Some(old_name) || add_enum_value_targets_table(op, old_name);
-            let targets_new_name =
-                operation_table(op) == Some(new_name) || add_enum_value_targets_table(op, new_name);
-            if op_index < rename_index && targets_old_name {
-                add_dependency(&mut outgoing, &mut in_degree, op_index, rename_index);
-            } else if op_index > rename_index && targets_new_name {
-                add_dependency(&mut outgoing, &mut in_degree, rename_index, op_index);
-            }
-        }
-    }
-
-    for (enum_index, enum_op) in operations.iter().enumerate() {
-        match enum_op {
-            MigrationOp::CreateEnumType { name, .. } => {
-                for (op_index, op) in operations.iter().enumerate() {
-                    if operation_uses_enum(op, name) {
-                        add_dependency(&mut outgoing, &mut in_degree, enum_index, op_index);
-                    }
-                }
-            }
-            MigrationOp::DropEnumType { name, .. } => {
-                for (op_index, op) in operations.iter().enumerate() {
-                    if operation_may_release_enum(op, name) {
-                        add_dependency(&mut outgoing, &mut in_degree, op_index, enum_index);
-                    }
-                }
-            }
-            MigrationOp::AddEnumValue { fields, .. } => {
-                for (op_index, op) in operations.iter().enumerate() {
-                    let depends_on_value = if fields.is_empty() {
-                        !matches!(
-                            op,
-                            MigrationOp::CreateEnumType { .. }
-                                | MigrationOp::DropEnumType { .. }
-                                | MigrationOp::AddEnumValue { .. }
-                                | MigrationOp::AlterEnumType { .. }
-                        )
-                    } else {
-                        operation_table(op).is_some_and(|table| {
-                            fields.iter().any(|field| field.table == table)
-                                && matches!(
-                                    op,
-                                    MigrationOp::AddColumn { .. }
-                                        | MigrationOp::AlterColumn { .. }
-                                        | MigrationOp::CreateIndex { .. }
-                                        | MigrationOp::AddForeignKey { .. }
-                                        | MigrationOp::AddCheck { .. }
-                                )
-                        })
-                    };
-                    if depends_on_value {
-                        add_dependency(&mut outgoing, &mut in_degree, enum_index, op_index);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let mut ready: BTreeSet<usize> = in_degree
-        .iter()
-        .enumerate()
-        .filter_map(|(index, degree)| (*degree == 0).then_some(index))
-        .collect();
-    let mut ordered = Vec::with_capacity(operations.len());
-
-    while let Some(index) = ready.pop_first() {
-        ordered.push(index);
-        for dependent in &outgoing[index] {
-            in_degree[*dependent] -= 1;
-            if in_degree[*dependent] == 0 {
-                ready.insert(*dependent);
-            }
-        }
-    }
-
-    if ordered.len() != operations.len() {
-        let blocked = in_degree
-            .iter()
-            .enumerate()
-            .filter_map(|(index, degree)| (*degree > 0).then_some(index.to_string()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        return Err(MigrateError::MigrationError(format!(
-            "cyclic migration operation dependencies at indices: {blocked}"
-        )));
-    }
-
-    Ok(ordered)
-}
-
 impl Migration {
     /// Generate SQL statements for this migration.
     ///
-    /// Operations are stably ordered by their concrete schema dependencies,
-    /// with authored order used to break ties. Statements emitted by one
+    /// Operations are rendered in authored order. Statements emitted by one
     /// operation remain contiguous and in renderer order.
     pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
         let mut all_sql = Vec::new();
-        for index in order_operations(&self.operations)? {
-            all_sql.extend(self.operations[index].to_sql(dialect)?);
+        for op in &self.operations {
+            all_sql.extend(op.to_sql(dialect)?);
         }
         Ok(all_sql)
     }
@@ -721,8 +374,8 @@ impl MigrationOpExt for MigrationOp {
                     sql.push(build_create_index(&table.name, index, dialect)?);
                 }
 
-                // PG/MySQL: FK and CHECK as separate ALTER TABLE statements
-                // (handles circular dependencies between tables)
+                // PG/MySQL: FK and CHECK as separate ALTER TABLE statements.
+                // The migration plan must create referenced tables first.
                 if dialect != Dialect::Sqlite {
                     for fk in &table.foreign_keys {
                         sql.push(build_sql!(build_fk_stmt(&table.name, fk), dialect));

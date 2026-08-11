@@ -221,6 +221,12 @@ fn existing_scalar_enum_fields(
 /// Cycles among unchanged tables are irrelevant and pass through silently.
 pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> {
     let mut ops = Vec::new();
+    // The differ has both schema snapshots, so it can stage dependency
+    // operations, including relationships that span tables, without changing
+    // authored renderer order.
+    let mut dependency_drops = Vec::new();
+    let mut column_changes = Vec::new();
+    let mut dependency_adds = Vec::new();
     let old_enums = collect_enum_defs(old)?;
     let new_enums = collect_enum_defs(new)?;
 
@@ -284,15 +290,6 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
     let old_order = topo_sort_table_names(&old_to_drop)?;
-    for name in old_order.iter().rev() {
-        if let Some(old_table) = old_to_drop.get(name) {
-            ops.push(MigrationOp::DropTable {
-                name: name.clone(),
-                table: Some(old_table.clone()),
-            });
-        }
-    }
-
     // Find modified tables (sorted: HashMap order must not leak into files)
     let mut modified: Vec<&String> = new.tables.keys().collect();
     modified.sort();
@@ -302,7 +299,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
             // Compare fields - find added columns
             for new_field in &new_table.fields {
                 if !old_table.fields.iter().any(|f| f.name == new_field.name) {
-                    ops.push(MigrationOp::AddColumn {
+                    column_changes.push(MigrationOp::AddColumn {
                         table: name.clone(),
                         field: new_field.clone(),
                     });
@@ -312,7 +309,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
             // Find dropped columns
             for old_field in &old_table.fields {
                 if !new_table.fields.iter().any(|f| f.name == old_field.name) {
-                    ops.push(MigrationOp::DropColumn {
+                    column_changes.push(MigrationOp::DropColumn {
                         table: name.clone(),
                         field: old_field.name.clone(),
                         field_def: Some(old_field.clone()),
@@ -347,7 +344,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
                         || unique_changed
                         || constraints_changed
                     {
-                        ops.push(MigrationOp::AlterColumn {
+                        column_changes.push(MigrationOp::AlterColumn {
                             table: name.clone(),
                             old_field: old_field.clone(),
                             new_field: new_field.clone(),
@@ -369,18 +366,18 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
                     .find(|idx| idx.name == old_idx.name)
                 {
                     Some(new_idx) if !new_idx.semantically_eq(old_idx) => {
-                        ops.push(MigrationOp::DropIndex {
+                        dependency_drops.push(MigrationOp::DropIndex {
                             table: name.clone(),
                             name: old_idx.name.clone(),
                             index_def: Some(old_idx.clone()),
                         });
-                        ops.push(MigrationOp::CreateIndex {
+                        dependency_adds.push(MigrationOp::CreateIndex {
                             table: name.clone(),
                             index: new_idx.clone(),
                         });
                     }
                     None => {
-                        ops.push(MigrationOp::DropIndex {
+                        dependency_drops.push(MigrationOp::DropIndex {
                             table: name.clone(),
                             name: old_idx.name.clone(),
                             index_def: Some(old_idx.clone()),
@@ -393,7 +390,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
             // Find added indexes
             for new_idx in &new_table.indexes {
                 if !old_table.indexes.iter().any(|idx| idx.name == new_idx.name) {
-                    ops.push(MigrationOp::CreateIndex {
+                    dependency_adds.push(MigrationOp::CreateIndex {
                         table: name.clone(),
                         index: new_idx.clone(),
                     });
@@ -407,7 +404,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
                     .iter()
                     .any(|fk| fk.name == new_fk.name)
                 {
-                    ops.push(MigrationOp::AddForeignKey {
+                    dependency_adds.push(MigrationOp::AddForeignKey {
                         table: name.clone(),
                         fk: new_fk.clone(),
                     });
@@ -421,7 +418,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
                     .iter()
                     .any(|fk| fk.name == old_fk.name)
                 {
-                    ops.push(MigrationOp::DropForeignKey {
+                    dependency_drops.push(MigrationOp::DropForeignKey {
                         table: name.clone(),
                         name: old_fk.name.clone(),
                         fk_def: Some(old_fk.clone()),
@@ -433,18 +430,18 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
             for old_check in &old_table.checks {
                 match new_table.checks.iter().find(|c| c.name == old_check.name) {
                     Some(new_check) if new_check.expression != old_check.expression => {
-                        ops.push(MigrationOp::DropCheck {
+                        dependency_drops.push(MigrationOp::DropCheck {
                             table: name.clone(),
                             name: old_check.name.clone(),
                             check_def: Some(old_check.clone()),
                         });
-                        ops.push(MigrationOp::AddCheck {
+                        dependency_adds.push(MigrationOp::AddCheck {
                             table: name.clone(),
                             check: new_check.clone(),
                         });
                     }
                     None => {
-                        ops.push(MigrationOp::DropCheck {
+                        dependency_drops.push(MigrationOp::DropCheck {
                             table: name.clone(),
                             name: old_check.name.clone(),
                             check_def: Some(old_check.clone()),
@@ -457,7 +454,7 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
             // Find added check constraints
             for new_check in &new_table.checks {
                 if !old_table.checks.iter().any(|c| c.name == new_check.name) {
-                    ops.push(MigrationOp::AddCheck {
+                    dependency_adds.push(MigrationOp::AddCheck {
                         table: name.clone(),
                         check: new_check.clone(),
                     });
@@ -465,6 +462,21 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
             }
         }
     }
+
+    // Remove dependencies before dropping columns or tables.
+    ops.extend(dependency_drops);
+    for name in old_order.iter().rev() {
+        if let Some(old_table) = old_to_drop.get(name) {
+            ops.push(MigrationOp::DropTable {
+                name: name.clone(),
+                table: Some(old_table.clone()),
+            });
+        }
+    }
+    // Preserve the existing Add/Drop/Alter column order while ensuring every
+    // table's new columns precede indexes and constraints that use them.
+    ops.extend(column_changes);
+    ops.extend(dependency_adds);
 
     for name in sorted_keys(&old_enums) {
         if !new_enums.contains_key(&name) {

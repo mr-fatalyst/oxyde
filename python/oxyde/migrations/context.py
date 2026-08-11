@@ -59,7 +59,6 @@ class MigrationContext:
         self._schema_state = schema_state
         self._operations: list[dict[str, Any]] = []
         self._raw_sql_seen = False
-        self._pending_operations: list[dict[str, Any]] = []
         self._sql_statements: list[str] = []
         self._non_transactional_ddl = False
 
@@ -515,7 +514,7 @@ class MigrationContext:
         return self._operations
 
     def _execute_operation(self, op: dict[str, Any]) -> None:
-        """Queue an operation for ordered SQL rendering.
+        """Convert operation to SQL and execute in database.
 
         Args:
             op: Operation dictionary
@@ -526,21 +525,13 @@ class MigrationContext:
 
         op = normalize_op_fields(op)
 
-        # Render the whole batch together so the Rust migration renderer can
-        # enforce cross-operation dependencies. Rendering operations individually
-        # bypasses migration-wide ordering.
-        self._pending_operations.append(op)
-
-    def _flush_pending_operations(self) -> None:
-        """Render queued structured operations into the SQL batch."""
-        if not self._pending_operations:
-            return
-
-        # Convert the queued operations to SQL using Rust.
-        operations_json = json.dumps(self._pending_operations)
+        # Convert operation to SQL using Rust
+        operations_json = json.dumps([op])
         sql_statements = migration_to_sql(operations_json, self._dialect)
-        self._sql_statements.extend(sql_statements)
-        self._pending_operations.clear()
+
+        # Execute each SQL statement
+        for sql in sql_statements:
+            self._execute_raw_sql(sql)
 
     def _execute_raw_sql(self, sql: str) -> None:
         """Execute SQL in database (collects SQL for batch execution).
@@ -551,12 +542,8 @@ class MigrationContext:
         if self._mode != "execute":
             return
 
-        # Raw SQL is an explicit ordering barrier. Render structured operations
-        # seen so far, then preserve the hand-written statement in its position.
-        self._flush_pending_operations()
-
-        # Collect SQL statements for batch execution.
-        # They will be executed by the executor after upgrade() completes.
+        # Collect SQL statements for batch execution
+        # They will be executed by the executor after upgrade() completes
         self._sql_statements.append(sql)
 
     async def _execute_collected_sql(self) -> None:
@@ -574,7 +561,6 @@ class MigrationContext:
         connections to different queries. The Rust transaction API ensures all queries
         in a transaction use the same connection.
         """
-        self._flush_pending_operations()
         if not self._sql_statements:
             return
 
@@ -588,7 +574,6 @@ class MigrationContext:
             if use_transaction:
                 tx_id = await begin_transaction(self._db_conn.name)
 
-            # Execute each SQL statement in the collected batch.
             for sql in self._sql_statements:
                 sql_ir = build_raw_sql_ir(sql=sql)
                 if tx_id is not None:
