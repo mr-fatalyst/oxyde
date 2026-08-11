@@ -1340,6 +1340,160 @@ fn test_compute_diff_adds_local_and_referenced_columns_before_fk() {
 }
 
 #[test]
+fn test_compute_diff_adds_existing_table_column_before_new_table_fk() {
+    let mut old = Snapshot::new();
+    old.add_table(table_with_fields("z_parent", &["id"]));
+
+    let mut new_parent = table_with_fields("z_parent", &["id", "code"]);
+    new_parent
+        .fields
+        .iter_mut()
+        .find(|field| field.name == "code")
+        .unwrap()
+        .unique = true;
+
+    let mut new_child = table_with_fields("a_child", &["id", "parent_code"]);
+    new_child.foreign_keys.push(sample_foreign_key(
+        "fk_child_parent_code",
+        &["parent_code"],
+        "z_parent",
+        &["code"],
+    ));
+
+    let mut new = Snapshot::new();
+    new.add_table(new_parent);
+    new.add_table(new_child);
+
+    let operations = compute_diff(&old, &new).unwrap();
+    for dialect in [Dialect::Postgres, Dialect::Mysql] {
+        let sql = Migration {
+            name: "create_child_with_new_parent_column".into(),
+            operations: operations.clone(),
+        }
+        .to_sql(dialect)
+        .unwrap();
+        let add_referenced_column = sql
+            .iter()
+            .position(|statement| {
+                statement.contains("ADD COLUMN")
+                    && statement.contains("z_parent")
+                    && statement.contains("code")
+            })
+            .unwrap();
+        let add_fk = sql
+            .iter()
+            .position(|statement| statement.contains("fk_child_parent_code"))
+            .unwrap();
+
+        assert!(
+            add_referenced_column < add_fk,
+            "the referenced column must exist before the new table's FK for {dialect:?}: {sql:?}"
+        );
+    }
+}
+
+#[test]
+fn test_compute_diff_drops_fk_before_its_supporting_index() {
+    let parent = table_with_fields("z_parent", &["id"]);
+    let mut old_child = table_with_fields("a_child", &["id", "parent_id"]);
+    old_child.indexes.push(IndexDef {
+        name: "ix_child_parent_id".into(),
+        fields: vec!["parent_id".into()],
+        unique: false,
+        method: None,
+        where_clause: None,
+    });
+    old_child.foreign_keys.push(sample_foreign_key(
+        "fk_child_parent",
+        &["parent_id"],
+        "z_parent",
+        &["id"],
+    ));
+
+    let mut old = Snapshot::new();
+    old.add_table(parent.clone());
+    old.add_table(old_child);
+
+    let mut new = Snapshot::new();
+    new.add_table(parent);
+    new.add_table(table_with_fields("a_child", &["id", "parent_id"]));
+
+    let operations = compute_diff(&old, &new).unwrap();
+    let sql = Migration {
+        name: "drop_fk_and_index".into(),
+        operations,
+    }
+    .to_sql(Dialect::Mysql)
+    .unwrap();
+    let drop_fk = sql
+        .iter()
+        .position(|statement| statement.contains("fk_child_parent"))
+        .unwrap();
+    let drop_index = sql
+        .iter()
+        .position(|statement| statement.contains("ix_child_parent_id"))
+        .unwrap();
+
+    assert!(
+        drop_fk < drop_index,
+        "MySQL requires the FK to be removed before its supporting index: {sql:?}"
+    );
+}
+
+#[test]
+fn test_compute_diff_creates_referenced_index_before_fk() {
+    let child = table_with_fields("a_child", &["id", "parent_code"]);
+    let parent = table_with_fields("z_parent", &["id", "code"]);
+
+    let mut old = Snapshot::new();
+    old.add_table(child.clone());
+    old.add_table(parent.clone());
+
+    let mut new_child = child;
+    new_child.foreign_keys.push(sample_foreign_key(
+        "fk_child_parent_code",
+        &["parent_code"],
+        "z_parent",
+        &["code"],
+    ));
+    let mut new_parent = parent;
+    new_parent.indexes.push(IndexDef {
+        name: "ux_parent_code".into(),
+        fields: vec!["code".into()],
+        unique: true,
+        method: None,
+        where_clause: None,
+    });
+
+    let mut new = Snapshot::new();
+    new.add_table(new_child);
+    new.add_table(new_parent);
+
+    let operations = compute_diff(&old, &new).unwrap();
+    for dialect in [Dialect::Postgres, Dialect::Mysql] {
+        let sql = Migration {
+            name: "add_index_and_fk".into(),
+            operations: operations.clone(),
+        }
+        .to_sql(dialect)
+        .unwrap();
+        let create_index = sql
+            .iter()
+            .position(|statement| statement.contains("ux_parent_code"))
+            .unwrap();
+        let add_fk = sql
+            .iter()
+            .position(|statement| statement.contains("fk_child_parent_code"))
+            .unwrap();
+
+        assert!(
+            create_index < add_fk,
+            "the referenced index must exist before the FK for {dialect:?}: {sql:?}"
+        );
+    }
+}
+
+#[test]
 fn test_compute_diff_detects_index_changes() {
     let mut old = Snapshot::new();
     old.add_table(sample_table());

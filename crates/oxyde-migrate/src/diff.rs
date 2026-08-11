@@ -1,9 +1,12 @@
 //! Schema diff computation.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::Result;
-use oxyde_codec::{ColumnTypeSpec, EnumFieldRef, MigrateError, MigrationOp, Snapshot, TableDef};
+use oxyde_codec::{
+    ColumnTypeSpec, EnumFieldRef, ForeignKeyDef, IndexDef, MigrateError, MigrationOp, Snapshot,
+    TableDef,
+};
 
 /// Topologically sort table names so that referenced tables come before
 /// tables that reference them. External FK targets (not in `tables`) are
@@ -214,11 +217,318 @@ fn existing_scalar_enum_fields(
     fields
 }
 
+fn index_covers_columns(index: &IndexDef, columns: &[String]) -> bool {
+    !columns.is_empty()
+        && index.fields.len() >= columns.len()
+        && index.fields[..columns.len()] == *columns
+}
+
+fn index_supports_fk(
+    index_table: &str,
+    index: &IndexDef,
+    fk_table: &str,
+    fk: &ForeignKeyDef,
+) -> bool {
+    (index_table == fk_table && index_covers_columns(index, &fk.columns))
+        || (index_table == fk.ref_table && index_covers_columns(index, &fk.ref_columns))
+}
+
+fn added_or_altered_column(op: &MigrationOp) -> Option<(&str, &str)> {
+    match op {
+        MigrationOp::AddColumn { table, field } => Some((table, &field.name)),
+        MigrationOp::AlterColumn {
+            table, new_field, ..
+        } => Some((table, &new_field.name)),
+        _ => None,
+    }
+}
+
+fn dropped_or_altered_column(op: &MigrationOp) -> Option<(&str, &str)> {
+    match op {
+        MigrationOp::DropColumn { table, field, .. } => Some((table, field)),
+        MigrationOp::AlterColumn {
+            table, old_field, ..
+        } => Some((table, &old_field.name)),
+        _ => None,
+    }
+}
+
+fn fk_uses_column(fk_table: &str, fk: &ForeignKeyDef, table: &str, column: &str) -> bool {
+    (fk_table == table && fk.columns.iter().any(|name| name == column))
+        || (fk.ref_table == table && fk.ref_columns.iter().any(|name| name == column))
+}
+
+fn add_dependency(prerequisites: &mut [BTreeSet<usize>], before: usize, after: usize) {
+    if before != after {
+        prerequisites[after].insert(before);
+    }
+}
+
+fn visit_operation(
+    index: usize,
+    operations: &[MigrationOp],
+    prerequisites: &[BTreeSet<usize>],
+    states: &mut [u8],
+    ordered: &mut Vec<usize>,
+) -> Result<()> {
+    match states[index] {
+        2 => return Ok(()),
+        1 => {
+            return Err(MigrateError::DiffError(format!(
+                "cyclic dependency while ordering generated migration operation: {:?}",
+                operations[index]
+            )));
+        }
+        _ => {}
+    }
+
+    states[index] = 1;
+    for &prerequisite in &prerequisites[index] {
+        visit_operation(prerequisite, operations, prerequisites, states, ordered)?;
+    }
+    states[index] = 2;
+    ordered.push(index);
+    Ok(())
+}
+
+/// Stably order generated operations from their concrete schema dependencies.
+///
+/// `compute_diff` owns full table, index, and foreign-key definitions, so it can
+/// safely move only prerequisites while leaving unrelated generated operations
+/// in their deterministic discovery order. The SQL renderer intentionally does
+/// not call this function: hand-authored migrations remain authored-order code.
+fn order_generated_operations(operations: Vec<MigrationOp>) -> Result<Vec<MigrationOp>> {
+    let mut prerequisites = vec![BTreeSet::new(); operations.len()];
+
+    for (after, operation) in operations.iter().enumerate() {
+        match operation {
+            MigrationOp::CreateTable { table } => {
+                for fk in &table.foreign_keys {
+                    for (before, candidate) in operations.iter().enumerate() {
+                        match candidate {
+                            MigrationOp::CreateTable { table: referenced }
+                                if referenced.name == fk.ref_table
+                                    && referenced.name != table.name =>
+                            {
+                                add_dependency(&mut prerequisites, before, after);
+                            }
+                            MigrationOp::CreateIndex {
+                                table: index_table,
+                                index,
+                            } if index_supports_fk(index_table, index, &table.name, fk) => {
+                                add_dependency(&mut prerequisites, before, after);
+                            }
+                            _ => {
+                                if let Some((column_table, column)) =
+                                    added_or_altered_column(candidate)
+                                {
+                                    if column_table == fk.ref_table
+                                        && fk.ref_columns.iter().any(|name| name == column)
+                                    {
+                                        add_dependency(&mut prerequisites, before, after);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            MigrationOp::CreateIndex { table, index } => {
+                for (before, candidate) in operations.iter().enumerate() {
+                    match candidate {
+                        MigrationOp::CreateTable { table: created } if created.name == *table => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::DropIndex {
+                            table: dropped_table,
+                            name,
+                            ..
+                        } if dropped_table == table && name == &index.name => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        _ => {
+                            if let Some((column_table, column)) = added_or_altered_column(candidate)
+                            {
+                                if column_table == table
+                                    && index.fields.iter().any(|name| name == column)
+                                {
+                                    add_dependency(&mut prerequisites, before, after);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            MigrationOp::AddForeignKey { table, fk } => {
+                for (before, candidate) in operations.iter().enumerate() {
+                    match candidate {
+                        MigrationOp::CreateTable { table: created }
+                            if created.name == *table || created.name == fk.ref_table =>
+                        {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::CreateIndex {
+                            table: index_table,
+                            index,
+                        } if index_supports_fk(index_table, index, table, fk) => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::DropForeignKey {
+                            table: dropped_table,
+                            name,
+                            ..
+                        } if dropped_table == table && name == &fk.name => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        _ => {
+                            if let Some((column_table, column)) = added_or_altered_column(candidate)
+                            {
+                                if fk_uses_column(table, fk, column_table, column) {
+                                    add_dependency(&mut prerequisites, before, after);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            MigrationOp::AddCheck { table, check } => {
+                for (before, candidate) in operations.iter().enumerate() {
+                    match candidate {
+                        MigrationOp::CreateTable { table: created } if created.name == *table => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::DropCheck {
+                            table: dropped_table,
+                            name,
+                            ..
+                        } if dropped_table == table && name == &check.name => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        _ => {
+                            if let Some((column_table, _)) = added_or_altered_column(candidate) {
+                                if column_table == table {
+                                    add_dependency(&mut prerequisites, before, after);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            MigrationOp::DropTable { name, .. } => {
+                for (before, candidate) in operations.iter().enumerate() {
+                    match candidate {
+                        MigrationOp::DropForeignKey {
+                            table,
+                            fk_def: Some(fk),
+                            ..
+                        } if table == name || fk.ref_table == *name => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::DropIndex { table, .. }
+                        | MigrationOp::DropCheck { table, .. }
+                            if table == name =>
+                        {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::DropTable {
+                            name: child_name,
+                            table: Some(child),
+                        } if child_name != name
+                            && child.foreign_keys.iter().any(|fk| fk.ref_table == *name) =>
+                        {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            MigrationOp::DropIndex {
+                table,
+                index_def: Some(index),
+                ..
+            } => {
+                for (before, candidate) in operations.iter().enumerate() {
+                    if let MigrationOp::DropForeignKey {
+                        table: fk_table,
+                        fk_def: Some(fk),
+                        ..
+                    } = candidate
+                    {
+                        if index_supports_fk(table, index, fk_table, fk) {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                    }
+                }
+            }
+            MigrationOp::DropColumn { .. } | MigrationOp::AlterColumn { .. } => {
+                let Some((table, column)) = dropped_or_altered_column(operation) else {
+                    unreachable!();
+                };
+                for (before, candidate) in operations.iter().enumerate() {
+                    match candidate {
+                        MigrationOp::DropForeignKey {
+                            table: fk_table,
+                            fk_def: Some(fk),
+                            ..
+                        } if fk_uses_column(fk_table, fk, table, column) => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::DropIndex {
+                            table: index_table,
+                            index_def: Some(index),
+                            ..
+                        } if index_table == table
+                            && index.fields.iter().any(|name| name == column) =>
+                        {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::DropCheck {
+                            table: check_table, ..
+                        } if check_table == table => {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        MigrationOp::DropTable {
+                            table: Some(dropped_table),
+                            ..
+                        } if dropped_table
+                            .foreign_keys
+                            .iter()
+                            .any(|fk| fk_uses_column(&dropped_table.name, fk, table, column)) =>
+                        {
+                            add_dependency(&mut prerequisites, before, after);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut ordered_indices = Vec::with_capacity(operations.len());
+    let mut states = vec![0; operations.len()];
+    for index in 0..operations.len() {
+        visit_operation(
+            index,
+            &operations,
+            &prerequisites,
+            &mut states,
+            &mut ordered_indices,
+        )?;
+    }
+
+    let mut operation_slots = operations.into_iter().map(Some).collect::<Vec<_>>();
+    Ok(ordered_indices
+        .into_iter()
+        .map(|index| operation_slots[index].take().unwrap())
+        .collect())
+}
+
 /// Compute diff between two snapshots.
 ///
-/// Returns `Err` only when the create- or drop-subset itself contains a
-/// foreign-key cycle (i.e. the cycle blocks linear CREATE/DROP ordering).
-/// Cycles among unchanged tables are irrelevant and pass through silently.
+/// Returns `Err` when schema definitions conflict or when the generated
+/// operations contain a dependency cycle that prevents a linear migration.
+/// Foreign-key cycles wholly among unchanged tables remain irrelevant.
 pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> {
     let mut ops = Vec::new();
     // The differ has both schema snapshots, so it can stage dependency
@@ -487,5 +797,5 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
         }
     }
 
-    Ok(ops)
+    order_generated_operations(ops)
 }
