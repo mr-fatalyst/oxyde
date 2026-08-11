@@ -243,16 +243,6 @@ fn added_or_altered_column(op: &MigrationOp) -> Option<(&str, &str)> {
     }
 }
 
-fn dropped_or_altered_column(op: &MigrationOp) -> Option<(&str, &str)> {
-    match op {
-        MigrationOp::DropColumn { table, field, .. } => Some((table, field)),
-        MigrationOp::AlterColumn {
-            table, old_field, ..
-        } => Some((table, &old_field.name)),
-        _ => None,
-    }
-}
-
 fn fk_uses_column(fk_table: &str, fk: &ForeignKeyDef, table: &str, column: &str) -> bool {
     (fk_table == table && fk.columns.iter().any(|name| name == column))
         || (fk.ref_table == table && fk.ref_columns.iter().any(|name| name == column))
@@ -264,31 +254,47 @@ fn add_dependency(prerequisites: &mut [BTreeSet<usize>], before: usize, after: u
     }
 }
 
-fn visit_operation(
-    index: usize,
+fn add_column_drop_dependencies(
+    prerequisites: &mut [BTreeSet<usize>],
     operations: &[MigrationOp],
-    prerequisites: &[BTreeSet<usize>],
-    states: &mut [u8],
-    ordered: &mut Vec<usize>,
-) -> Result<()> {
-    match states[index] {
-        2 => return Ok(()),
-        1 => {
-            return Err(MigrateError::DiffError(format!(
-                "cyclic dependency while ordering generated migration operation: {:?}",
-                operations[index]
-            )));
+    after: usize,
+    table: &str,
+    column: &str,
+) {
+    for (before, candidate) in operations.iter().enumerate() {
+        match candidate {
+            MigrationOp::DropForeignKey {
+                table: fk_table,
+                fk_def: Some(fk),
+                ..
+            } if fk_uses_column(fk_table, fk, table, column) => {
+                add_dependency(prerequisites, before, after);
+            }
+            MigrationOp::DropIndex {
+                table: index_table,
+                index_def: Some(index),
+                ..
+            } if index_table == table && index.fields.iter().any(|name| name == column) => {
+                add_dependency(prerequisites, before, after);
+            }
+            MigrationOp::DropCheck {
+                table: check_table, ..
+            } if check_table == table => {
+                add_dependency(prerequisites, before, after);
+            }
+            MigrationOp::DropTable {
+                table: Some(dropped_table),
+                ..
+            } if dropped_table
+                .foreign_keys
+                .iter()
+                .any(|fk| fk_uses_column(&dropped_table.name, fk, table, column)) =>
+            {
+                add_dependency(prerequisites, before, after);
+            }
+            _ => {}
         }
-        _ => {}
     }
-
-    states[index] = 1;
-    for &prerequisite in &prerequisites[index] {
-        visit_operation(prerequisite, operations, prerequisites, states, ordered)?;
-    }
-    states[index] = 2;
-    ordered.push(index);
-    Ok(())
 }
 
 /// Stably order generated operations from their concrete schema dependencies.
@@ -460,61 +466,62 @@ fn order_generated_operations(operations: Vec<MigrationOp>) -> Result<Vec<Migrat
                     }
                 }
             }
-            MigrationOp::DropColumn { .. } | MigrationOp::AlterColumn { .. } => {
-                let Some((table, column)) = dropped_or_altered_column(operation) else {
-                    unreachable!();
-                };
-                for (before, candidate) in operations.iter().enumerate() {
-                    match candidate {
-                        MigrationOp::DropForeignKey {
-                            table: fk_table,
-                            fk_def: Some(fk),
-                            ..
-                        } if fk_uses_column(fk_table, fk, table, column) => {
-                            add_dependency(&mut prerequisites, before, after);
-                        }
-                        MigrationOp::DropIndex {
-                            table: index_table,
-                            index_def: Some(index),
-                            ..
-                        } if index_table == table
-                            && index.fields.iter().any(|name| name == column) =>
-                        {
-                            add_dependency(&mut prerequisites, before, after);
-                        }
-                        MigrationOp::DropCheck {
-                            table: check_table, ..
-                        } if check_table == table => {
-                            add_dependency(&mut prerequisites, before, after);
-                        }
-                        MigrationOp::DropTable {
-                            table: Some(dropped_table),
-                            ..
-                        } if dropped_table
-                            .foreign_keys
-                            .iter()
-                            .any(|fk| fk_uses_column(&dropped_table.name, fk, table, column)) =>
-                        {
-                            add_dependency(&mut prerequisites, before, after);
-                        }
-                        _ => {}
-                    }
-                }
+            MigrationOp::DropColumn { table, field, .. } => {
+                add_column_drop_dependencies(&mut prerequisites, &operations, after, table, field);
+            }
+            MigrationOp::AlterColumn {
+                table, old_field, ..
+            } => {
+                add_column_drop_dependencies(
+                    &mut prerequisites,
+                    &operations,
+                    after,
+                    table,
+                    &old_field.name,
+                );
             }
             _ => {}
         }
     }
 
+    // Stable Kahn ordering preserves the staged discovery order whenever more
+    // than one operation is ready. A DFS post-order can hoist a later
+    // prerequisite ahead of an unrelated earlier operation and cross the
+    // dependency-drop / table-drop / column-change staging boundaries below.
+    let mut dependents = vec![BTreeSet::new(); operations.len()];
+    let mut in_degree = vec![0usize; operations.len()];
+    for (after, required) in prerequisites.iter().enumerate() {
+        in_degree[after] = required.len();
+        for &before in required {
+            dependents[before].insert(after);
+        }
+    }
+
+    let mut ready = in_degree
+        .iter()
+        .enumerate()
+        .filter_map(|(index, &degree)| (degree == 0).then_some(index))
+        .collect::<BTreeSet<_>>();
     let mut ordered_indices = Vec::with_capacity(operations.len());
-    let mut states = vec![0; operations.len()];
-    for index in 0..operations.len() {
-        visit_operation(
-            index,
-            &operations,
-            &prerequisites,
-            &mut states,
-            &mut ordered_indices,
-        )?;
+    while let Some(index) = ready.pop_first() {
+        ordered_indices.push(index);
+        for &dependent in &dependents[index] {
+            in_degree[dependent] -= 1;
+            if in_degree[dependent] == 0 {
+                ready.insert(dependent);
+            }
+        }
+    }
+
+    if ordered_indices.len() != operations.len() {
+        let index = in_degree
+            .iter()
+            .position(|&degree| degree != 0)
+            .expect("an incomplete topological order must leave a dependency");
+        return Err(MigrateError::DiffError(format!(
+            "cyclic dependency while ordering generated migration operation: {:?}",
+            operations[index]
+        )));
     }
 
     let mut operation_slots = operations.into_iter().map(Some).collect::<Vec<_>>();
@@ -540,6 +547,9 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
     let old_enums = collect_enum_defs(old)?;
     let new_enums = collect_enum_defs(new)?;
 
+    // Generated migrations must create enum types before tables or columns can
+    // reference them. `order_generated_operations` has no enum graph edges, so
+    // this insertion position is an explicit ordering invariant.
     for name in sorted_keys(&new_enums) {
         if !old_enums.contains_key(&name) {
             ops.push(MigrationOp::CreateEnumType {
@@ -788,6 +798,9 @@ pub fn compute_diff(old: &Snapshot, new: &Snapshot) -> Result<Vec<MigrationOp>> 
     ops.extend(column_changes);
     ops.extend(dependency_adds);
 
+    // Generated migrations must remove dependent tables and columns before
+    // dropping their enum types. As above, the insertion position deliberately
+    // carries this invariant instead of enum-specific graph edges.
     for name in sorted_keys(&old_enums) {
         if !new_enums.contains_key(&name) {
             ops.push(MigrationOp::DropEnumType {

@@ -699,12 +699,17 @@ fn enum_create_table() {
     snap("enum_create_table", &ops, ALL_DIALECTS);
 }
 
-/// AddEnumValue is authored before DDL that may use the new value. PG: native
-/// ALTER TYPE ... ADD VALUE; MySQL: progressive MODIFY COLUMN per referencing
-/// column; SQLite: nothing.
+/// Deliberately unsafe input: the dependent index is authored before the enum
+/// value addition. The renderer must preserve that order unchanged rather than
+/// silently repairing it. PG: native ALTER TYPE ... ADD VALUE; MySQL:
+/// progressive MODIFY COLUMN per referencing column; SQLite: nothing.
 #[test]
 fn enum_add_value_ordering() {
     let ops = [
+        MigrationOp::CreateIndex {
+            table: "enum_posts".into(),
+            index: index("ix_enum_posts_status", &["status"]),
+        },
         MigrationOp::AddEnumValue {
             name: "post_status_enum".into(),
             value: "archived".into(),
@@ -716,27 +721,24 @@ fn enum_add_value_ordering() {
                 ),
             }],
         },
-        MigrationOp::CreateIndex {
-            table: "enum_posts".into(),
-            index: index("ix_enum_posts_status", &["status"]),
-        },
     ];
     snap("enum_add_value_ordering", &ops, ALL_DIALECTS);
 }
 
-/// DROP TYPE is authored after DROP TABLE. AlterEnumType (value
+/// Deliberately unsafe input: DROP TYPE is authored before DROP TABLE. The
+/// renderer must preserve that order unchanged. AlterEnumType (value
 /// removal/reorder) intentionally emits NO SQL on any dialect — execution is
 /// guarded by ctx.require_manual() on the Python side; frozen here as-is.
 #[test]
 fn enum_drop_and_manual_alter() {
     let ops = [
-        MigrationOp::DropTable {
-            name: "enum_posts".into(),
-            table: None,
-        },
         MigrationOp::DropEnumType {
             name: "post_status_enum".into(),
             values: Some(vec!["draft".into(), "published".into()]),
+        },
+        MigrationOp::DropTable {
+            name: "enum_posts".into(),
+            table: None,
         },
         MigrationOp::AlterEnumType {
             name: "review_state_enum".into(),

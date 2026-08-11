@@ -278,6 +278,40 @@ fn test_postgres_enum_type_is_created_before_table() {
 }
 
 #[test]
+fn test_compute_diff_creates_enum_before_dependent_table() {
+    let old = Snapshot::new();
+    let mut new = Snapshot::new();
+    new.add_table(enum_table(&["draft", "published"]));
+
+    let operations = compute_diff(&old, &new).unwrap();
+    assert!(
+        matches!(operations.first(), Some(MigrationOp::CreateEnumType { name, .. }) if name == "post_status_enum"),
+        "enum type must be created before its dependent table: {operations:?}"
+    );
+    assert!(
+        matches!(operations.get(1), Some(MigrationOp::CreateTable { table }) if table.name == "posts"),
+        "dependent table must follow its enum type: {operations:?}"
+    );
+}
+
+#[test]
+fn test_compute_diff_drops_enum_after_dependent_table() {
+    let mut old = Snapshot::new();
+    old.add_table(enum_table(&["draft", "published"]));
+    let new = Snapshot::new();
+
+    let operations = compute_diff(&old, &new).unwrap();
+    assert!(
+        matches!(operations.first(), Some(MigrationOp::DropTable { name, .. }) if name == "posts"),
+        "dependent table must be dropped before its enum type: {operations:?}"
+    );
+    assert!(
+        matches!(operations.get(1), Some(MigrationOp::DropEnumType { name, .. }) if name == "post_status_enum"),
+        "enum type must be dropped after its dependent table: {operations:?}"
+    );
+}
+
+#[test]
 fn test_mysql_enum_is_inline_column_type() {
     let sql = MigrationOp::CreateTable {
         table: enum_table(&["draft", "published"]),
@@ -1390,6 +1424,44 @@ fn test_compute_diff_adds_existing_table_column_before_new_table_fk() {
             "the referenced column must exist before the new table's FK for {dialect:?}: {sql:?}"
         );
     }
+}
+
+#[test]
+fn test_compute_diff_preserves_staging_while_unblocking_new_table() {
+    let obsolete = table_with_fields("obsolete", &["id"]);
+    let parent = table_with_fields("z_parent", &["id"]);
+
+    let mut old = Snapshot::new();
+    old.add_table(obsolete);
+    old.add_table(parent.clone());
+
+    let mut new_parent = parent;
+    new_parent.fields.push(sample_field("code"));
+    let mut child = table_with_fields("a_child", &["id", "parent_code"]);
+    child.foreign_keys.push(sample_foreign_key(
+        "fk_child_parent_code",
+        &["parent_code"],
+        "z_parent",
+        &["code"],
+    ));
+
+    let mut new = Snapshot::new();
+    new.add_table(new_parent);
+    new.add_table(child);
+
+    let operations = compute_diff(&old, &new).unwrap();
+    assert!(
+        matches!(operations.first(), Some(MigrationOp::DropTable { name, .. }) if name == "obsolete"),
+        "an unrelated staged drop must remain before the later column change: {operations:?}"
+    );
+    assert!(
+        matches!(operations.get(1), Some(MigrationOp::AddColumn { table, field }) if table == "z_parent" && field.name == "code"),
+        "the referenced column must precede the new dependent table: {operations:?}"
+    );
+    assert!(
+        matches!(operations.get(2), Some(MigrationOp::CreateTable { table }) if table.name == "a_child"),
+        "the dependent table must be unblocked without crossing the staged drop: {operations:?}"
+    );
 }
 
 #[test]

@@ -28,7 +28,8 @@ impl Migration {
     /// Generate SQL statements for this migration.
     ///
     /// Operations are rendered in authored order. Statements emitted by one
-    /// operation remain contiguous and in renderer order.
+    /// operation remain contiguous and in renderer order. Callers are
+    /// responsible for supplying dependency-safe operation ordering.
     pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
         let mut all_sql = Vec::new();
         for op in &self.operations {

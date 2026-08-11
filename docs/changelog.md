@@ -88,6 +88,8 @@ Either give the enum string values, or annotate the field as `int`.
 
 ### Migrations
 
+- **Migration SQL preserves caller ordering** — `migration_to_sql()` renders operations in the supplied order and keeps each operation's statements contiguous. Callers are responsible for supplying dependency-safe operation ordering; operations returned by `migration_compute_diff()` are already dependency-ordered.
+
 - **`ALTER COLUMN` on PostgreSQL emits a `USING` clause** — type changes now generate `ALTER TABLE "t" ALTER COLUMN "c" TYPE <new> USING "c"::text::<new>`. PostgreSQL has no implicit text → enum cast, so text ↔ enum conversions previously failed; other conversions such as `int` → `varchar` work now too.
 
 - **Enum lifecycle** — appending values is fully automatic: `ALTER TYPE ... ADD VALUE IF NOT EXISTS` on PostgreSQL, progressive `MODIFY COLUMN` on MySQL, nothing on SQLite. Removing or reordering values cannot be automated — the generated migration pairs `ctx.alter_enum_type(...)` (updates replay state, emits no SQL) with `ctx.require_manual(...)`, which fails execution until you replace it with hand-written `ctx.execute(...)` statements. `oxyde sqlmigrate` prints a `-- manual migration required` marker for these operations.
