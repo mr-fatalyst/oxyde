@@ -1,5 +1,5 @@
 ---
-source: crates/oxyde-migrate/tests/golden_ddl.rs
+source: crates/oxyde-sql/tests/golden_ddl.rs
 expression: sql
 ---
 ALTER TABLE `users` MODIFY COLUMN `age` VARCHAR(50) NOT NULL;

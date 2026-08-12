@@ -1,5 +1,5 @@
 ---
-source: crates/oxyde-migrate/tests/golden_ddl.rs
+source: crates/oxyde-sql/tests/golden_ddl.rs
 expression: sql
 ---
 CREATE INDEX `ix_users_name` ON `users` (`name`);

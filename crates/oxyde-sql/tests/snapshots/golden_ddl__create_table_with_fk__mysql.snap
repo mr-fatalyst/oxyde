@@ -1,5 +1,5 @@
 ---
-source: crates/oxyde-migrate/tests/golden_ddl.rs
+source: crates/oxyde-sql/tests/golden_ddl.rs
 expression: sql
 ---
 CREATE TABLE `post` ( `id` BIGINT PRIMARY KEY AUTO_INCREMENT, `title` VARCHAR(255) NOT NULL, `author_id` BIGINT NOT NULL, `editor_id` BIGINT, `reviewer_id` BIGINT, `owner_id` BIGINT );

@@ -13,9 +13,7 @@ use crate::{registry, transaction_registry};
 
 /// Check if profiling is enabled via OXYDE_PROFILE env var
 fn is_profiling_enabled() -> bool {
-    std::env::var("OXYDE_PROFILE")
-        .map(|v| v == "1")
-        .unwrap_or(false)
+    std::env::var("OXYDE_PROFILE").is_ok_and(|v| v == "1")
 }
 
 /// Execute a SELECT query and return pre-encoded msgpack bytes + row count.

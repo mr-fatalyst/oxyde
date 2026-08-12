@@ -27,27 +27,15 @@ pub struct Migration {
 impl Migration {
     /// Generate SQL statements for this migration.
     ///
-    /// CREATE/DROP/INDEX statements come first, ALTER TABLE statements last.
-    /// This ensures referenced tables exist before FK constraints are added
-    /// (PG/MySQL emit FK as separate ALTER TABLE, not inline in CREATE TABLE).
+    /// Operations are rendered in authored order. Statements emitted by one
+    /// operation remain contiguous and in renderer order. Callers are
+    /// responsible for supplying dependency-safe operation ordering.
     pub fn to_sql(&self, dialect: Dialect) -> Result<Vec<String>> {
-        let mut all_sql: Vec<(u8, String)> = Vec::new();
+        let mut all_sql = Vec::new();
         for op in &self.operations {
-            let sqls = op.to_sql(dialect)?;
-            for sql in sqls {
-                let bucket = match op {
-                    MigrationOp::CreateEnumType { .. } => 0,
-                    MigrationOp::AddEnumValue { .. } => 1,
-                    MigrationOp::DropEnumType { .. } => 4,
-                    MigrationOp::AlterEnumType { .. } => 5,
-                    _ if sql.trim_start().starts_with("ALTER TABLE") => 3,
-                    _ => 2,
-                };
-                all_sql.push((bucket, sql));
-            }
+            all_sql.extend(op.to_sql(dialect)?);
         }
-        all_sql.sort_by_key(|(bucket, _)| *bucket);
-        Ok(all_sql.into_iter().map(|(_, sql)| sql).collect())
+        Ok(all_sql)
     }
 }
 
@@ -387,8 +375,8 @@ impl MigrationOpExt for MigrationOp {
                     sql.push(build_create_index(&table.name, index, dialect)?);
                 }
 
-                // PG/MySQL: FK and CHECK as separate ALTER TABLE statements
-                // (handles circular dependencies between tables)
+                // PG/MySQL: FK and CHECK as separate ALTER TABLE statements.
+                // The migration plan must create referenced tables first.
                 if dialect != Dialect::Sqlite {
                     for fk in &table.foreign_keys {
                         sql.push(build_sql!(build_fk_stmt(&table.name, fk), dialect));

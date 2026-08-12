@@ -30,6 +30,9 @@ pub(crate) fn migration_compute_diff(old_json: &str, new_json: &str) -> PyResult
 
 /// Convert migration operations to SQL statements
 ///
+/// Operations are rendered in the supplied order. Callers are responsible for
+/// supplying dependency-safe operation ordering.
+///
 /// Args:
 ///     operations_json: JSON string with list of migration operations
 ///     dialect: Database dialect ("sqlite", "postgres", or "mysql")

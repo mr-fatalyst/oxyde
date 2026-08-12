@@ -1,5 +1,5 @@
 ---
-source: crates/oxyde-migrate/tests/golden_ddl.rs
+source: crates/oxyde-sql/tests/golden_ddl.rs
 expression: sql
 ---
 CREATE TYPE "post_status_enum" AS ENUM ('draft', 'published');

@@ -173,7 +173,7 @@ fn check(name: &str, expression: &str) -> CheckDef {
 // ── Rendering + snapshot helpers ───────────────────────────────────────────
 
 /// Render ops through the production entry point (`Migration::to_sql`),
-/// which also applies the "ALTER statements last" ordering.
+/// which preserves authored operation and renderer statement order.
 fn render(ops: &[MigrationOp], dialect: Dialect) -> String {
     let migration = Migration {
         name: "golden".into(),
@@ -329,7 +329,7 @@ fn create_table_db_type_overrides() {
     snap("create_table_db_type_overrides", &ops, ALL_DIALECTS);
 }
 
-// ── 4. CreateTable with FK / CHECK / index (+ ALTER-last ordering) ─────────
+// ── 4. CreateTable with FK / CHECK / index (+ constraints after CREATE) ────
 
 #[test]
 fn create_table_with_fk() {
@@ -699,9 +699,10 @@ fn enum_create_table() {
     snap("enum_create_table", &ops, ALL_DIALECTS);
 }
 
-/// Bucket ordering: AddEnumValue lands before other DDL regardless of the
-/// op order in the migration. PG: native ALTER TYPE ... ADD VALUE;
-/// MySQL: progressive MODIFY COLUMN per referencing column; SQLite: nothing.
+/// Deliberately unsafe input: the dependent index is authored before the enum
+/// value addition. The renderer must preserve that order unchanged rather than
+/// silently repairing it. PG: native ALTER TYPE ... ADD VALUE; MySQL:
+/// progressive MODIFY COLUMN per referencing column; SQLite: nothing.
 #[test]
 fn enum_add_value_ordering() {
     let ops = [
@@ -724,7 +725,8 @@ fn enum_add_value_ordering() {
     snap("enum_add_value_ordering", &ops, ALL_DIALECTS);
 }
 
-/// DROP TYPE comes after DROP TABLE (bucket order). AlterEnumType (value
+/// Deliberately unsafe input: DROP TYPE is authored before DROP TABLE. The
+/// renderer must preserve that order unchanged. AlterEnumType (value
 /// removal/reorder) intentionally emits NO SQL on any dialect — execution is
 /// guarded by ctx.require_manual() on the Python side; frozen here as-is.
 #[test]

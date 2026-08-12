@@ -1,5 +1,5 @@
 ---
-source: crates/oxyde-migrate/tests/golden_ddl.rs
+source: crates/oxyde-sql/tests/golden_ddl.rs
 expression: sql
 ---
 ALTER TABLE "users" ALTER COLUMN "age" TYPE VARCHAR(50) USING "age"::text::VARCHAR(50);
