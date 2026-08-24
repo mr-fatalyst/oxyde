@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,7 @@ FIXTURES: list[tuple[str, str, str, str]] = [
     ("edges/inheritance_chain", "edges/inheritance_chain", "module", "usage.py"),
     ("edges/reserved_names", "edges/reserved_names", "module", "usage.py"),
     ("edges/generics_in_field", "edges/generics_in_field", "module", "usage.py"),
+    ("edges/enums", "edges/enums", "module", "usage.py"),
 ]
 
 
@@ -72,11 +74,14 @@ def _run_pyright(targets: list[Path], cwd: Path) -> subprocess.CompletedProcess[
     )
 
 
-def _run_ty(targets: list[Path], cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run_ty(
+    targets: list[Path], cwd: Path, *, concise: bool = False
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             TY_EXE,
             "check",
+            *(["--output-format", "concise"] if concise else []),
             "--python",
             sys.prefix,
             "--extra-search-path",
@@ -221,3 +226,79 @@ def test_mypy_accepts_model_source(
         f"--- STDOUT ---\n{result.stdout}\n"
         f"--- STDERR ---\n{result.stderr}"
     )
+
+
+# --- Negative tests: wrong usage MUST be rejected. -------------------------
+#
+# Every positive fixture above would stay green if the stubs degraded to
+# permissive Any-signatures. The ``negative`` fixture is the guard: each line
+# of bad_usage.py marked ``# type-error`` must be flagged by the checker, and
+# unmarked lines must stay clean.
+
+_NEGATIVE_FIXTURE = ("negative", "module", "bad_usage.py")
+
+
+def _expected_error_lines(path: Path) -> set[int]:
+    return {
+        lineno
+        for lineno, line in enumerate(path.read_text().splitlines(), start=1)
+        if line.rstrip().endswith("# type-error")
+    }
+
+
+def _reported_error_lines(output: str, usage_file: str) -> set[int]:
+    """Line numbers of error diagnostics for usage_file in checker output.
+
+    All three checkers emit one-line diagnostics matching
+    ``<path>:<line>[:<col>]`` with the word ``error`` on the same line
+    (mypy: ``file:16: error: ...``; pyright: ``/abs/file:16:36 - error: ...``;
+    ty concise: ``file:16:31: error[rule] ...``). mypy ``note:`` lines carry
+    no ``error`` token and are ignored.
+    """
+    pattern = re.compile(rf"{re.escape(usage_file)}:(\d+)")
+    return {
+        int(match.group(1))
+        for line in output.splitlines()
+        if "error" in line and (match := pattern.search(line))
+    }
+
+
+def _assert_flagged_exactly(
+    checker: str, output: str, work_dir: Path, usage_file: str
+) -> None:
+    expected = _expected_error_lines(work_dir / usage_file)
+    assert expected, "negative fixture has no '# type-error' markers"
+    reported = _reported_error_lines(output, usage_file)
+    assert reported == expected, (
+        f"{checker} flagged lines {sorted(reported)}, "
+        f"expected exactly {sorted(expected)}:\n{output}"
+    )
+
+
+def test_mypy_flags_bad_usage(generate_stubs) -> None:
+    fixture_dir, model_module, usage_file = _NEGATIVE_FIXTURE
+    work_dir = generate_stubs(FIXTURES_DIR / fixture_dir, model_module)
+
+    result = _run_mypy(work_dir / usage_file, work_dir)
+    assert result.returncode != 0, "mypy accepted intentionally wrong usage"
+    _assert_flagged_exactly("mypy", result.stdout, work_dir, usage_file)
+
+
+@pytest.mark.skipif(PYRIGHT_EXE is None, reason="pyright is not installed")
+def test_pyright_flags_bad_usage(generate_stubs) -> None:
+    fixture_dir, model_module, usage_file = _NEGATIVE_FIXTURE
+    work_dir = generate_stubs(FIXTURES_DIR / fixture_dir, model_module)
+
+    result = _run_pyright([work_dir / usage_file], work_dir)
+    assert result.returncode != 0, "pyright accepted intentionally wrong usage"
+    _assert_flagged_exactly("pyright", result.stdout, work_dir, usage_file)
+
+
+@pytest.mark.skipif(TY_EXE is None, reason="ty is not installed")
+def test_ty_flags_bad_usage(generate_stubs) -> None:
+    fixture_dir, model_module, usage_file = _NEGATIVE_FIXTURE
+    work_dir = generate_stubs(FIXTURES_DIR / fixture_dir, model_module)
+
+    result = _run_ty([work_dir / usage_file], work_dir, concise=True)
+    assert result.returncode != 0, "ty accepted intentionally wrong usage"
+    _assert_flagged_exactly("ty", result.stdout, work_dir, usage_file)

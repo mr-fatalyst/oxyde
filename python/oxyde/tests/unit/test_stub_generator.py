@@ -17,6 +17,7 @@ from oxyde.codegen.stub_generator import (
     _generate_create_params,
     _generate_filter_params,
     _get_python_type_name,
+    _stub_class_def,
 )
 
 
@@ -90,11 +91,12 @@ class TestExtractTopLevelCopyable:
         tree = ast.parse(
             "from __future__ import annotations\nfrom pydantic import field_validator\n"
         )
-        imports, functions = _extract_top_level_copyable(tree)
+        imports, functions, classes = _extract_top_level_copyable(tree)
         assert [ast.unparse(node) for node in imports] == [
             "from pydantic import field_validator"
         ]
         assert functions == []
+        assert classes == []
 
     def test_overload_implementation_dropped(self):
         """Only @overload variants survive; the implementation body is dropped."""
@@ -106,9 +108,64 @@ class TestExtractTopLevelCopyable:
             "def f(x: str) -> int: ...\n"
             "def f(x): return x\n"
         )
-        _, functions = _extract_top_level_copyable(tree)
+        _, functions, _ = _extract_top_level_copyable(tree)
         assert len(functions) == 2
         assert all("@overload" in fn for fn in functions)
+
+    def test_class_defs_collected(self):
+        """Top-level classes are returned as raw AST nodes for later copying."""
+        tree = ast.parse(
+            "from enum import Enum\n"
+            "class Color(str, Enum):\n"
+            "    RED = 'red'\n"
+            "def helper() -> int: return 1\n"
+        )
+        _, functions, classes = _extract_top_level_copyable(tree)
+        assert len(functions) == 1
+        assert [node.name for node in classes] == ["Color"]
+
+
+class TestStubClassDef:
+    """Test stubbing of supporting top-level classes (enums, helpers)."""
+
+    def test_enum_members_kept_verbatim(self):
+        """Enum member values are the type interface — they must survive."""
+        tree = ast.parse(
+            "class Color(str, Enum):\n"
+            '    """Doc."""\n'
+            "    RED = 'red'\n"
+            "    GREEN = 'green'\n"
+            "    def label(self) -> str:\n"
+            "        return self.value.upper()\n"
+        )
+        class_def = tree.body[0]
+        assert isinstance(class_def, ast.ClassDef)
+        stub = _stub_class_def(class_def)
+        assert "class Color(str, Enum):" in stub
+        assert "RED = 'red'" in stub
+        assert "GREEN = 'green'" in stub
+        assert "def label(self) -> str:" in stub
+        assert "self.value.upper()" not in stub
+
+    def test_nested_class_and_overloads_stubbed(self):
+        """Nested classes recurse; overload implementations are dropped."""
+        tree = ast.parse(
+            "class Helper:\n"
+            "    class Inner:\n"
+            "        x: int = 0\n"
+            "    @overload\n"
+            "    def f(self, x: int) -> str: ...\n"
+            "    @overload\n"
+            "    def f(self, x: str) -> int: ...\n"
+            "    def f(self, x): return x\n"
+        )
+        class_def = tree.body[0]
+        assert isinstance(class_def, ast.ClassDef)
+        stub = _stub_class_def(class_def)
+        assert "class Inner:" in stub
+        assert "x: int = 0" in stub
+        assert stub.count("def f") == 2
+        assert "return x" not in stub
 
 
 class TestAssembleImports:
@@ -116,7 +173,7 @@ class TestAssembleImports:
 
     @staticmethod
     def _imports(source: str) -> list[ast.Import | ast.ImportFrom]:
-        imports, _ = _extract_top_level_copyable(ast.parse(source))
+        imports, _, _ = _extract_top_level_copyable(ast.parse(source))
         return imports
 
     def test_skeleton_names_deduped_and_unused_dropped(self):

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import time
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID
 
 from models import Author, Post, Tag
+from typing_extensions import assert_type
 
 
 # --- Manager-level query builders ---
@@ -271,6 +273,39 @@ async def field_types_filters() -> list[Post]:
         )
         .all()
     )
+
+
+# --- assert_type: pin down EXACT inferred types. Return-annotation checks
+# above stay green even if a method degrades to Any; assert_type does not. ---
+
+
+async def precise_terminal_types() -> None:
+    assert_type(await Post.objects.all(), list[Post])
+    assert_type(await Post.objects.first(), Post | None)
+    assert_type(await Post.objects.get(id=1), Post)
+    assert_type(await Post.objects.get_or_none(id=1), Post | None)
+    assert_type(await Post.objects.get_or_create(title="X"), tuple[Post, bool])
+    assert_type(await Post.objects.count(), int)
+    assert_type(await Post.objects.exists(), bool)
+    assert_type(await Post.objects.create(title="X"), Post)
+    assert_type(await Post.objects.values("id").all(), list[dict[str, Any]])
+    assert_type(
+        await Post.objects.values_list("id", "title").all(), list[tuple[Any, ...]]
+    )
+    assert_type(await Post.objects.values_list("id", flat=True).all(), list[Any])
+    assert_type(await Post.objects.filter(id=1).update(title="X"), int)
+    assert_type(
+        await Post.objects.filter(id=1).update(title="X", returning=True), list[Post]
+    )
+    assert_type(await Post.objects.filter(id=1).delete(), int)
+
+
+def precise_field_types(post: Post, author: Author) -> None:
+    assert_type(post.status, Literal["draft", "published", "archived"])
+    assert_type(post.slug_id, UUID)
+    assert_type(post.author, Author | None)
+    assert_type(post.tags, list[Tag])
+    assert_type(author.posts, list[Post])
 
 
 async def lookup_value_shapes() -> list[Post]:

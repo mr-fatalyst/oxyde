@@ -299,18 +299,62 @@ def _stub_function_defs(body: list[ast.stmt]) -> list[str]:
     return functions
 
 
+def _stubbed_class_body(body: list[ast.stmt]) -> list[ast.stmt]:
+    """Class body with function bodies replaced by ``...``.
+
+    Nested classes are processed recursively. Assignments are kept verbatim:
+    for enums the member values ARE the type interface (checkers read them for
+    Literal narrowing), and dataclass/plain-class attribute defaults are almost
+    always literals. Overload implementations are dropped as at top level.
+    """
+    overloaded_names: set[str] = {
+        node.name
+        for node in body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and _has_overload_decorator(node)
+    }
+
+    out: list[ast.stmt] = []
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name in overloaded_names and not _has_overload_decorator(node):
+                continue
+            node_copy = copy.deepcopy(node)
+            node_copy.body = [ast.Expr(value=ast.Constant(value=Ellipsis))]
+            out.append(node_copy)
+        elif isinstance(node, ast.ClassDef):
+            class_copy = copy.deepcopy(node)
+            class_copy.body = _stubbed_class_body(class_copy.body) or [ast.Pass()]
+            out.append(class_copy)
+        else:
+            out.append(copy.deepcopy(node))
+    return out or [ast.Pass()]
+
+
+def _stub_class_def(class_def: ast.ClassDef) -> str:
+    """Stub source for a supporting top-level class (enum, dataclass, helper)."""
+    node_copy = copy.deepcopy(class_def)
+    node_copy.body = _stubbed_class_body(node_copy.body)
+    return ast.unparse(node_copy)
+
+
 def _extract_top_level_copyable(
     tree: ast.Module,
-) -> tuple[list[ast.Import | ast.ImportFrom], list[str]]:
-    """Collect top-level imports (as AST nodes) and function stubs from source.
+) -> tuple[list[ast.Import | ast.ImportFrom], list[str], list[ast.ClassDef]]:
+    """Collect top-level imports, function stubs and class defs from source.
 
     - ``Import`` / ``ImportFrom``: returned as AST nodes so the caller can
       dedupe them against the stub skeleton imports and drop unused ones.
       ``from __future__ import ...`` is dropped entirely — a ``.pyi`` never
       needs it, and anywhere but the top of the file it is a syntax error.
     - ``FunctionDef`` / ``AsyncFunctionDef``: stubbed via ``_stub_function_defs``.
-    - Everything else (top-level classes, dataclasses, enums, assignments) is
-      intentionally skipped — those belong in dedicated modules.
+    - ``ClassDef``: returned as raw AST nodes. The caller stubs model classes
+      via the generator and copies supporting classes (enums used as column
+      types, helper classes referenced by custom methods) via
+      ``_stub_class_def`` when the generated body references them — a ``.pyi``
+      shadows the module entirely, so an unreferenced name would otherwise
+      break both the stub and user imports of that class.
+    - Top-level assignments (constants) are intentionally skipped.
     """
     imports: list[ast.Import | ast.ImportFrom] = [
         node
@@ -318,7 +362,8 @@ def _extract_top_level_copyable(
         if isinstance(node, (ast.Import, ast.ImportFrom))
         and not (isinstance(node, ast.ImportFrom) and node.module == "__future__")
     ]
-    return imports, _stub_function_defs(tree.body)
+    class_defs = [node for node in tree.body if isinstance(node, ast.ClassDef)]
+    return imports, _stub_function_defs(tree.body), class_defs
 
 
 # Names the generated stub skeleton may reference, grouped by stdlib module.
@@ -987,20 +1032,23 @@ def _build_stub(file_path: Path, models: list[type[Model]]) -> str:
 
     Policy: the .pyi covers models plus top-level functions (as stubs). From
     the source we also keep the imports still referenced by the generated body
-    (cross-module FK types, custom-method signatures, decorators); everything
-    else at top level (classes, dataclasses, constants) is intentionally not
-    propagated — those belong in dedicated modules.
+    (cross-module FK types, custom-method signatures, decorators) and copy the
+    supporting top-level classes the body references — most importantly enums
+    used as column types, which appear throughout the generated filter/create
+    signatures. Unreferenced classes and top-level constants are not
+    propagated.
     """
     source = file_path.read_text()
     tree = ast.parse(source)
 
-    user_imports, function_stubs = _extract_top_level_copyable(tree)
+    user_imports, function_stubs, class_defs = _extract_top_level_copyable(tree)
 
     model_names = {m.__name__ for m in models}
-    custom_methods_by_model: dict[str, list[str]] = {}
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and node.name in model_names:
-            custom_methods_by_model[node.name] = _extract_custom_methods(node)
+    custom_methods_by_model: dict[str, list[str]] = {
+        node.name: _extract_custom_methods(node)
+        for node in class_defs
+        if node.name in model_names
+    }
 
     body_parts: list[str] = []
     for function_stub in function_stubs:
@@ -1016,7 +1064,32 @@ def _build_stub(file_path: Path, models: list[type[Model]]) -> str:
         body_parts.append("")
         body_parts.append(generate_model_stub(model))
         body_parts.append("")
-    body = "\n".join(body_parts)
+    core_body = "\n".join(body_parts)
+
+    # Copy supporting classes the body references. Iterated to a fixpoint:
+    # a kept class may itself reference another top-level class (an enum used
+    # in a dataclass field, a base class).
+    support_defs = [node for node in class_defs if node.name not in model_names]
+    support_stubs: dict[str, str] = {}
+    search_space = core_body
+    changed = True
+    while changed:
+        changed = False
+        for node in support_defs:
+            if node.name in support_stubs:
+                continue
+            if _is_name_used(node.name, search_space):
+                stub_src = _stub_class_def(node)
+                support_stubs[node.name] = stub_src
+                search_space = f"{search_space}\n{stub_src}"
+                changed = True
+
+    support_parts: list[str] = []
+    for node in support_defs:
+        if node.name in support_stubs:
+            support_parts.append(support_stubs[node.name])
+            support_parts.append("")
+    body = "\n".join([*support_parts, core_body])
 
     parts: list[str] = [
         "# Auto-generated by oxyde generate-stubs",
