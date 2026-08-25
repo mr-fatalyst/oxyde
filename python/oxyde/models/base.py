@@ -190,6 +190,9 @@ def _build_globalns(cls: type) -> dict[str, Any]:
     combined.setdefault("ForeignKeyInfo", ForeignKeyInfo)
     combined.setdefault("Query", Query)
     combined.setdefault("QueryManager", QueryManager)
+    # typing.Self does not exist on 3.10; the inherited `objects` annotation
+    # references it, so resolution must see the typing_extensions fallback.
+    combined.setdefault("Self", Self)
     return combined
 
 
