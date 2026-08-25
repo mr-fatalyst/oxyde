@@ -19,8 +19,9 @@ Functions:
         Return names of virtual (relation) fields.
 
     _dump_insert_data(instance) -> dict:
-        Serialize instance for INSERT. Uses model_dump(exclude_none=True).
-        Excludes virtual fields.
+        Serialize instance for INSERT. Includes default/default_factory
+        values; omits a column only when it is None and was not set
+        explicitly. Excludes virtual fields.
 
     _dump_update_data(instance, fields) -> dict:
         Serialize specific fields for UPDATE. Includes None values.
@@ -68,13 +69,24 @@ def _dump_insert_data(instance: Model) -> dict[str, Any]:
 
     Excludes virtual relation fields (db_reverse_fk, db_m2m) and Pydantic
     computed fields that don't correspond to actual database columns.
+
+    Values filled from ``default=`` / ``default_factory`` are included —
+    dumping with ``exclude_unset`` dropped them, silently inserting NULL or
+    the server default instead (issue #35). A column is omitted only when its
+    value is None AND the field was not set explicitly: an untouched
+    ``Field(default=None, db_pk=True)`` pk stays out of the INSERT so the
+    database sequence fills it, while an explicit ``field=None`` still
+    reaches the database as NULL (e.g. to override a server-side default).
     """
     virtual_fields = _get_virtual_fields(instance.__class__)
     computed_fields = set(instance.__class__.model_computed_fields.keys())
-    data = instance.model_dump(
-        mode="python", exclude_unset=True, exclude=virtual_fields | computed_fields
-    )
-    return data
+    data = instance.model_dump(mode="python", exclude=virtual_fields | computed_fields)
+    explicitly_set = instance.model_fields_set
+    return {
+        name: value
+        for name, value in data.items()
+        if value is not None or name in explicitly_set
+    }
 
 
 def _dump_update_data(instance: Model, fields: Iterable[str]) -> dict[str, Any]:

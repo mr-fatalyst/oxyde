@@ -13,7 +13,7 @@ from oxyde.exceptions import (
 )
 from oxyde.queries import execute_raw
 
-from .conftest import Author, Post, Product, create_author
+from .conftest import Author, FactoryKeyed, Post, Product, create_author
 
 
 class TestCreate:
@@ -36,6 +36,20 @@ class TestCreate:
         assert post.body == ""
         assert post.views == 0
         assert post.published == False  # noqa: E712 — SQLite returns int
+
+    @pytest.mark.asyncio
+    async def test_create_sends_default_factory_pk(self, db):
+        """default_factory pk must reach the INSERT, not become NULL.
+
+        The column has no server-side default, so if the serializer drops the
+        generated UUID this fails with a not-null violation.
+        """
+        obj = await FactoryKeyed.objects.create(name="Alice", using=db.name)
+        assert obj.id is not None
+        fetched = await FactoryKeyed.objects.get(id=obj.id, using=db.name)
+        assert fetched.name == "Alice"
+        # Plain default= must be stored too, not just shown on the instance
+        assert fetched.status == "active"
 
     @pytest.mark.asyncio
     async def test_create_with_null_fk(self, db):

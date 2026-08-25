@@ -15,6 +15,7 @@ from oxyde import AsyncDatabase, Field, Model, disconnect_all
 from oxyde.db.schema import create_tables, drop_tables
 from oxyde.migrations.utils import detect_dialect
 from oxyde.models.registry import clear_registry, register_table
+from oxyde.models.utils import _unpack_annotated, _unwrap_optional
 from oxyde.queries.raw import execute_raw
 
 # ── Testcontainers availability ────────────────────────────────────────
@@ -205,9 +206,21 @@ class Product(Model):
         table_name = "products"
 
 
+class FactoryKeyed(Model):
+    """UUID pk from default_factory (issue #35 regression model)."""
+
+    id: UUID | None = Field(default_factory=uuid.uuid4, db_pk=True)
+    name: str = Field(max_length=100)
+    status: str = Field(default="active", max_length=20)
+
+    class Meta:
+        is_table = True
+        table_name = "factory_keyed"
+
+
 ALL_MODELS = [
     Event, AliasedEvent, Author, Category, Post, Comment, Tag, PostTag,
-    AllTypes, NullableTypes, BytesModel, TdModel, Product,
+    AllTypes, NullableTypes, BytesModel, TdModel, Product, FactoryKeyed,
 ]
 
 
@@ -311,6 +324,11 @@ async def _clear_all_tables(database: AsyncDatabase) -> None:
 async def _fix_pg_sequences(database: AsyncDatabase) -> None:
     """Reset PG sequences after explicit-ID inserts."""
     for model in ALL_MODELS:
+        # Only integer pks have a serial sequence (UUID pks: FactoryKeyed)
+        base_hint, _ = _unpack_annotated(model.model_fields["id"].annotation)
+        pk_type, _ = _unwrap_optional(base_hint)
+        if pk_type is not int:
+            continue
         table = model.Meta.table_name
         await execute_raw(
             f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
