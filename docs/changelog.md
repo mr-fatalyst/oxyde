@@ -6,7 +6,7 @@ All notable changes to Oxyde are documented here.
 
 ## 0.8.0 - Unreleased
 
-**Rust core: 0.7.0** (`core-v0.7.0`)
+**Rust core: 0.7.0+** (`core-v0.7.0+`)
 
 ### Upgrade Notes
 
@@ -50,6 +50,10 @@ database enum columns, or annotate the field as int for integer storage.
 ```
 
 Either give the enum string values, or annotate the field as `int`.
+
+#### `db_index` on fields now reaches migrations
+
+`Field(db_index=True)` used to be silently ignored by `makemigrations` — only table-level `Meta.indexes` produced index definitions — and on FK fields `db_unique` was lost as well. Both now work, so the first `makemigrations` after upgrading generates the indexes and UNIQUE constraints your models always declared. Review that migration before applying: index creation on large tables can be slow.
 
 ### New Features
 
@@ -97,10 +101,14 @@ Either give the enum string values, or annotate the field as `int`.
     !!! warning "Non-transactional migrations on PostgreSQL"
         PostgreSQL forbids `ALTER TYPE ... ADD VALUE` inside a transaction block, so a migration containing one runs **entirely without a transaction**. Keep enum value additions in their own migration to limit partial-application risk.
 
+- **`db_index` / `db_unique` on FK fields; field-level indexes everywhere** — the synthetic FK column (`author_id`) now inherits `db_unique`, `db_index`, `db_index_name` and `db_index_method` from the relation field, and `Field(db_index=True)` on any column produces an index definition (previously only `Meta.indexes` did). A unique column does not get a redundant plain index on top of its constraint, and a field-level index duplicating a `Meta.indexes` entry on the same column is skipped with a warning. (#34)
+
 ### Bug Fixes
 
 - **Non-deterministic migration operation order** — the diff iterated modified tables in `HashMap` order, so repeated `makemigrations` runs could emit the same operations in a different order. Changed tables are now processed through a sorted list of names.
 - **Panic in the JOIN result encoder** — when a relation's primary key column was missing from the result set, the encoder indexed past the column list and panicked. It now validates relation groups after column matching and returns a proper `ColumnNotFound` error.
+- **Values from `default=` / `default_factory` were dropped on INSERT** — `create()` and `bulk_create()` serialized instances with `exclude_unset=True`, so a field filled by its default never reached the database: a NOT NULL column failed with `IntegrityError` (e.g. a `default_factory=uuid4` pk), a nullable one silently stored NULL. A column is now omitted only when its value is `None` **and** the field was not set explicitly — an untouched `Field(default=None, db_pk=True)` pk still leaves the value to the database sequence, and an explicit `field=None` still inserts NULL (e.g. to override a server-side default). (#35)
+- **Generated stubs broke when the model module defined its own classes** — the `.pyi` referenced classes defined in the model file (most commonly an enum used as a column type) without defining or importing them, so type checkers failed on every generated signature and `from models import MyEnum` stopped resolving (the stub shadows the module's exports). Top-level classes referenced by the stub are now copied into it: enum members verbatim, method bodies replaced with `...`.
 
 ### Internal
 
