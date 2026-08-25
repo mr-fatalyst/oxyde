@@ -157,6 +157,153 @@ class TestSchemaExtraction:
         assert UniqueTogetherModel._db_meta.unique_together[0] == ("tenant_id", "code")
 
 
+class TestFieldLevelIndexes:
+    """Field(db_index/db_unique) must reach the schema snapshot."""
+
+    def test_field_index_extracted_into_snapshot(self):
+        """db_index=True on a plain field produces an index definition."""
+
+        class Page(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            slug: str = Field(db_index=True)
+            body: str = Field(default="")
+
+            class Meta:
+                is_table = True
+                table_name = "pages"
+
+        registered_tables()
+        snapshot = extract_current_schema(dialect="postgres")
+
+        [index] = snapshot["tables"]["pages"]["indexes"]
+        assert index == {
+            "name": "pages_slug_idx",
+            "fields": ["slug"],
+            "unique": False,
+            "method": None,
+            "where": None,
+        }
+
+    def test_field_index_name_and_method_honored(self):
+        """db_index_name and db_index_method flow into the definition."""
+
+        class Doc(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            payload: str = Field(
+                db_index=True, db_index_name="idx_doc_payload", db_index_method="hash"
+            )
+
+            class Meta:
+                is_table = True
+                table_name = "docs"
+
+        registered_tables()
+        snapshot = extract_current_schema(dialect="postgres")
+
+        [index] = snapshot["tables"]["docs"]["indexes"]
+        assert index["name"] == "idx_doc_payload"
+        assert index["method"] == "hash"
+
+    def test_unique_field_gets_no_redundant_index(self):
+        """db_unique already creates an index via the constraint; a field-level
+        db_index on the same column is skipped."""
+
+        class Account(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            email: str = Field(db_unique=True, db_index=True)
+
+            class Meta:
+                is_table = True
+                table_name = "accounts"
+
+        registered_tables()
+        snapshot = extract_current_schema(dialect="postgres")
+
+        [email] = [
+            f for f in snapshot["tables"]["accounts"]["fields"] if f["name"] == "email"
+        ]
+        assert email["unique"] is True
+        assert snapshot["tables"]["accounts"]["indexes"] == []
+
+    def test_field_index_deduped_against_meta_indexes_with_warning(self):
+        """The workaround layout (Meta.indexes on the same column) must not
+        produce a duplicate index — and must warn about the double declaration."""
+        from oxyde.models.decorators import Index
+
+        class Report(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            slug: str = Field(db_index=True)
+
+            class Meta:
+                is_table = True
+                table_name = "reports"
+                indexes = [Index(fields=["slug"])]
+
+        registered_tables()
+        with pytest.warns(UserWarning, match="already contains an index"):
+            snapshot = extract_current_schema(dialect="postgres")
+
+        [index] = snapshot["tables"]["reports"]["indexes"]
+        assert index["fields"] == ["slug"]
+
+    def test_fk_unique_reaches_synthetic_column(self):
+        """db_unique on a FK field lands on the synthetic column."""
+
+        class Writer(Model):
+            id: int | None = Field(default=None, db_pk=True)
+
+            class Meta:
+                is_table = True
+                table_name = "writers"
+
+        class Article(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            writer: Writer = Field(
+                default=None, db_on_delete="CASCADE", db_nullable=False, db_unique=True
+            )
+
+            class Meta:
+                is_table = True
+                table_name = "articles"
+
+        registered_tables()
+        snapshot = extract_current_schema(dialect="postgres")
+
+        [writer_id] = [
+            f
+            for f in snapshot["tables"]["articles"]["fields"]
+            if f["name"] == "writer_id"
+        ]
+        assert writer_id["unique"] is True
+        assert writer_id["nullable"] is False
+
+    def test_fk_index_reaches_synthetic_column_once(self):
+        """db_index on a FK field produces exactly one index on the synthetic
+        column (the virtual field must not generate a duplicate)."""
+
+        class Owner(Model):
+            id: int | None = Field(default=None, db_pk=True)
+
+            class Meta:
+                is_table = True
+                table_name = "owners"
+
+        class Pet(Model):
+            id: int | None = Field(default=None, db_pk=True)
+            owner: Owner = Field(default=None, db_on_delete="CASCADE", db_index=True)
+
+            class Meta:
+                is_table = True
+                table_name = "pets"
+
+        registered_tables()
+        snapshot = extract_current_schema(dialect="postgres")
+
+        [index] = snapshot["tables"]["pets"]["indexes"]
+        assert index["fields"] == ["owner_id"]
+        assert index["name"] == "pets_owner_id_idx"
+
+
 class TestFieldTypeDetection:
     """Test field type detection for migrations."""
 

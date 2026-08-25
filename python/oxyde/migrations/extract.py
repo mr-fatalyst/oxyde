@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
@@ -228,7 +229,7 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
             fields.append(field_dict)
 
         # Extract indexes
-        indexes = []
+        indexes: list[dict[str, Any]] = []
         if hasattr(meta, "indexes") and meta.indexes:
             for index in meta.indexes:
                 # Generate index name if not provided
@@ -247,6 +248,41 @@ def extract_current_schema(dialect: str = "sqlite") -> dict[str, Any]:
                         else index.where,
                     }
                 )
+
+        # Field-level indexes: Field(db_index=True) on any column, FK included.
+        # Skipped for unique columns — the UNIQUE constraint already creates
+        # an index, an extra plain one is redundant.
+        declared_column_sets = {frozenset(index["fields"]) for index in indexes}
+        for field_name, field_meta in meta.field_metadata.items():
+            if isinstance(field_meta.python_type, type) and issubclass(
+                field_meta.python_type, Model
+            ):
+                continue  # virtual FK field — flags live on the synthetic column
+            if field_meta.extra.get("reverse_fk") or field_meta.extra.get("m2m"):
+                continue
+            if not field_meta.index or field_meta.unique:
+                continue
+
+            column = field_meta.db_column
+            if frozenset([column]) in declared_column_sets:
+                warnings.warn(
+                    f"Field '{field_name}' on table '{meta.table_name}' declares "
+                    f"db_index=True, but Meta.indexes already contains an index "
+                    f"on ('{column}',). Skipping the field-level index — drop "
+                    "one of the two declarations.",
+                    stacklevel=2,
+                )
+                continue
+
+            indexes.append(
+                {
+                    "name": field_meta.index_name or f"{meta.table_name}_{column}_idx",
+                    "fields": [column],
+                    "unique": False,
+                    "method": field_meta.index_method,
+                    "where": None,
+                }
+            )
 
         # Extract foreign keys from field metadata
         foreign_keys = []

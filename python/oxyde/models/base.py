@@ -394,9 +394,17 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             # Build FK column name: db_column or {field_name}_{target_field}
             db_column = None
             db_nullable = None
+            db_unique = False
+            db_index = False
+            db_index_name = None
+            db_index_method = None
             if isinstance(field_info, OxydeFieldInfo):
                 db_column = getattr(field_info, "db_column", None)
                 db_nullable = getattr(field_info, "db_nullable", None)
+                db_unique = getattr(field_info, "db_unique", False)
+                db_index = getattr(field_info, "db_index", False)
+                db_index_name = getattr(field_info, "db_index_name", None)
+                db_index_method = getattr(field_info, "db_index_method", None)
             fk_column_name = db_column or f"{field_name}_{target_field_name}"
 
             # Check if this field already exists (avoid duplicates)
@@ -412,12 +420,21 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                 fk_column_type = fk_type
                 fk_default = PydanticUndefined
 
-            # Pass db_nullable to the synthetic FK column field
+            # Carry column-level attributes from the virtual FK field over to
+            # the synthetic column — it is the real DB column, so db_unique
+            # and the index attributes must live on it.
             fields_to_add.append(
                 (
                     fk_column_name,
                     fk_column_type,
-                    Field(default=fk_default, db_nullable=db_nullable),
+                    Field(
+                        default=fk_default,
+                        db_nullable=db_nullable,
+                        db_unique=db_unique,
+                        db_index=db_index,
+                        db_index_name=db_index_name,
+                        db_index_method=db_index_method,
+                    ),
                 )
             )
 

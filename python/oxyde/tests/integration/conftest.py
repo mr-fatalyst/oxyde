@@ -207,7 +207,7 @@ class Product(Model):
 
 
 class FactoryKeyed(Model):
-    """UUID pk from default_factory (issue #35 regression model)."""
+    """UUID pk from default_factory — no server-side default on the column."""
 
     id: UUID | None = Field(default_factory=uuid.uuid4, db_pk=True)
     name: str = Field(max_length=100)

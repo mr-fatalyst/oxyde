@@ -70,13 +70,12 @@ def _dump_insert_data(instance: Model) -> dict[str, Any]:
     Excludes virtual relation fields (db_reverse_fk, db_m2m) and Pydantic
     computed fields that don't correspond to actual database columns.
 
-    Values filled from ``default=`` / ``default_factory`` are included —
-    dumping with ``exclude_unset`` dropped them, silently inserting NULL or
-    the server default instead (issue #35). A column is omitted only when its
-    value is None AND the field was not set explicitly: an untouched
-    ``Field(default=None, db_pk=True)`` pk stays out of the INSERT so the
-    database sequence fills it, while an explicit ``field=None`` still
-    reaches the database as NULL (e.g. to override a server-side default).
+    Values filled from ``default=`` / ``default_factory`` are included. A
+    column is omitted only when its value is None AND the field was not set
+    explicitly: an untouched ``Field(default=None, db_pk=True)`` pk stays out
+    of the INSERT so the database sequence fills it, while an explicit
+    ``field=None`` reaches the database as NULL (e.g. to override a
+    server-side default).
     """
     virtual_fields = _get_virtual_fields(instance.__class__)
     computed_fields = set(instance.__class__.model_computed_fields.keys())
