@@ -39,12 +39,15 @@ Functions:
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from oxyde.exceptions import ManagerError
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
+
+
+TModel = TypeVar("TModel", bound="Model")
 
 
 def _get_virtual_fields(model_class: type[Model]) -> set[str]:
@@ -120,9 +123,9 @@ def _derive_create_data(
 
 
 def _normalize_instance(
-    model_class: type[Model],
+    model_class: type[TModel],
     payload: Any,
-) -> Model:
+) -> TModel:
     """Normalize payload to model instance."""
     if isinstance(payload, model_class):
         return payload

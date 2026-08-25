@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from typing_extensions import Self
 
@@ -13,12 +13,15 @@ if TYPE_CHECKING:
     from oxyde.models.base import Model
 
 
-class FilteringMixin:
+TModel = TypeVar("TModel", bound="Model")
+
+
+class FilteringMixin(Generic[TModel]):
     """Mixin providing filtering capabilities."""
 
     # These attributes are defined in the base Query class
     _filter_tree: ir.FilterNode | None
-    model_class: type[Model]
+    model_class: type[TModel]
 
     def _clone(self) -> Self:
         """Must be implemented by the main Query class."""

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from typing_extensions import Self
 
@@ -16,11 +16,14 @@ if TYPE_CHECKING:
     from oxyde.models.base import Model
 
 
-class DebugMixin:
+TModel = TypeVar("TModel", bound="Model")
+
+
+class DebugMixin(Generic[TModel]):
     """Mixin providing debugging and introspection capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[Model]
+    model_class: type[TModel]
     _union_query: DebugMixin | None
     _union_all: bool
 

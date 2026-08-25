@@ -168,38 +168,10 @@ def test_ty_accepts_generated_stubs(
     )
 
 
-# Per-fixture marks for the model-source check. ``mixed_module`` calls
-# ``Note.objects.all()`` from inside the model file itself, which exercises
-# QueryManager/Query typing rather than the Field-assignment fix this suite
-# is about. Stubs cover the cross-module case; in-file manager calls remain
-# untyped until QueryManager/Query gain proper Generic[TModel] propagation.
-_MODEL_SOURCE_XFAIL = {
-    "edges/mixed_module": pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "QueryManager.all() declared as Coroutine[..., bytes | list[Any]] "
-            "and Model.objects is ClassVar[QueryManager] without TModel. "
-            "Stubs cover cross-module imports; in-file Model.objects.xxx() "
-            "calls require Generic[TModel] propagation through the manager, "
-            "Query and ExecutionMixin. Tracked as a follow-up to issue #13."
-        ),
-    ),
-}
-
-
-def _model_source_params() -> list:
-    params = []
-    for test_id, fixture_dir, model_module, usage_file in FIXTURES:
-        marks = (_MODEL_SOURCE_XFAIL[test_id],) if test_id in _MODEL_SOURCE_XFAIL else ()
-        params.append(
-            pytest.param(fixture_dir, model_module, usage_file, id=test_id, marks=marks)
-        )
-    return params
-
-
 @pytest.mark.parametrize(
     ("fixture_dir", "model_module", "usage_file"),
-    _model_source_params(),
+    [(f[1], f[2], f[3]) for f in FIXTURES],
+    ids=[f[0] for f in FIXTURES],
 )
 def test_mypy_accepts_model_source(
     fixture_dir: str,

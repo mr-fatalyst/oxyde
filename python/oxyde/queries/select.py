@@ -79,13 +79,13 @@ TModel = TypeVar("TModel", bound="Model")
 
 
 class Query(
-    FilteringMixin,
-    PaginationMixin,
-    JoiningMixin,
-    AggregationMixin,
-    ExecutionMixin,
-    MutationMixin,
-    DebugMixin,
+    FilteringMixin[TModel],
+    PaginationMixin[TModel],
+    JoiningMixin[TModel],
+    AggregationMixin[TModel],
+    ExecutionMixin[TModel],
+    MutationMixin[TModel],
+    DebugMixin[TModel],
     Generic[TModel],
 ):
     """
@@ -101,7 +101,7 @@ class Query(
     - DebugMixin: sql, query, explain, union, union_all
     """
 
-    def __init__(self, model_class: type[Model]):
+    def __init__(self, model_class: type[TModel]):
         self.model_class = model_class
         # Filtering state
         self._filter_tree: ir.FilterNode | None = None

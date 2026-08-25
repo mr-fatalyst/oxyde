@@ -81,7 +81,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic.errors import PydanticUndefinedAnnotation
 from pydantic.fields import FieldInfo, PydanticUndefined
-from typing_extensions import dataclass_transform
+from typing_extensions import Self, dataclass_transform
 
 from oxyde.core import register_validator
 from oxyde.core.column_types import compute_column_type
@@ -211,7 +211,9 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         ignored_types=(RelationDescriptorBase,),
     )
     _db_meta: ClassVar[ModelMeta]
-    objects: ClassVar[QueryManager]
+    # Parametrized by Self so `User.objects.first()` infers `User | None`
+    # on every subclass without the generated stubs.
+    objects: ClassVar[QueryManager[Self]]
     _is_table: ClassVar[bool] = False
     __pending_fk_fields__: ClassVar[list[tuple[str, Any, Any]]] = []
     __fk_fields_resolved__: ClassVar[bool] = False
@@ -279,7 +281,9 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             QueryManager,
         )
 
-        cls.objects = QueryManager(cls)
+        # `cls` is type[Model] here while the annotation binds Self per
+        # subclass; the instance is per-class, so the narrowing is correct.
+        cls.objects = QueryManager(cls)  # type: ignore[arg-type]
 
         # Register validator with Rust core for server-side row validation
         model_key = f"{cls.__module__}.{cls.__qualname__}"
@@ -710,7 +714,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         client: SupportsExecute | None = None,
         using: str | None = None,
         update_fields: Iterable[str] | None = None,
-    ) -> Model:
+    ) -> Self:
         manager = self.__class__.objects
         pk_field = self.__class__._db_meta.pk_field
         pk_value = getattr(self, pk_field) if pk_field else None
@@ -816,7 +820,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         *,
         client: SupportsExecute | None = None,
         using: str | None = None,
-    ) -> Model:
+    ) -> Self:
         """
         Reload this instance from the database.
 

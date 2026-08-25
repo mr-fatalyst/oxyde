@@ -10,6 +10,8 @@ never instantiated — if one ever were, it would behave exactly like a plain
 ``Query``.
 """
 
+# pyright: reportIncompatibleMethodOverride=false
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -31,7 +33,7 @@ class ValuesQuery(Query[TModel]):
 
     if TYPE_CHECKING:
 
-        @overload  # type: ignore[override]
+        @overload
         def values_list(
             self, field: str, /, *, flat: Literal[True]
         ) -> FlatValuesListQuery[TModel]: ...
@@ -48,35 +50,35 @@ class ValuesQuery(Query[TModel]):
 
         def values_list(self, *fields: str, flat: bool = False) -> Any: ...
 
-        def all(
+        def all(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
             client: SupportsExecute | None = None,
         ) -> Coroutine[Any, Any, list[dict[str, Any]]]: ...
 
-        async def first(
+        async def first(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
             client: SupportsExecute | None = None,
         ) -> dict[str, Any] | None: ...
 
-        async def last(
+        async def last(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
             client: SupportsExecute | None = None,
         ) -> dict[str, Any] | None: ...
 
-        async def get(
+        async def get(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
             client: SupportsExecute | None = None,
         ) -> dict[str, Any]: ...
 
-        async def get_or_none(
+        async def get_or_none(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
@@ -89,11 +91,9 @@ class ValuesListQuery(Query[TModel]):
 
     if TYPE_CHECKING:
 
-        def values(  # type: ignore[override]
-            self, *fields: str
-        ) -> ValuesQuery[TModel]: ...
+        def values(self, *fields: str) -> ValuesQuery[TModel]: ...
 
-        @overload  # type: ignore[override]
+        @overload
         def values_list(
             self, field: str, /, *, flat: Literal[True]
         ) -> FlatValuesListQuery[TModel]: ...
@@ -110,35 +110,35 @@ class ValuesListQuery(Query[TModel]):
 
         def values_list(self, *fields: str, flat: bool = False) -> Any: ...
 
-        def all(
+        def all(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
             client: SupportsExecute | None = None,
         ) -> Coroutine[Any, Any, list[tuple[Any, ...]]]: ...
 
-        async def first(
+        async def first(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
             client: SupportsExecute | None = None,
         ) -> tuple[Any, ...] | None: ...
 
-        async def last(
+        async def last(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
             client: SupportsExecute | None = None,
         ) -> tuple[Any, ...] | None: ...
 
-        async def get(
+        async def get(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
             client: SupportsExecute | None = None,
         ) -> tuple[Any, ...]: ...
 
-        async def get_or_none(
+        async def get_or_none(  # type: ignore[override]
             self,
             *,
             using: str | None = None,
@@ -151,11 +151,9 @@ class FlatValuesListQuery(Query[TModel]):
 
     if TYPE_CHECKING:
 
-        def values(  # type: ignore[override]
-            self, *fields: str
-        ) -> ValuesQuery[TModel]: ...
+        def values(self, *fields: str) -> ValuesQuery[TModel]: ...
 
-        @overload  # type: ignore[override]
+        @overload
         def values_list(
             self, field: str, /, *, flat: Literal[True]
         ) -> FlatValuesListQuery[TModel]: ...

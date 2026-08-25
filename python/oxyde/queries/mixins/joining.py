@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from typing_extensions import Self
 
@@ -19,11 +19,14 @@ if TYPE_CHECKING:
     from oxyde.models.base import Model
 
 
-class JoiningMixin:
+TModel = TypeVar("TModel", bound="Model")
+
+
+class JoiningMixin(Generic[TModel]):
     """Mixin providing join and prefetch capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[Model]
+    model_class: type[TModel]
     _join_specs: list[_JoinDescriptor]
     _prefetch_paths: list[str]
 
@@ -97,7 +100,7 @@ class JoiningMixin:
         if not path:
             raise ValueError("join() path must be non-empty")
         segments = path.split("__")
-        current_model = self.model_class
+        current_model: type[Model] = self.model_class
         parent_path: str | None = None
         parent_alias: str | None = None
         descriptors: list[_JoinDescriptor] = []

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from typing_extensions import Self
 
@@ -27,11 +27,14 @@ _HAVING_LOOKUP_OPS: dict[str, str] = {
 }
 
 
-class AggregationMixin:
+TModel = TypeVar("TModel", bound="Model")
+
+
+class AggregationMixin(Generic[TModel]):
     """Mixin providing aggregation capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[Model]
+    model_class: type[TModel]
     _annotations: dict[str, Any]
     _group_by_fields: list[str]
     _having: ir.FilterNode | None

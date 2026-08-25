@@ -607,11 +607,11 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Add HAVING clause for filtering grouped results.\"\"\"
         ...
 
-    def values(self, *fields: {field_literal}) -> ValuesQuery[{model_name}]:  # type: ignore[override]
+    def values(self, *fields: {field_literal}) -> ValuesQuery[{model_name}]:
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    @overload  # type: ignore[override]
+    @overload
     def values_list(self, field: {field_literal}, /, *, flat: Literal[True]) -> FlatValuesListQuery[{model_name}]:
         ...
 
@@ -620,7 +620,7 @@ class {model_name}Query(Query[{model_name}]):
         ...
 
     @overload
-    def values_list(self, *fields: {field_literal}, flat: bool) -> ValuesListQuery[{model_name}] | FlatValuesListQuery[{model_name}]:  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    def values_list(self, *fields: {field_literal}, flat: bool) -> ValuesListQuery[{model_name}] | FlatValuesListQuery[{model_name}]:
         ...
 
     # Terminal methods (async, execute query)
@@ -728,7 +728,7 @@ class {model_name}Query(Query[{model_name}]):
         \"\"\"Return one result or None (raises if many).\"\"\"
         ...
 
-    @overload  # type: ignore[override]
+    @overload
     async def update(
         self,
         *,
@@ -740,7 +740,7 @@ class {model_name}Query(Query[{model_name}]):
         ...
 
     @overload
-    async def update(  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    async def update(
         self,
         *,
         returning: Literal[False] = ...,
@@ -802,7 +802,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Return dicts instead of models.\"\"\"
         ...
 
-    @overload  # type: ignore[override]
+    @overload
     def values_list(self, field: {field_literal}, /, *, flat: Literal[True]) -> FlatValuesListQuery[{model_name}]:
         ...
 
@@ -811,7 +811,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         ...
 
     @overload
-    def values_list(self, *fields: {field_literal}, flat: bool) -> ValuesListQuery[{model_name}] | FlatValuesListQuery[{model_name}]:  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    def values_list(self, *fields: {field_literal}, flat: bool) -> ValuesListQuery[{model_name}] | FlatValuesListQuery[{model_name}]:
         ...
 
     def distinct(self, distinct: bool = True) -> {model_name}Query:
@@ -903,7 +903,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Check if any records exist.\"\"\"
         ...
 
-    @overload  # type: ignore[override]
+    @overload
     async def all(
         self,
         *,
@@ -914,7 +914,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         ...
 
     @overload
-    async def all(  # ty: ignore[invalid-method-override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    async def all(
         self,
         *,
         client: Any | None = ...,
@@ -1001,7 +1001,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Create new object.\"\"\"
         ...
 
-    async def bulk_create(  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    async def bulk_create(
         self,
         objects: Iterable[{model_name} | dict[str, Any]],
         *,
@@ -1012,7 +1012,7 @@ class {model_name}Manager(QueryManager[{model_name}]):
         \"\"\"Bulk create objects.\"\"\"
         ...
 
-    async def bulk_update(  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    async def bulk_update(
         self,
         objects: Iterable[{model_name}],
         fields: Iterable[str],

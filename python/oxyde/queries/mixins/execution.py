@@ -7,8 +7,8 @@ Model.model_config - no sanitization needed.
 
 from __future__ import annotations
 
-from collections.abc import Coroutine
-from typing import TYPE_CHECKING, Any
+from collections.abc import Coroutine, Sequence
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from pydantic import TypeAdapter
 from typing_extensions import Self
@@ -31,6 +31,9 @@ if TYPE_CHECKING:
     from oxyde.models.base import Model
 
 
+TModel = TypeVar("TModel", bound="Model")
+
+
 def _remap_columns(columns: list[str], model_class: type[Model]) -> list[str]:
     """Remap db_column names to field names using cached reverse_column_map."""
     rmap = model_class._db_meta.reverse_column_map
@@ -39,11 +42,11 @@ def _remap_columns(columns: list[str], model_class: type[Model]) -> list[str]:
     return [rmap.get(c, c) for c in columns]
 
 
-class ExecutionMixin:
+class ExecutionMixin(Generic[TModel]):
     """Mixin providing query execution capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[Model]
+    model_class: type[TModel]
     _result_mode: str | None
     _values_flat: bool
     _selected_fields: list[str] | None
@@ -136,7 +139,7 @@ class ExecutionMixin:
                 return [dict(zip(columns, row)) for row in second]
         return data if isinstance(data, list) else []
 
-    async def fetch_models(self, client: SupportsExecute) -> list[Model]:
+    async def fetch_models(self, client: SupportsExecute) -> list[TModel]:
         """Execute query and return results as model instances.
 
         JOIN relations use Rust-side dedup encoding (3-element msgpack array).
@@ -173,7 +176,7 @@ class ExecutionMixin:
             rows = [dict(zip(columns, row)) for row in main_rows]
             del main_rows, data
 
-            models: list[Model] = adapter.validate_python(rows)
+            models: list[TModel] = adapter.validate_python(rows)
             del rows
             self._hydrate_from_dedup(models, relations_map)
         elif (
@@ -205,7 +208,7 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Coroutine[Any, Any, bytes | list[Any]]:
+    ) -> Coroutine[Any, Any, list[TModel]]:
         """Execute query and return results as Pydantic models.
 
         Args:
@@ -222,7 +225,7 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Any:
+    ) -> TModel | None:
         """
         Return the first result or None.
 
@@ -246,7 +249,7 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Any:
+    ) -> TModel | None:
         """
         Return the last result or None.
 
@@ -332,7 +335,7 @@ class ExecutionMixin:
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Any:
+    ) -> TModel:
         """
         Return exactly one result matching the query.
 
@@ -355,14 +358,15 @@ class ExecutionMixin:
             raise MultipleObjectsReturned(
                 f"Query for {self.model_class.__name__} returned multiple objects"
             )
-        return results[0]
+        result: TModel = results[0]
+        return result
 
     async def get_or_none(
         self,
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
-    ) -> Any:
+    ) -> TModel | None:
         """
         Return one result or None if not found.
 
@@ -386,8 +390,12 @@ class ExecutionMixin:
         *,
         using: str | None,
         client: SupportsExecute | None,
-    ) -> Coroutine[Any, Any, bytes | list[Any]]:
-        """Internal execution dispatcher."""
+    ) -> Coroutine[Any, Any, Any]:
+        """Internal execution dispatcher.
+
+        The payload type depends on the result mode (models / dicts / tuples /
+        raw msgpack); public terminals narrow it in their own signatures.
+        """
 
         async def runner() -> bytes | list[Any]:
             exec_client = await _resolve_execution_client(using, client)
@@ -403,7 +411,7 @@ class ExecutionMixin:
 
     def _hydrate_from_dedup(
         self,
-        models: list[Model],
+        models: Sequence[Model],
         relations_map: dict[str, Any],
     ) -> None:
         """Hydrate joined relations from Rust dedup format.
@@ -475,7 +483,7 @@ class ExecutionMixin:
 
     async def _run_prefetch(
         self,
-        parents: list[Model],
+        parents: Sequence[Model],
         client: SupportsExecute,
     ) -> None:
         """Run prefetch for all specified paths."""
@@ -485,7 +493,7 @@ class ExecutionMixin:
 
     async def _prefetch_path(
         self,
-        parents: list[Model],
+        parents: Sequence[Model],
         client: SupportsExecute,
         segments: list[str],
         current_model: type[Model],
@@ -554,9 +562,7 @@ class ExecutionMixin:
             filter_kwargs = {f"{fk_column}__in": unique_ids}
             children: list[Model] = await target_model.objects.filter(
                 **filter_kwargs
-            ).all(  # type: ignore[assignment]
-                client=client
-            )
+            ).all(client=client)
             for child in children:
                 key = getattr(child, fk_column, None)
                 if key is None:
@@ -587,7 +593,7 @@ class ExecutionMixin:
 
     async def _prefetch_m2m(
         self,
-        parents: list[Model],
+        parents: Sequence[Model],
         client: SupportsExecute,
         relation: Any,  # RelationInfo
         source_model: type[Model],
@@ -671,9 +677,7 @@ class ExecutionMixin:
             filter_kwargs = {f"{target_pk.name}__in": target_ids}
             targets: list[Model] = await target_model.objects.filter(
                 **filter_kwargs
-            ).all(  # type: ignore[assignment]
-                client=client
-            )
+            ).all(client=client)
             for target in targets:
                 pk_val = getattr(target, target_pk.name)
                 targets_by_pk[pk_val] = target

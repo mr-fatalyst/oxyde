@@ -6,7 +6,16 @@ import warnings
 from collections.abc import Iterable
 from enum import Enum
 from functools import cache
-from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Generic,
+    Literal,
+    TypeVar,
+    get_args,
+    get_origin,
+    overload,
+)
 
 from pydantic import TypeAdapter
 
@@ -35,6 +44,9 @@ if TYPE_CHECKING:
     from oxyde.models.base import Model
 
 
+TModel = TypeVar("TModel", bound="Model")
+
+
 async def _is_mysql(using: str | None, client: SupportsExecute | None) -> bool:
     """Check if the target database is MySQL via cached backend from Rust."""
     if client is not None:
@@ -47,8 +59,8 @@ async def _is_mysql(using: str | None, client: SupportsExecute | None) -> bool:
 
 
 def _hydrate_models(
-    model_class: type[Model], columns: list[str], rows: list[list[Any]]
-) -> list[Model]:
+    model_class: type[TModel], columns: list[str], rows: list[list[Any]]
+) -> list[TModel]:
     """Convert raw columns + rows into validated model instances."""
     rmap = model_class._db_meta.reverse_column_map
     field_columns = [rmap.get(c, c) for c in columns] if rmap else columns
@@ -56,8 +68,8 @@ def _hydrate_models(
 
 
 def _decode_returning_models(
-    model_class: type[Model], result: dict[str, Any]
-) -> list[Model]:
+    model_class: type[TModel], result: dict[str, Any]
+) -> list[TModel]:
     """Decode mutation-returning result {columns, rows} into model instances."""
     rows = result.get("rows", [])
     if not rows:
@@ -65,7 +77,9 @@ def _decode_returning_models(
     return _hydrate_models(model_class, result.get("columns", []), rows)
 
 
-def _decode_columnar_models(model_class: type[Model], result: list[Any]) -> list[Model]:
+def _decode_columnar_models(
+    model_class: type[TModel], result: list[Any]
+) -> list[TModel]:
     """Decode columnar SELECT result [columns, rows] into model instances."""
     if len(result) < 2 or not result[1]:
         return []
@@ -111,11 +125,11 @@ def _validate_enum_update_values(
     return validated
 
 
-class MutationMixin:
+class MutationMixin(Generic[TModel]):
     """Mixin providing data mutation capabilities."""
 
     # These attributes are defined in the base Query class
-    model_class: type[Model]
+    model_class: type[TModel]
 
     def _build_filter_tree(self) -> ir.FilterNode | None:
         """Must be implemented by FilteringMixin."""
@@ -167,7 +181,7 @@ class MutationMixin:
         using: str | None = ...,
         client: SupportsExecute | None = ...,
         **values: Any,
-    ) -> list[Model]: ...
+    ) -> list[TModel]: ...
 
     @overload
     async def update(
@@ -186,7 +200,7 @@ class MutationMixin:
         using: str | None = None,
         client: SupportsExecute | None = None,
         **values: Any,
-    ) -> int | list[Model]:
+    ) -> int | list[TModel]:
         """
         Update records matching the query.
 
@@ -242,7 +256,7 @@ class MutationMixin:
         exec_client: SupportsExecute,
         serialized_values: dict[str, Any],
         column_types: dict[str, dict] | None,
-    ) -> list[Model]:
+    ) -> list[TModel]:
         """MySQL fallback: SELECT PKs FOR UPDATE → UPDATE → re-fetch by PKs."""
         from oxyde.db.transaction import atomic, get_active_transaction
 
@@ -255,7 +269,7 @@ class MutationMixin:
         filter_tree = self._build_filter_tree()
         alias = using or "default"
 
-        async def _do(tx_client: SupportsExecute) -> list[Model]:
+        async def _do(tx_client: SupportsExecute) -> list[TModel]:
             # 1. Collect PKs with FOR UPDATE lock
             select_pks_ir = ir.build_select_ir(
                 table=table,
@@ -369,12 +383,12 @@ class MutationMixin:
     async def create(
         self,
         *,
-        instance: Model | None = None,
+        instance: TModel | None = None,
         using: str | None = None,
         client: SupportsExecute | None = None,
         _skip_hooks: bool = False,
         **data: Any,
-    ) -> Model:
+    ) -> TModel:
         """
         Create a new record in the database.
 
@@ -436,12 +450,12 @@ class MutationMixin:
 
     async def bulk_create(
         self,
-        objects: Iterable[Any],
+        objects: Iterable[TModel | dict[str, Any]],
         *,
         using: str | None = None,
         client: SupportsExecute | None = None,
         batch_size: int | None = None,
-    ) -> list[Model]:
+    ) -> list[TModel]:
         """
         Insert multiple objects efficiently.
 
@@ -506,7 +520,7 @@ class MutationMixin:
 
     async def bulk_update(
         self,
-        objects: Iterable[Model],
+        objects: Iterable[TModel],
         fields: Iterable[str],
         *,
         using: str | None = None,
