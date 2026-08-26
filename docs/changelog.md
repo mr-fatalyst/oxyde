@@ -4,7 +4,7 @@ All notable changes to Oxyde are documented here.
 
 ---
 
-## 0.8.0 - Unreleased
+## 0.8.0 - 2026-08-26
 
 **Rust core: 0.7.0+** (`core-v0.7.0+`)
 
