@@ -101,11 +101,13 @@ def normalize_field_dict(field: dict) -> dict:
             "(column_type={'kind': ...}) or regenerate the migration with "
             "'oxyde makemigrations'."
         )
-    spec = None
     if db_type:
-        # db_type wins for the semantic kind, same as compute_column_type
-        spec = compute_column_type(None, db_type)
-    if spec is None:
+        # An explicit db_type owns the column kind, same rule as live models
+        # (compute_column_type): a type name the mapping does not know is
+        # `unknown` — never a fallback to python_type, or legacy history and
+        # makemigrations would disagree on the same column.
+        spec = compute_column_type(None, db_type) or {"kind": "unknown"}
+    else:
         spec = spec_from_legacy_name(
             str(field.get("python_type", "")),
             max_length=field.get("max_length"),

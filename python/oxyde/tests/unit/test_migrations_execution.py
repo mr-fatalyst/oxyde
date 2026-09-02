@@ -363,6 +363,29 @@ class TestMigrationValidation:
         with pytest.raises(ValueError, match="defines neither"):
             normalize_field_dict({"name": "id", "field_type": "INTEGER"})
 
+    def test_explicit_db_type_owns_the_column_kind(self):
+        """With db_type set, the kind comes from db_type alone: a type name
+        the mapping does not know is `unknown`, exactly what extract reports
+        for the live model. python_type is consulted only without db_type."""
+        from oxyde.migrations.utils import normalize_field_dict
+
+        unknown = normalize_field_dict(
+            {
+                "name": "id",
+                "python_type": "int",
+                "db_type": "bigint GENERATED ALWAYS AS IDENTITY",
+            }
+        )
+        assert unknown["column_type"] == {"kind": "unknown"}
+
+        known = normalize_field_dict(
+            {"name": "ts", "python_type": "datetime", "db_type": "TIMESTAMPTZ"}
+        )
+        assert known["column_type"] == {"kind": "date_time_utc"}
+
+        annotated = normalize_field_dict({"name": "n", "python_type": "int"})
+        assert annotated["column_type"] == {"kind": "big_integer"}
+
     def test_validate_table_name(self):
         """Test table name validation."""
         import re

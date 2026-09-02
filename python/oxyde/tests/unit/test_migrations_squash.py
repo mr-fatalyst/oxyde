@@ -6,10 +6,15 @@ raw-SQL detection, history replacement, idempotency, empty dir.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from oxyde import Field, Model
+from oxyde.core import migration_compute_diff
+from oxyde.migrations.extract import extract_current_schema
 from oxyde.migrations.replay import replay_migrations
 from oxyde.migrations.squash import squash_migrations
+from oxyde.models.registry import unregister_table
 
 LEGACY_0001 = '''"""Legacy-format migration (python_type field dicts)."""
 
@@ -73,6 +78,40 @@ def upgrade(ctx):
 
 def downgrade(ctx):
     ctx.drop_column("users", "age")
+'''
+
+
+LEGACY_IDENTITY = '''"""Legacy-format migration with a hand-written column definition."""
+
+depends_on = None
+
+
+def upgrade(ctx):
+    ctx.create_table(
+        "identity_authors",
+        fields=[
+            {
+                "name": "id",
+                "python_type": "int",
+                "db_type": "bigint GENERATED ALWAYS AS IDENTITY",
+                "nullable": True,
+                "primary_key": True,
+                "unique": False,
+                "default": None,
+                "auto_increment": False,
+            },
+            {
+                "name": "name",
+                "python_type": "str",
+                "db_type": None,
+                "nullable": False,
+                "primary_key": False,
+                "unique": False,
+                "default": None,
+                "auto_increment": False,
+            },
+        ],
+    )
 '''
 
 
@@ -186,6 +225,35 @@ def upgrade(ctx):
             assert (
                 users_before[col]["column_type"] == users_after[col]["column_type"]
             ), col
+
+    def test_squashed_legacy_history_matches_live_model(self, tmp_path, recwarn):
+        """A db_type the mapping does not recognize is `unknown` on both
+        sides — legacy history (and its squash) and the live model — so
+        makemigrations right after squash has nothing to emit."""
+        (tmp_path / "0001_authors.py").write_text(LEGACY_IDENTITY)
+
+        class IdentityAuthor(Model):
+            id: int | None = Field(
+                default=None,
+                db_pk=True,
+                db_type="bigint GENERATED ALWAYS AS IDENTITY",
+            )
+            name: str
+
+            class Meta:
+                is_table = True
+                table_name = "identity_authors"
+
+        try:
+            squash_migrations(tmp_path)
+            old = replay_migrations(str(tmp_path))
+            new = extract_current_schema("postgres")
+            new["tables"] = {"identity_authors": new["tables"]["identity_authors"]}
+            ops = json.loads(migration_compute_diff(json.dumps(old), json.dumps(new)))
+        finally:
+            unregister_table(IdentityAuthor)
+
+        assert ops == []
 
     def test_squash_is_idempotent(self, tmp_path):
         _write_legacy_history(tmp_path)

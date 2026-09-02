@@ -4,6 +4,14 @@ All notable changes to Oxyde are documented here.
 
 ---
 
+## Unreleased
+
+### Migrations
+
+- **Phantom `alter_column` after upgrading with a hand-written `db_type`** — legacy migration files (`python_type` format) and `oxyde migrations squash` derived the column kind from `python_type` whenever `db_type` was not a recognized type name (e.g. `bigint GENERATED ALWAYS AS IDENTITY`), while `makemigrations` reports such a column as `unknown`. The next `makemigrations` then emitted an `alter_column` with no effect (a table rebuild on SQLite). An explicit `db_type` now owns the column kind on both sides. (#47)
+
+---
+
 ## 0.8.0 - 2026-08-26
 
 **Rust core: 0.7.0+** (`core-v0.7.0+`)
