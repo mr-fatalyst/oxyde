@@ -48,6 +48,15 @@ pyo3::create_exception!(
 
 /// Convert a `DriverError` into the matching Python exception.
 pub(crate) fn driver_err(e: &DriverError) -> PyErr {
+    match e {
+        DriverError::InvalidListenerChannels(_) => {
+            return pyo3::exceptions::PyValueError::new_err(e.to_string())
+        }
+        DriverError::ListenerUnsupported => {
+            return pyo3::exceptions::PyNotImplementedError::new_err(e.to_string())
+        }
+        _ => {}
+    }
     let message = e.to_string();
     match e.db_kind() {
         Some(DbErrorKind::UniqueViolation) => UniqueViolationError::new_err(message),

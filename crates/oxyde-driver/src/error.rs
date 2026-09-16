@@ -4,6 +4,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DriverError {
+    #[error("PostgreSQL notification listeners are not supported by this backend")]
+    ListenerUnsupported,
+
+    #[error("Invalid listener channels: {0}")]
+    InvalidListenerChannels(String),
+
     #[error("Database error: {0}")]
     DatabaseError(String),
 
