@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 import pytest
 
@@ -43,6 +44,7 @@ class OxydeTestModel(Model):
     is_active: bool = True
     created_at: datetime
     birth_date: date | None = None
+    uuid_val: UUID | None = None
 
     class Meta:
         is_table = True
@@ -122,6 +124,10 @@ class TestLookupCategory:
         category = _lookup_category(meta)
         assert category in ("bool", "generic", "numeric")
 
+    def test_uuid_category(self):
+        meta = _resolve_column_meta(OxydeTestModel, "uuid_val")
+        assert _lookup_category(meta) == "uuid"
+
 
 class TestAllowedLookups:
     """Test _allowed_lookups_for_meta function."""
@@ -183,6 +189,57 @@ class TestAllowedLookups:
         assert "exact" in allowed
         assert "in" in allowed
         assert "isnull" in allowed
+
+    def test_uuid_field_lookups(self):
+        meta = _resolve_column_meta(OxydeTestModel, "uuid_val")
+        allowed = _allowed_lookups_for_meta(meta)
+        assert set(allowed) == {
+            "exact",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "between",
+            "range",
+            "in",
+            "isnull",
+        }
+
+
+class TestUuidLookups:
+    UUID_LOW = UUID("10000000-0000-4000-8000-000000000001")
+    UUID_HIGH = UUID("90000000-0000-4000-8000-000000000003")
+
+    @pytest.mark.parametrize(
+        ("lookup", "operator"),
+        [("gt", ">"), ("gte", ">="), ("lt", "<"), ("lte", "<=")],
+    )
+    def test_comparison(self, lookup, operator):
+        ir = OxydeTestModel.objects.filter(
+            **{f"uuid_val__{lookup}": self.UUID_LOW}
+        ).to_ir()
+        condition = get_filter_condition(ir)
+        assert condition["operator"] == operator
+        assert condition["value"] == str(self.UUID_LOW)
+
+    @pytest.mark.parametrize("lookup", ["between", "range"])
+    def test_inclusive_range(self, lookup):
+        ir = OxydeTestModel.objects.filter(
+            **{f"uuid_val__{lookup}": (self.UUID_LOW, self.UUID_HIGH)}
+        ).to_ir()
+        condition = get_filter_condition(ir)
+        assert condition["operator"] == "BETWEEN"
+        assert condition["value"] == [str(self.UUID_LOW), str(self.UUID_HIGH)]
+
+    def test_existing_validation(self):
+        with pytest.raises(FieldLookupValueError):
+            OxydeTestModel.objects.filter(uuid_val__gt=None)
+        with pytest.raises(FieldLookupValueError):
+            OxydeTestModel.objects.filter(uuid_val__between=(self.UUID_LOW,))
+        with pytest.raises(FieldLookupError):
+            OxydeTestModel.objects.filter(uuid_val__contains="1000")
+        with pytest.raises(FieldLookupError):
+            OxydeTestModel.objects.filter(uuid_val__year=2026)
 
 
 class TestStringLookups:
@@ -563,7 +620,7 @@ class TestResolveColumnMeta:
         meta = _resolve_column_meta(OxydeTestModel, "name")
 
         assert meta.name == "name"
-        assert meta.python_type == str
+        assert meta.python_type is str
 
     def test_resolves_pk_field(self):
         """Test resolving metadata for primary key field."""

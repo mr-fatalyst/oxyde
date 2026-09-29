@@ -24,7 +24,7 @@ from uuid import UUID
 class TypeDescriptor:
     """Describes how a Python type maps to ORM operations."""
 
-    category: str  # "string", "numeric", "datetime", "time", "bool", "generic"
+    category: str  # "string", "numeric", "datetime", "time", "uuid", "bool", "generic"
     serialize: Callable[[Any], Any]  # value → msgpack-safe value
 
 
@@ -41,7 +41,7 @@ TYPE_REGISTRY: dict[type, TypeDescriptor] = {
     # part, so date-part lookups (year/month/day) must not be offered.
     time: TypeDescriptor("time", lambda v: v.isoformat()),
     timedelta: TypeDescriptor("generic", lambda v: int(v.total_seconds() * 1_000_000)),
-    UUID: TypeDescriptor("generic", str),
+    UUID: TypeDescriptor("uuid", str),
     Decimal: TypeDescriptor("numeric", str),
     dict: TypeDescriptor("generic", lambda v: v),
 }

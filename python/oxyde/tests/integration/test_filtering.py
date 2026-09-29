@@ -3,12 +3,78 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 import pytest
 
 from oxyde import Q
 
-from .conftest import AliasedEvent, Author, Event, Post
+from .conftest import AliasedEvent, AllTypes, Author, Event, FactoryKeyed, Post
+
+UUID_LOW = UUID("10000000-0000-4000-8000-000000000001")
+UUID_MID = UUID("80000000-0000-4000-8000-000000000002")
+UUID_HIGH = UUID("90000000-0000-4000-8000-000000000003")
+UUID_V7_LOW = UUID("018f0000-0000-7000-8000-000000000001")
+UUID_V7_HIGH = UUID("018f0000-0002-7000-8000-000000000003")
+
+
+class TestUuidFilters:
+    @pytest.mark.asyncio
+    async def test_comparisons_ranges_and_pagination(self, db):
+        values = [UUID_HIGH, UUID_V7_HIGH, UUID_MID, UUID_LOW, UUID_V7_LOW]
+        for value in values:
+            await FactoryKeyed.objects.create(id=value, name=str(value), using=db.name)
+
+        ordered = sorted(values)
+        cases = [
+            ({"id__gt": UUID_MID}, [UUID_HIGH]),
+            ({"id__gte": UUID_MID}, [UUID_MID, UUID_HIGH]),
+            ({"id__lt": UUID_MID}, [UUID_V7_LOW, UUID_V7_HIGH, UUID_LOW]),
+            ({"id__lte": UUID_MID}, [UUID_V7_LOW, UUID_V7_HIGH, UUID_LOW, UUID_MID]),
+            ({"id__between": (UUID_LOW, UUID_MID)}, [UUID_LOW, UUID_MID]),
+            ({"id__range": [UUID_LOW, UUID_MID]}, [UUID_LOW, UUID_MID]),
+            ({"id__range": [UUID_MID, UUID_LOW]}, []),
+        ]
+        for filters, expected in cases:
+            rows = (
+                await FactoryKeyed.objects.filter(**filters)
+                .order_by("id")
+                .all(using=db.name)
+            )
+            assert [row.id for row in rows] == expected
+
+        seen = []
+        cursor = None
+        while True:
+            query = FactoryKeyed.objects.order_by("id").limit(2)
+            if cursor is not None:
+                query = query.filter(id__gt=cursor)
+            page = await query.all(using=db.name)
+            if not page:
+                break
+            seen.extend(row.id for row in page)
+            cursor = page[-1].id
+        assert seen == ordered
+
+    @pytest.mark.asyncio
+    async def test_nullable_uuid_and_q_exclude(self, db):
+        await AllTypes.objects.create(uuid_val=None, using=db.name)
+        await AllTypes.objects.create(uuid_val=UUID_LOW, using=db.name)
+        await AllTypes.objects.create(uuid_val=UUID_MID, using=db.name)
+        await AllTypes.objects.create(uuid_val=UUID_HIGH, using=db.name)
+
+        rows = await AllTypes.objects.filter(uuid_val__gte=UUID_MID).all(using=db.name)
+        assert {row.uuid_val for row in rows} == {UUID_MID, UUID_HIGH}
+
+        rows = await AllTypes.objects.filter(
+            Q(uuid_val__lt=UUID_MID) | Q(uuid_val__gt=UUID_MID)
+        ).all(using=db.name)
+        assert {row.uuid_val for row in rows} == {UUID_LOW, UUID_HIGH}
+
+        rows = await AllTypes.objects.exclude(
+            uuid_val__between=(UUID_LOW, UUID_MID)
+        ).all(using=db.name)
+        assert {row.uuid_val for row in rows} == {UUID_HIGH}
 
 
 class TestBasicFilters:
@@ -78,9 +144,9 @@ class TestBasicFilters:
             using=db.name,
         )
 
-        posts = await Post.objects.filter(
-            title__iexact="SNAKE_CASE_TITLE"
-        ).all(using=db.name)
+        posts = await Post.objects.filter(title__iexact="SNAKE_CASE_TITLE").all(
+            using=db.name
+        )
 
         assert len(posts) == 1
         assert posts[0].title == "snake_case_title"

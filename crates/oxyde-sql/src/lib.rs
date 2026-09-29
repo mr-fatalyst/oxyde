@@ -374,6 +374,66 @@ mod tests {
     }
 
     #[test]
+    fn test_uuid_comparison_and_range_bindings() {
+        let lower = "10000000-0000-4000-8000-000000000001";
+        let upper = "90000000-0000-4000-8000-000000000003";
+        let expected = [lower, upper];
+
+        for dialect in [Dialect::Postgres, Dialect::Sqlite, Dialect::Mysql] {
+            for operator in [">", ">=", "<", "<=", "BETWEEN"] {
+                let filter = if operator == "BETWEEN" {
+                    filter_with_column(
+                        "id",
+                        "item.uuid_id",
+                        operator,
+                        rmpv_arr(vec![rmpv_str(lower), rmpv_str(upper)]),
+                    )
+                } else {
+                    filter_with_column("id", "item.uuid_id", operator, rmpv_str(lower))
+                };
+                let ir = QueryIR {
+                    table: "items".into(),
+                    cols: Some(vec!["id".into()]),
+                    column_types: Some(HashMap::from([(
+                        "item.uuid_id".into(),
+                        ColumnTypeSpec::Uuid,
+                    )])),
+                    filter_tree: Some(filter),
+                    ..Default::default()
+                };
+
+                let (sql, params) = build_sql(&ir, dialect).unwrap();
+                assert!(sql.contains(operator), "{dialect:?}: {sql}");
+                assert_eq!(params.len(), if operator == "BETWEEN" { 2 } else { 1 });
+                for (actual, value) in params.iter().zip(expected) {
+                    match actual {
+                        Value::Uuid(Some(uuid)) => assert_eq!(uuid.to_string(), value),
+                        other => panic!("{dialect:?} {operator}: expected UUID, got {other:?}"),
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_uuid_between_rejects_wrong_endpoint_count() {
+        let ir = QueryIR {
+            table: "items".into(),
+            column_types: Some(HashMap::from([("id".into(), ColumnTypeSpec::Uuid)])),
+            filter_tree: Some(filter_cond(
+                "id",
+                "BETWEEN",
+                rmpv_arr(vec![rmpv_str("10000000-0000-4000-8000-000000000001")]),
+            )),
+            ..Default::default()
+        };
+        assert!(matches!(
+            build_sql(&ir, Dialect::Postgres),
+            Err(QueryError::InvalidQuery(_))
+        ));
+    }
+
+    #[test]
     fn test_select_is_null_lookup() {
         let ir = QueryIR {
             table: "entries".into(),

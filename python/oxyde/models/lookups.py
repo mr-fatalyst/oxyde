@@ -18,6 +18,9 @@ Lookup Categories by Field Type:
     Time fields:
         exact, gt, gte, lt, lte, between, range, in, isnull
 
+    UUID fields:
+        exact, gt, gte, lt, lte, between, range, in, isnull
+
     Boolean fields:
         exact, in, isnull
 
@@ -88,6 +91,7 @@ STRING_LOOKUPS = [
 ]
 NUMERIC_LOOKUPS = ["gt", "gte", "lt", "lte", "between", "range"]
 DATETIME_LOOKUPS = ["gt", "gte", "lt", "lte", "between", "range"]
+UUID_LOOKUPS = ["gt", "gte", "lt", "lte", "between", "range"]
 BOOL_LOOKUPS: list[str] = []
 GENERIC_LOOKUPS: list[str] = []
 COMMON_LOOKUPS = ["in", "isnull"]
@@ -126,6 +130,8 @@ def _allowed_lookups_for_meta(meta: ColumnMeta) -> list[str]:
         # Comparisons are valid for times of day, but there is no calendar
         # part to extract — the year/month/day builders reject time fields.
         lookups.extend(DATETIME_LOOKUPS)
+    elif category == "uuid":
+        lookups.extend(UUID_LOOKUPS)
     elif category == "bool":
         lookups.extend(BOOL_LOOKUPS)
     else:
@@ -510,6 +516,7 @@ __all__ = [
     "STRING_LOOKUPS",
     "NUMERIC_LOOKUPS",
     "DATETIME_LOOKUPS",
+    "UUID_LOOKUPS",
     "BOOL_LOOKUPS",
     "GENERIC_LOOKUPS",
     "COMMON_LOOKUPS",

@@ -9,7 +9,6 @@ from uuid import UUID
 from models import Author, Post, Tag
 from typing_extensions import assert_type
 
-
 # --- Manager-level query builders ---
 
 
@@ -263,6 +262,11 @@ async def field_types_filters() -> list[Post]:
             published=True,
             created_at__year=2026,
             slug_id__isnull=False,
+            slug_id__gt=UUID("10000000-0000-4000-8000-000000000001"),
+            slug_id__range=(
+                UUID("10000000-0000-4000-8000-000000000001"),
+                UUID("90000000-0000-4000-8000-000000000003"),
+            ),
             title__startswith="Hi",
             title__exact="Hi",
             published_on__year=2026,

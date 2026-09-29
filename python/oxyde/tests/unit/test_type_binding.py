@@ -171,8 +171,30 @@ OPERATOR_CASES = [
     ("contains", {"name__contains": "ali"}, [("String", "%ali%")]),
     ("startswith", {"name__startswith": "Al"}, [("String", "Al%")]),
     ("endswith", {"name__endswith": "ce"}, [("String", "%ce")]),
-    ("in_int", {"age__in": [20, 30, 40]}, [("BigInt", 20), ("BigInt", 30), ("BigInt", 40)]),
-    ("in_str", {"name__in": ["Alice", "Bob"]}, [("String", "Alice"), ("String", "Bob")]),
+    (
+        "in_int",
+        {"age__in": [20, 30, 40]},
+        [("BigInt", 20), ("BigInt", 30), ("BigInt", 40)],
+    ),
+    (
+        "in_str",
+        {"name__in": ["Alice", "Bob"]},
+        [("String", "Alice"), ("String", "Bob")],
+    ),
+    ("uuid_gt", {"uuid_val__gt": U}, [("Uuid", str(U))]),
+    ("uuid_gte", {"uuid_val__gte": U}, [("Uuid", str(U))]),
+    ("uuid_lt", {"uuid_val__lt": U}, [("Uuid", str(U))]),
+    ("uuid_lte", {"uuid_val__lte": U}, [("Uuid", str(U))]),
+    (
+        "uuid_between",
+        {"uuid_val__between": (U, UUID("90000000-0000-4000-8000-000000000003"))},
+        [("Uuid", str(U)), ("Uuid", "90000000-0000-4000-8000-000000000003")],
+    ),
+    (
+        "uuid_range",
+        {"uuid_val__range": [U, UUID("90000000-0000-4000-8000-000000000003")]},
+        [("Uuid", str(U)), ("Uuid", "90000000-0000-4000-8000-000000000003")],
+    ),
 ]
 
 
@@ -229,7 +251,9 @@ def test_null_filter(dialect):
 def test_sql_syntax(dialect, placeholder, quote):
     sql, _ = TypeModel.objects.filter(age=25).sql(dialect=dialect)
     assert placeholder in sql, f"[{dialect}] expected {placeholder} in: {sql}"
-    assert f"{quote}age{quote}" in sql, f"[{dialect}] expected {quote}age{quote} in: {sql}"
+    assert f"{quote}age{quote}" in sql, (
+        f"[{dialect}] expected {quote}age{quote} in: {sql}"
+    )
 
 
 # ---- Backward compatibility: with_types=False (default) ----

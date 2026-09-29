@@ -441,8 +441,12 @@ impl MigrationOpExt for MigrationOp {
                             )]
                         } else {
                             vec![
-                                format!("-- WARNING: field_def not provided, column attributes may be lost"),
-                                format!("ALTER TABLE `{}` CHANGE `{}` `{}` TEXT", table, old_name, new_name),
+                                "-- WARNING: field_def not provided, column attributes may be lost"
+                                    .to_string(),
+                                format!(
+                                    "ALTER TABLE `{}` CHANGE `{}` `{}` TEXT",
+                                    table, old_name, new_name
+                                ),
                             ]
                         }
                     }

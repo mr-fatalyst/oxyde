@@ -244,9 +244,7 @@ class TestGenerateFilterParams:
         params = _generate_filter_params(Dated)
         assert "created__year: int | None = None," in params
         assert "created__month: tuple[int, int] | list[int] | None = None," in params
-        assert (
-            "created__day: tuple[int, int, int] | list[int] | None = None," in params
-        )
+        assert "created__day: tuple[int, int, int] | list[int] | None = None," in params
 
     def test_time_fields_get_comparisons_but_no_date_parts(self):
         """A time-of-day has no calendar part: the runtime rejects
@@ -265,6 +263,17 @@ class TestGenerateFilterParams:
         assert "starts_at__year" not in params
         assert "starts_at__month" not in params
         assert "starts_at__day" not in params
+
+    def test_uuid_fields_get_typed_ranges_without_string_lookups(self):
+        class Keyed(Model):
+            id: UUID = Field(db_pk=True)
+
+        params = _generate_filter_params(Keyed)
+        assert "id__gt: UUID | None = None," in params
+        assert "id__range: tuple[UUID, UUID] | list[UUID] | None = None," in params
+        assert "id__between: tuple[UUID, UUID] | list[UUID] | None = None," in params
+        assert "id__contains" not in params
+        assert "id__year" not in params
 
     def test_time_lookup_table_matches_builders(self):
         """The runtime permission table itself must not advertise date parts
@@ -285,9 +294,7 @@ class TestGenerateFilterParams:
         assert "gt" in time_lookups and "between" in time_lookups
         assert not {"year", "month", "day"} & set(time_lookups)
 
-        dt_lookups = _allowed_lookups_for_meta(
-            _resolve_column_meta(Clocked, "created")
-        )
+        dt_lookups = _allowed_lookups_for_meta(_resolve_column_meta(Clocked, "created"))
         assert {"year", "month", "day"} <= set(dt_lookups)
 
     def test_reserved_field_names_not_enumerated(self):

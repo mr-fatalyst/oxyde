@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from types import SimpleNamespace
 from typing import Any, ClassVar
+from uuid import UUID
 
 import msgpack
 import pytest
@@ -1025,6 +1026,38 @@ def test_fk_filter_parses_nested_path() -> None:
     assert filter_tree["column"] == "author.age"
     assert filter_tree["operator"] == ">="
     assert filter_tree["value"] == 18
+
+    clear_registry()
+
+
+def test_fk_filter_uuid_range() -> None:
+    clear_registry()
+
+    class Author(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        slug: UUID
+
+        class Meta:
+            is_table = True
+
+    class Post(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        author: Author = Field(db_on_delete="CASCADE")
+
+        class Meta:
+            is_table = True
+
+    lower = UUID("10000000-0000-4000-8000-000000000001")
+    upper = UUID("90000000-0000-4000-8000-000000000003")
+    ir = Post.objects.filter(author__slug__range=(lower, upper)).to_ir()
+    assert len(ir["joins"]) == 1
+    assert ir["filter_tree"]["column"] == "author.slug"
+    assert ir["filter_tree"]["operator"] == "BETWEEN"
+    assert ir["filter_tree"]["value"] == [str(lower), str(upper)]
+    _, params = Post.objects.filter(author__slug__range=(lower, upper)).sql(
+        dialect="postgres", with_types=True
+    )
+    assert params == [("Uuid", str(lower)), ("Uuid", str(upper))]
 
     clear_registry()
 

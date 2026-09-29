@@ -232,6 +232,30 @@ users = await User.objects.filter(status="active").exclude(role="bot").all()
 - `exact`
 - `in`, `isnull`
 
+### UUID Fields
+
+- `exact`
+- `gt`, `gte`, `lt`, `lte`
+- `between`, `range` (inclusive)
+- `in`, `isnull`
+
+UUID comparisons follow the database's UUID ordering. PostgreSQL compares its
+native UUID type; SQLite and MySQL compare the stored canonical UUID text.
+Ordering does not necessarily reflect creation or commit time.
+
+```python
+# Fetch the next page in UUID order.
+page = await (
+    Event.objects.filter(id__gt=cursor)
+    .order_by("id")
+    .limit(50)
+    .all()
+)
+
+# Include both endpoints.
+events = await Event.objects.filter(id__range=(first_id, last_id)).all()
+```
+
 ## Common Patterns
 
 ### Pagination
