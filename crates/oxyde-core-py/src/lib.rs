@@ -75,6 +75,7 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 mod convert;
 mod errors;
 mod execute;
+mod listener;
 mod migration;
 mod pool;
 mod types;
@@ -88,6 +89,7 @@ const ABI_VERSION: u32 = 1;
 #[pymodule(gil_used = false)]
 fn _oxyde_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__abi_version__", ABI_VERSION)?;
+    m.add_function(wrap_pyfunction!(listener::listen, m)?)?;
 
     m.add_function(wrap_pyfunction!(pool::init_pool, m)?)?;
     m.add_function(wrap_pyfunction!(pool::init_pool_overwrite, m)?)?;

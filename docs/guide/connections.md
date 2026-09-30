@@ -515,3 +515,60 @@ async def test_cross_db(test_dbs):
 
 - [Queries](queries.md) — Query your models
 - [Transactions](transactions.md) — Transaction handling
+
+## PostgreSQL notifications
+
+`db.listen()` opens a dedicated PostgreSQL connection using an existing named
+database's connection configuration and subscribes before entering the context:
+
+```python
+from oxyde import db, execute_raw
+
+async with db.listen("run_changed", using="default") as listener:
+    async for notification in listener:
+        print(notification.channel, notification.payload, notification.pid)
+
+await execute_raw("SELECT pg_notify($1, $2)", ["run_changed", "run-123"])
+```
+
+`Notification` is immutable, with `channel: str`, `payload: str`, and `pid: int`
+(the publisher's PostgreSQL backend PID). The listener also supports `recv()`
+and idempotent `close()`. Closing interrupts a pending receive, ends async
+iteration, and makes direct receives raise `db.ListenerClosedError`. Database
+failures propagate as errors, including during iteration; terminal errors close
+the listener. Closing or replacing its named database also closes idle listeners.
+
+Each listener opens **one additional database connection outside the named
+pool's connection limit**, independent of any surrounding `atomic()`
+transaction. Include listeners when sizing the database's connection budget.
+Application queries can still use every configured pool slot. Independent
+listeners receive PostgreSQL broadcasts. A single listener allows only one
+pending receive; use an application dispatcher to wake multiple local watchers.
+
+Closing requests SQLx's asynchronous `UNLISTEN` cleanup and waits up to one
+second for the listener's private pool to close. A stalled cleanup may finish
+later in the background, but it cannot occupy or delay the application pool.
+Cancelling `close()` does not cancel the Rust-side shutdown request.
+
+Subscriptions are fixed for the context lifetime. Multiple channels, Unicode,
+and quoted names are supported. Names must be distinct, nonempty, contain no
+NUL, and fit within 63 UTF-8 bytes. Longer names are rejected rather than
+silently truncated. SQLite and MySQL raise `NotImplementedError`.
+
+Treat notifications as **wake-up hints**, not durable events. SQLx reconnects
+and restores subscriptions on recoverable I/O disconnects while receiving.
+Notifications during a disconnect are lost, and cancelling a receive can lose
+an in-flight hint. There is no replay, exactly-once guarantee, or fixed deadline
+for detecting broken connections. Other failures, such as protocol errors or
+failed reconnection attempts, propagate; applications may open a fresh
+listener after handling them. Always subscribe before reading state and
+periodically reread authoritative state, even when no hint arrives.
+
+Oxyde reads notifications only when `recv()` or iteration requests them; it does
+not create a background notification queue. Rust owns shutdown and abandoned
+handle cleanup, including cancellation during context entry. Closing or
+replacing the named database also requests listener shutdown. Normal use should
+still use the context manager.
+
+See [`examples/listen_notify.py`](https://github.com/mr-fatalyst/oxyde/blob/main/examples/listen_notify.py)
+for a runnable reconciliation loop with a periodic fallback.

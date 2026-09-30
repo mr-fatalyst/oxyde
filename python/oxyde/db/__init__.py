@@ -56,6 +56,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any
 
 from . import transaction
+from .listener import ListenerClosedError, Notification, NotificationListener, listen
 from .pool import AsyncDatabase, PoolSettings
 from .registry import (
     disconnect_all,
@@ -209,8 +210,12 @@ __all__ = [
     "close",
     "connect",
     "lifespan",
+    "listen",
     "get_connection",
     # Classes
+    "Notification",
+    "NotificationListener",
+    "ListenerClosedError",
     "AsyncDatabase",
     "AsyncTransaction",
     "PoolSettings",

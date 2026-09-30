@@ -57,6 +57,7 @@ EXPECTED_ABI_VERSION = 1
 # - is_noop_fallback: True if stub should be no-op instead of raising
 _FUNCTION_REGISTRY: list[tuple[str, str, bool, bool]] = [
     # Pool management
+    ("listen", "listen", True, False),
     ("init_pool", "init_pool", True, False),
     ("init_pool_overwrite", "init_pool_overwrite", True, False),
     ("close_pool", "close_pool", True, False),
@@ -159,6 +160,7 @@ def _load_functions() -> dict[str, Callable[..., Any]]:
 _exports = _load_functions()
 
 # Export individual functions for IDE support and type checking
+listen = _exports["listen"]
 execute = _exports["execute"]
 execute_in_transaction = _exports["execute_in_transaction"]
 init_pool = _exports["init_pool"]
@@ -214,6 +216,7 @@ except ImportError:  # pragma: no cover - extension missing
 
 
 __all__ = [
+    "listen",
     "execute",
     "execute_in_transaction",
     "init_pool",
