@@ -258,6 +258,28 @@ pub struct JoinSpec {
     pub columns: Vec<JoinColumn>,
 }
 
+impl JoinSpec {
+    /// Result-column name of a joined column: `{result_prefix}__{field}`.
+    #[must_use]
+    pub fn result_column(&self, field: &str) -> String {
+        format!("{}__{}", self.result_prefix, field)
+    }
+
+    /// Result column holding the joined row's primary key.
+    ///
+    /// Joined columns are aliased by *field* name, while `target_column` is
+    /// the database column; they differ when the pk has a `db_column`.
+    #[must_use]
+    pub fn pk_result_column(&self) -> String {
+        let field = self
+            .columns
+            .iter()
+            .find(|c| c.column == self.target_column)
+            .map_or(self.target_column.as_str(), |c| c.field.as_str());
+        self.result_column(field)
+    }
+}
+
 /// Query IR structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryIR {
@@ -686,5 +708,41 @@ mod tests {
         let bytes = rmp_serde::to_vec_named(&map).unwrap();
         let back: HashMap<String, ColumnTypeSpec> = rmp_serde::from_slice(&bytes).unwrap();
         assert_eq!(back, map);
+    }
+
+    fn join_spec(target_column: &str, columns: &[(&str, &str)]) -> JoinSpec {
+        JoinSpec {
+            path: "parent".into(),
+            alias: "parent".into(),
+            parent: None,
+            table: "parents".into(),
+            source_column: "parent_id".into(),
+            target_column: target_column.into(),
+            result_prefix: "parent".into(),
+            columns: columns
+                .iter()
+                .map(|(field, column)| JoinColumn {
+                    field: (*field).into(),
+                    column: (*column).into(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn join_pk_result_column_uses_the_pk_field_name() {
+        let plain = join_spec("id", &[("id", "id"), ("name", "name")]);
+        assert_eq!(plain.pk_result_column(), "parent__id");
+
+        // pk declared as `id` with db_column="parent_pk"
+        let renamed = join_spec("parent_pk", &[("id", "parent_pk"), ("name", "name")]);
+        assert_eq!(renamed.pk_result_column(), "parent__id");
+        assert_eq!(renamed.result_column("name"), "parent__name");
+
+        // No column metadata: fall back to the column name
+        assert_eq!(
+            join_spec("parent_pk", &[]).pk_result_column(),
+            "parent__parent_pk"
+        );
     }
 }

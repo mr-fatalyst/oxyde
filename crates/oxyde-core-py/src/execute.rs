@@ -65,7 +65,7 @@ pub(crate) fn execute<'py>(
                         .iter()
                         .map(|j| RelationInfo {
                             prefix: j.result_prefix.clone(),
-                            pk_col: format!("{}__{}", j.result_prefix, j.target_column),
+                            pk_col: j.pk_result_column(),
                         })
                         .collect();
                     execute_query_columnar_dedup(
@@ -200,7 +200,7 @@ pub(crate) fn execute_in_transaction<'py>(
                         .iter()
                         .map(|j| RelationInfo {
                             prefix: j.result_prefix.clone(),
-                            pk_col: format!("{}__{}", j.result_prefix, j.target_column),
+                            pk_col: j.pk_result_column(),
                         })
                         .collect();
                     execute_query_columnar_dedup_in_transaction(

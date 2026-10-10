@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import Author, Post
+from .conftest import Author, Post, RenamedChild, RenamedParent
 
 
 class TestJoin:
@@ -17,6 +17,35 @@ class TestJoin:
         assert posts[0].author.name == "Alice"
         assert posts[2].author.name == "Bob"
 
+    @pytest.mark.asyncio
+    async def test_related_model_with_db_column_renames(self, db):
+        """Joined rows hydrate a related model whose pk and list field set
+        db_column (result columns are aliased by field name)."""
+        rust = await RenamedParent.objects.create(
+            name="rust", labels=["a", "b"], using=db.name
+        )
+        go = await RenamedParent.objects.create(name="go", labels=None, using=db.name)
+        await RenamedChild.objects.create(name="r1", parent_id=rust.id, using=db.name)
+        await RenamedChild.objects.create(name="r2", parent_id=rust.id, using=db.name)
+        await RenamedChild.objects.create(name="g1", parent_id=go.id, using=db.name)
+
+        children = await (
+            RenamedChild.objects.join("parent").order_by("id").all(using=db.name)
+        )
+        assert [(c.name, c.parent.id, c.parent.labels) for c in children] == [
+            ("r1", rust.id, ["a", "b"]),
+            ("r2", rust.id, ["a", "b"]),
+            ("g1", go.id, None),
+        ]
+
+        # Filtering through the FK joins the parent the same way.
+        children = await (
+            RenamedChild.objects.filter(parent__name="rust")
+            .order_by("id")
+            .all(using=db.name)
+        )
+        assert [c.name for c in children] == ["r1", "r2"]
+        assert children[0].parent.labels == ["a", "b"]
 
 
 class TestPrefetch:

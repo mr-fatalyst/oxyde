@@ -10,6 +10,10 @@ All notable changes to Oxyde are documented here.
 
 - UUID fields now support `gt`, `gte`, `lt`, `lte`, `between`, and `range` filters on PostgreSQL, SQLite, and MySQL. These use each database's UUID ordering and typed UUID parameters.
 
+### Fixes
+
+- **Joins to a model with renamed columns** — `join()` and FK-traversal filters (`filter(author__name=...)`) failed with `no column found for name` when the related model's primary key set `db_column`, and on SQLite returned undecoded JSON for a related list/JSON field with `db_column`. Joined result columns are named by field, but the primary-key lookup and the column types used for decoding were keyed by column name.
+
 ### Migrations
 
 - **Phantom `alter_column` after upgrading with a hand-written `db_type`** — legacy migration files (`python_type` format) and `oxyde migrations squash` derived the column kind from `python_type` whenever `db_type` was not a recognized type name (e.g. `bigint GENERATED ALWAYS AS IDENTITY`), while `makemigrations` reports such a column as `unknown`. The next `makemigrations` then emitted an `alter_column` with no effect (a table rebuild on SQLite). An explicit `db_type` now owns the column kind on both sides. (#47)
