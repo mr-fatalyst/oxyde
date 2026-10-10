@@ -233,7 +233,7 @@ fn apply_select_joins(
         query.left_join(table_ref, Expr::col(left_col).equals(right_col));
         for column in &join.columns {
             let expr = Expr::col((join_alias.clone(), ColumnIdent(column.column.clone())));
-            let alias = Alias::new(format!("{}__{}", join.result_prefix, column.field));
+            let alias = Alias::new(join.result_column(&column.field));
             query.expr_as(expr, alias);
         }
     }

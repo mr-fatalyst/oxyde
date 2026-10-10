@@ -218,12 +218,15 @@ class Query(
 
         for descriptor in self._join_specs:
             target_types = descriptor.target_model._db_meta.column_types or {}
-            for _, column in descriptor.columns:
+            for field, column in descriptor.columns:
                 spec = target_types.get(column)
                 if spec is None:
                     continue
+                # Qualified column reference (filters on the joined table)
                 column_types[f"{descriptor.alias}.{column}"] = spec
-                column_types[f"{descriptor.result_prefix}__{column}"] = spec
+                # Result column: the SQL aliases joined columns by *field*
+                # name, which differs from the column when db_column is set
+                column_types[f"{descriptor.result_prefix}__{field}"] = spec
 
         return column_types or None
 

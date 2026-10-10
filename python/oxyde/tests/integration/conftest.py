@@ -218,9 +218,34 @@ class FactoryKeyed(Model):
         table_name = "factory_keyed"
 
 
+class RenamedParent(Model):
+    """Related model whose pk and list field both set db_column."""
+
+    id: int | None = Field(default=None, db_pk=True, db_column="parent_pk")
+    name: str = Field(default="", max_length=50)
+    labels: list[str] | None = Field(
+        default=None, db_nullable=True, db_column="label_list"
+    )
+
+    class Meta:
+        is_table = True
+        table_name = "renamed_parents"
+
+
+class RenamedChild(Model):
+    id: int | None = Field(default=None, db_pk=True)
+    parent: RenamedParent | None = Field(default=None, db_nullable=True)
+    name: str = Field(default="", max_length=50)
+
+    class Meta:
+        is_table = True
+        table_name = "renamed_children"
+
+
 ALL_MODELS = [
     Event, AliasedEvent, Author, Category, Post, Comment, Tag, PostTag,
     AllTypes, NullableTypes, BytesModel, TdModel, Product, FactoryKeyed,
+    RenamedParent, RenamedChild,
 ]
 
 
@@ -330,9 +355,10 @@ async def _fix_pg_sequences(database: AsyncDatabase) -> None:
         if pk_type is not int:
             continue
         table = model.Meta.table_name
+        pk = model._db_meta.pk_column or "id"
         await execute_raw(
-            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
-            f"GREATEST(COALESCE((SELECT MAX(id) FROM {table}), 1), 1))",
+            f"SELECT setval(pg_get_serial_sequence('{table}', '{pk}'), "
+            f"GREATEST(COALESCE((SELECT MAX({pk}) FROM {table}), 1), 1))",
             using=database.name,
         )
 
