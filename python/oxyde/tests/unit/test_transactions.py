@@ -9,7 +9,7 @@ import msgpack
 import pytest
 
 from oxyde import Field, Model
-from oxyde.db import atomic
+from oxyde.db import atomic, get_transaction_depth, transaction
 from oxyde.db.transaction import (
     _ACTIVE_TRANSACTIONS,
     AsyncTransaction,
@@ -326,6 +326,178 @@ class TestGetActiveTransaction:
             assert get_active_transaction("default") is None
             # "primary" should have active transaction
             assert get_active_transaction("primary") is ctx.transaction
+
+
+class TestTransactionDepth:
+    """Test public depth inspection without exposing transaction state."""
+
+    def test_depth_outside_event_loop(self, reset_transactions):
+        assert get_transaction_depth() == 0
+
+    def test_helper_export(self):
+        assert transaction.get_transaction_depth is get_transaction_depth
+
+    @pytest.mark.asyncio
+    async def test_depth_tracks_nesting(self, mock_tx, mock_get_connection):
+        assert get_transaction_depth() == 0
+
+        async with atomic():
+            assert get_transaction_depth() == 1
+            async with atomic():
+                assert get_transaction_depth() == 2
+                async with atomic():
+                    assert get_transaction_depth() == 3
+                assert get_transaction_depth() == 2
+            assert get_transaction_depth() == 1
+
+        assert get_transaction_depth() == 0
+
+    @pytest.mark.asyncio
+    async def test_inner_rollback_restores_depth(self, mock_tx, mock_get_connection):
+        async with atomic():
+            with pytest.raises(ValueError):
+                async with atomic():
+                    assert get_transaction_depth() == 2
+                    raise ValueError("inner error")
+            assert get_transaction_depth() == 1
+
+        assert get_transaction_depth() == 0
+        assert ("commit", 1) in mock_tx.calls
+
+    @pytest.mark.asyncio
+    async def test_outer_rollback_clears_depth(self, mock_tx, mock_get_connection):
+        with pytest.raises(ValueError):
+            async with atomic():
+                async with atomic():
+                    assert get_transaction_depth() == 2
+                    raise ValueError("outer error")
+
+        assert get_transaction_depth() == 0
+        assert ("rollback", 1) in mock_tx.calls
+
+    @pytest.mark.asyncio
+    async def test_explicit_rollback_preserves_depth_until_exit(
+        self, mock_tx, mock_get_connection
+    ):
+        async with atomic():
+            async with atomic() as inner:
+                inner.set_rollback()
+                assert get_transaction_depth() == 2
+            assert get_transaction_depth() == 1
+
+        assert get_transaction_depth() == 0
+        assert ("rollback", 1) in mock_tx.calls
+
+    @pytest.mark.asyncio
+    async def test_failed_begin_leaves_zero_depth(
+        self, mock_tx, mock_get_connection, monkeypatch
+    ):
+        async def fail_begin(pool_name):
+            raise RuntimeError("begin failed")
+
+        monkeypatch.setattr(transaction, "_begin_transaction", fail_begin)
+        with pytest.raises(RuntimeError, match="begin failed"):
+            async with atomic():
+                pytest.fail("Failed transaction should not be entered")
+        assert get_transaction_depth() == 0
+        assert get_active_transaction() is None
+
+    @pytest.mark.asyncio
+    async def test_failed_savepoint_preserves_depth(
+        self, mock_tx, mock_get_connection, monkeypatch
+    ):
+        async def fail_savepoint(tx_id, name):
+            raise RuntimeError("savepoint failed")
+
+        async with atomic():
+            monkeypatch.setattr(transaction, "_create_savepoint", fail_savepoint)
+            with pytest.raises(RuntimeError, match="savepoint failed"):
+                async with atomic():
+                    pytest.fail("Failed savepoint should not be entered")
+            assert get_transaction_depth() == 1
+
+        assert get_transaction_depth() == 0
+        assert ("commit", 1) in mock_tx.calls
+
+    @pytest.mark.asyncio
+    async def test_failed_release_restores_depth(
+        self, mock_tx, mock_get_connection, monkeypatch
+    ):
+        async def fail_release(tx_id, name):
+            raise RuntimeError("release failed")
+
+        async with atomic():
+            monkeypatch.setattr(transaction, "_release_savepoint", fail_release)
+            with pytest.raises(RuntimeError, match="release failed"):
+                async with atomic():
+                    assert get_transaction_depth() == 2
+            assert get_transaction_depth() == 1
+
+        assert get_transaction_depth() == 0
+        assert ("commit", 1) in mock_tx.calls
+
+    @pytest.mark.asyncio
+    async def test_failed_commit_clears_depth(
+        self, mock_tx, mock_get_connection, monkeypatch
+    ):
+        async def fail_commit(tx_id):
+            raise RuntimeError("commit failed")
+
+        monkeypatch.setattr(transaction, "_commit_transaction", fail_commit)
+        with pytest.raises(RuntimeError, match="commit failed"):
+            async with atomic():
+                assert get_transaction_depth() == 1
+
+        assert get_transaction_depth() == 0
+        assert get_active_transaction() is None
+
+    @pytest.mark.asyncio
+    async def test_depth_in_worker_thread(self, mock_tx, mock_get_connection):
+        async with atomic():
+            assert await asyncio.to_thread(get_transaction_depth) == 0
+            assert await asyncio.to_thread(get_active_transaction) is None
+            assert get_transaction_depth() == 1
+
+    @pytest.mark.asyncio
+    async def test_depth_is_independent_per_alias(self, mock_tx, mock_get_connection):
+        async with atomic():
+            async with atomic(using="analytics"):
+                assert get_transaction_depth() == 1
+                assert get_transaction_depth("analytics") == 1
+                async with atomic(using="analytics"):
+                    assert get_transaction_depth("analytics") == 2
+                    assert get_transaction_depth() == 1
+                    assert get_transaction_depth("unknown") == 0
+                assert get_transaction_depth("analytics") == 1
+            assert get_transaction_depth("analytics") == 0
+            assert get_transaction_depth() == 1
+
+        assert get_transaction_depth() == 0
+
+    @pytest.mark.asyncio
+    async def test_child_task_depth_is_independent(self, mock_tx, mock_get_connection):
+        async def child_work():
+            assert get_transaction_depth() == 0
+            async with atomic():
+                assert get_transaction_depth() == 1
+                async with atomic():
+                    assert get_transaction_depth() == 2
+                assert get_transaction_depth() == 1
+            assert get_transaction_depth() == 0
+
+        async with atomic():
+            async with atomic():
+                await asyncio.create_task(child_work())
+                assert get_transaction_depth() == 2
+            assert get_transaction_depth() == 1
+        assert get_transaction_depth() == 0
+
+    @pytest.mark.asyncio
+    async def test_low_level_transaction_is_not_counted(
+        self, mock_tx, mock_get_connection
+    ):
+        async with AsyncTransaction(await transaction.get_connection()):
+            assert get_transaction_depth() == 0
 
 
 class TestTransactionIsolation:
