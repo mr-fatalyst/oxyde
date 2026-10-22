@@ -21,8 +21,8 @@ workspace = true
 tokio.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
-pyo3 = { version = "0.26", default-features = false, features = ["macros", "anyhow", "serde"] }
-pyo3-async-runtimes = { version = "0.26", features = ["tokio-runtime"] }
+pyo3 = { version = "0.30", default-features = false, features = ["macros", "anyhow", "serde"] }
+pyo3-async-runtimes = { version = "0.30", features = ["tokio-runtime"] }
 rmpv = { version = "1", features = ["with-serde"] }
 oxyde-codec = { path = "../oxyde-codec" }
 oxyde-sql = { path = "../oxyde-sql" }
