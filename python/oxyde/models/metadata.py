@@ -50,6 +50,7 @@ from typing import Any
 
 from pydantic.fields import PydanticUndefined
 
+from oxyde.core.column_types import compute_column_type
 from oxyde.models.decorators import Check, Index
 
 
@@ -120,11 +121,41 @@ class ModelMeta:
     extra: dict[str, Any] = dataclass_field(default_factory=dict)
     # Cached IR type hints for Rust decoding (computed at finalization)
     column_types: dict[str, dict] | None = None
+    # Array db_type overrides by column, sent with queries (PostgreSQL
+    # casts filter values to them)
+    column_db_types: dict[str, str] | None = None
     # Reverse mapping: db_column → field_name (only where they differ)
     reverse_column_map: dict[str, str] = dataclass_field(default_factory=dict)
     # Primary key field name and db column (cached at finalization)
     pk_field: str | None = None
     pk_column: str | None = None
+
+
+def is_column_field(meta: ColumnMeta) -> bool:
+    """Whether a field is backed by its own column.
+
+    Virtual relation fields (reverse FK, m2m) and FK model fields
+    (author: Author) are not columns; the synthetic FK field (author_id) is.
+    """
+    return not (
+        meta.extra.get("reverse_fk")
+        or meta.extra.get("m2m")
+        or meta.foreign_key is not None
+    )
+
+
+def column_type_for_meta(meta: ColumnMeta) -> dict[str, Any] | None:
+    """ColumnTypeSpec dict of a field's column, or None when it has none
+    (see ``is_column_field``)."""
+    if not is_column_field(meta):
+        return None
+    return compute_column_type(
+        meta.python_type,
+        meta.db_type,
+        max_length=meta.max_length,
+        max_digits=meta.max_digits,
+        decimal_places=meta.decimal_places,
+    )
 
 
 class RelationDescriptorBase:
@@ -139,4 +170,6 @@ __all__ = [
     "RelationInfo",
     "ModelMeta",
     "RelationDescriptorBase",
+    "column_type_for_meta",
+    "is_column_field",
 ]

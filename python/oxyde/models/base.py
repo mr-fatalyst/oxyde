@@ -84,7 +84,6 @@ from pydantic.fields import FieldInfo, PydanticUndefined
 from typing_extensions import Self, dataclass_transform
 
 from oxyde.core import register_validator
-from oxyde.core.column_types import compute_column_type
 
 if TYPE_CHECKING:
     from oxyde.queries.base import SupportsExecute
@@ -98,6 +97,8 @@ from oxyde.models.metadata import (
     ModelMeta,
     RelationDescriptorBase,
     RelationInfo,
+    column_type_for_meta,
+    is_column_field,
 )
 from oxyde.models.registry import finalize_pending, register_table
 from oxyde.models.serializers import _dump_update_data
@@ -313,34 +314,32 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
 
     @classmethod
     def _compute_column_types(cls) -> None:
-        """Compute ColumnTypeSpec dicts from field metadata (cached in _db_meta)."""
+        """Compute ColumnTypeSpec dicts and db_type overrides from field
+        metadata (cached in _db_meta)."""
         if cls._db_meta.column_types is not None:
             return  # Already computed
 
         column_types: dict[str, dict] = {}
+        column_db_types: dict[str, str] = {}
         reverse_map: dict[str, str] = {}
         for field_name, meta in cls._db_meta.field_metadata.items():
-            # Skip virtual relation fields
-            if meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
+            # Virtual relation fields and FK model fields (author: Author)
+            # have no column of their own, nor a reverse mapping
+            if not is_column_field(meta):
                 continue
-            # Skip FK model fields (author: Author) — only synthetic FK
-            # fields (author_id) are actual columns
-            if meta.foreign_key:
-                continue
-            spec = compute_column_type(
-                meta.python_type,
-                meta.db_type,
-                max_length=meta.max_length,
-                max_digits=meta.max_digits,
-                decimal_places=meta.decimal_places,
-            )
+            spec = column_type_for_meta(meta)
             if spec is not None:
                 column_types[meta.db_column] = spec
+            # Only array overrides change how filter values bind (PostgreSQL
+            # casts them to INTEGER[] etc.), so only they go with queries
+            if meta.db_type is not None and meta.db_type.strip().endswith("[]"):
+                column_db_types[meta.db_column] = meta.db_type
             # Cache reverse mapping where db_column differs from field_name
             if meta.db_column != field_name:
                 reverse_map[meta.db_column] = field_name
 
         cls._db_meta.column_types = column_types if column_types else None
+        cls._db_meta.column_db_types = column_db_types or None
         cls._db_meta.reverse_column_map = reverse_map
 
     @classmethod

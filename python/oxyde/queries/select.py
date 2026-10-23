@@ -230,6 +230,20 @@ class Query(
 
         return column_types or None
 
+    def _column_db_types_for_query(self) -> dict[str, str] | None:
+        """Return base and joined db_type overrides keyed by SQL column
+        reference ("alias.column" for joined columns, as filters name them)."""
+        column_db_types = dict(self.model_class._db_meta.column_db_types or {})
+
+        for descriptor in self._join_specs:
+            target_db_types = descriptor.target_model._db_meta.column_db_types or {}
+            for _field, column in descriptor.columns:
+                db_type = target_db_types.get(column)
+                if db_type is not None:
+                    column_db_types[f"{descriptor.alias}.{column}"] = db_type
+
+        return column_db_types or None
+
     def to_ir(self) -> dict[str, Any]:
         """Convert query to IR format for Rust execution."""
         from oxyde.models.base import Model
@@ -309,6 +323,7 @@ class Query(
             table=table_name,
             columns=db_columns,
             column_types=column_types,
+            column_db_types=self._column_db_types_for_query(),
             model=_model_key(self.model_class),
             column_mappings=None,
             filter_tree=final_filter_tree,

@@ -560,6 +560,22 @@ def test_f_expression_serialization() -> None:
     assert expr["rhs"]["type"] == "value"
 
 
+def test_serialize_value_recurses_into_tuples() -> None:
+    from datetime import datetime
+    from decimal import Decimal
+    from uuid import UUID
+
+    from oxyde.core.types import serialize_value
+
+    uid = UUID("10000000-0000-4000-8000-000000000001")
+    value = (datetime(2024, 1, 1, 10, 0), (Decimal("1.5"), uid), {"k": (uid,)})
+    assert serialize_value(value) == [
+        "2024-01-01T10:00:00",
+        ["1.5", str(uid)],
+        {"k": [str(uid)]},
+    ]
+
+
 def test_join_ir_contains_join_spec() -> None:
     clear_registry()
 

@@ -1,11 +1,14 @@
 """Integration tests for aggregation functions and group_by."""
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
+
 import pytest
 
 from oxyde import Avg, Count, Max, Min, Sum
 
-from .conftest import Author, Post
+from .conftest import AllTypes, Author, Post
 
 
 class TestAggregateShortcuts:
@@ -90,3 +93,48 @@ class TestAnnotateGroupBy:
         )
         # Alice: 120+35=155, Bob: 80+0=80, Charlie: 200+0=200
         assert len(rows) == 2  # Alice and Charlie
+
+
+async def _seed_typed_groups(db):
+    # SQLite stores Decimal as TEXT, so HAVING compares it as text there (as
+    # it always has); the decimals share their number of integer digits.
+    for str_val, decimal_val, date_val in [
+        ("a", Decimal("1.25"), date(2024, 1, 10)),
+        ("a", Decimal("2.00"), date(2024, 2, 10)),
+        ("b", Decimal("3.75"), date(2024, 3, 10)),
+        ("b", Decimal("1.50"), date(2024, 1, 5)),
+    ]:
+        await AllTypes.objects.create(
+            str_val=str_val, decimal_val=decimal_val, date_val=date_val, using=db.name
+        )
+
+
+class TestHavingAggregateTypes:
+    """HAVING values bind by the aggregate's result type, so string-encoded
+    values (Decimal, date) compare as that type."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("alias", ["top", "decimal_val"])
+    async def test_max_decimal(self, db, alias):
+        """The alias may also be the aggregated field's name."""
+        await _seed_typed_groups(db)
+        rows = await (
+            AllTypes.objects.annotate(**{alias: Max("decimal_val")})
+            .group_by("str_val")
+            .having(**{f"{alias}__gt": Decimal("2.5")})
+            .values("str_val")
+            .all(using=db.name)
+        )
+        assert [r["str_val"] for r in rows] == ["b"]
+
+    @pytest.mark.asyncio
+    async def test_max_date(self, db):
+        await _seed_typed_groups(db)
+        rows = await (
+            AllTypes.objects.annotate(last=Max("date_val"))
+            .group_by("str_val")
+            .having(last__gt=date(2024, 3, 1))
+            .values("str_val")
+            .all(using=db.name)
+        )
+        assert [r["str_val"] for r in rows] == ["b"]

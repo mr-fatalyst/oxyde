@@ -8,8 +8,17 @@ from uuid import UUID
 import pytest
 
 from oxyde import Q
+from oxyde.migrations.utils import detect_dialect
 
-from .conftest import AliasedEvent, AllTypes, Author, Event, FactoryKeyed, Post
+from .conftest import (
+    AliasedEvent,
+    AllTypes,
+    Author,
+    ConvertedValues,
+    Event,
+    FactoryKeyed,
+    Post,
+)
 
 UUID_LOW = UUID("10000000-0000-4000-8000-000000000001")
 UUID_MID = UUID("80000000-0000-4000-8000-000000000002")
@@ -462,3 +471,47 @@ class TestDbColumnAliasing:
             .all(using=aliased_db.name)
         )
         assert rows == ["Morning A", "Midnight"]
+
+
+class TestStringLookupsOnJson:
+    """String lookups on a `str` field stored as JSON match the string the
+    field reads back as, not its quoted JSON text."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "lookup",
+        [
+            {"body__startswith": "hel"},
+            {"body__endswith": "llo"},
+            {"body__iexact": "HELLO"},
+            {"body__contains": "ello"},
+            {"body__icontains": "ELLO"},
+        ],
+    )
+    async def test_json_string_matches_unquoted(self, db, lookup):
+        # A JSON string document: stored as "hello", read back as hello
+        await ConvertedValues.objects.create(name="a", body='"hello"', using=db.name)
+        await ConvertedValues.objects.create(name="b", body='"shell"', using=db.name)
+        rows = await ConvertedValues.objects.filter(**lookup).all(using=db.name)
+        assert [(row.name, row.body) for row in rows] == [("a", "hello")]
+
+    @pytest.mark.asyncio
+    async def test_json_null_matches_nothing(self, db):
+        # 'null' is JSON text, so it is stored as a JSON null and read back
+        # as None. MySQL's JSON_UNQUOTE() alone printed it as 'null'.
+        await ConvertedValues.objects.create(name="a", body="null", using=db.name)
+        for lookup in [{"body__startswith": "nu"}, {"body__icontains": "NULL"}]:
+            query = ConvertedValues.objects.filter(**lookup)
+            assert await query.count(using=db.name) == 0, lookup
+
+    @pytest.mark.asyncio
+    async def test_non_json_text_on_sqlite(self, db):
+        if detect_dialect(db.url) != "sqlite":
+            pytest.skip("only SQLite stores a str that is not JSON")
+        await ConvertedValues.objects.create(
+            name="a", body="plain text", using=db.name
+        )
+        rows = await ConvertedValues.objects.filter(body__startswith="plain").all(
+            using=db.name
+        )
+        assert [row.name for row in rows] == ["a"]

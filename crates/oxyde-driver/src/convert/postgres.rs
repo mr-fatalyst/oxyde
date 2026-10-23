@@ -15,8 +15,8 @@ use sqlx::{
 use uuid::Uuid;
 
 use super::encoder::{
-    write_array_len, write_bin, write_bool, write_f64, write_i32_as_i64, write_i64,
-    write_json_value, write_nil, write_str, CellEncoder,
+    write_array_len, write_bin, write_bool, write_f64, write_i64, write_json_value, write_nil,
+    write_str, CellEncoder,
 };
 
 pub struct PgEncoder;
@@ -61,15 +61,7 @@ impl CellEncoder for PgEncoder {
     ) -> bool {
         match spec {
             ColumnTypeSpec::BigInteger => {
-                match row.try_get::<Option<i64>, _>(idx) {
-                    Ok(Some(v)) => write_i64(buf, v),
-                    Ok(None) => write_nil(buf),
-                    Err(_) => match row.try_get::<Option<i32>, _>(idx) {
-                        Ok(Some(v)) => write_i32_as_i64(buf, v),
-                        Ok(None) => write_nil(buf),
-                        Err(_) => fallback_str(buf, row, idx),
-                    },
-                }
+                encode_pg_int(buf, row, idx);
                 true
             }
             ColumnTypeSpec::Text | ColumnTypeSpec::String { .. } => {
@@ -197,15 +189,7 @@ impl CellEncoder for PgEncoder {
                 Ok(None) => write_nil(buf),
                 Err(_) => fallback_str(buf, row, idx),
             },
-            name if name.contains("INT") => match row.try_get::<Option<i64>, _>(idx) {
-                Ok(Some(v)) => write_i64(buf, v),
-                Ok(None) => write_nil(buf),
-                Err(_) => match row.try_get::<Option<i32>, _>(idx) {
-                    Ok(Some(v)) => write_i32_as_i64(buf, v),
-                    Ok(None) => write_nil(buf),
-                    Err(_) => fallback_str(buf, row, idx),
-                },
-            },
+            name if name.contains("INT") => encode_pg_int(buf, row, idx),
             name if name.contains("FLOAT") || name.contains("DOUBLE") || name.contains("REAL") => {
                 match row.try_get::<Option<f64>, _>(idx) {
                     Ok(Some(v)) => write_f64(buf, v),
@@ -274,6 +258,22 @@ impl CellEncoder for PgEncoder {
     }
 }
 
+fn encode_pg_int(buf: &mut Vec<u8>, row: &PgRow, idx: usize) {
+    match row.try_get::<Option<i64>, _>(idx) {
+        Ok(Some(v)) => write_i64(buf, v),
+        Ok(None) => write_nil(buf),
+        Err(_) => match row.try_get::<Option<i32>, _>(idx) {
+            Ok(Some(v)) => write_i64(buf, i64::from(v)),
+            Ok(None) => write_nil(buf),
+            Err(_) => match row.try_get::<Option<i16>, _>(idx) {
+                Ok(Some(v)) => write_i64(buf, i64::from(v)),
+                Ok(None) => write_nil(buf),
+                Err(_) => fallback_str(buf, row, idx),
+            },
+        },
+    }
+}
+
 fn fallback_str(buf: &mut Vec<u8>, row: &PgRow, idx: usize) {
     match row.try_get::<Option<String>, _>(idx) {
         Ok(Some(v)) => write_str(buf, &v),
@@ -289,9 +289,13 @@ fn fallback_str(buf: &mut Vec<u8>, row: &PgRow, idx: usize) {
 fn encode_pg_array(buf: &mut Vec<u8>, row: &PgRow, idx: usize, item: &ColumnTypeSpec) {
     match item {
         ColumnTypeSpec::BigInteger | ColumnTypeSpec::Timedelta => {
-            // Try i64 first (BIGINT[]), fall back to i32 (INTEGER[]/SMALLINT[])
-            if !try_encode_pg_array_opt::<i64>(buf, row, idx, write_i64) {
-                encode_pg_array_opt::<i32>(buf, row, idx, |b, v| write_i64(b, i64::from(v)));
+            // Try i64 (BIGINT[]), then i32 (INTEGER[]), then i16 (SMALLINT[]).
+            if !try_encode_pg_array_opt::<i64>(buf, row, idx, write_i64)
+                && !try_encode_pg_array_opt::<i32>(buf, row, idx, |b, v| {
+                    write_i64(b, i64::from(v));
+                })
+            {
+                encode_pg_array_opt::<i16>(buf, row, idx, |b, v| write_i64(b, i64::from(v)));
             }
         }
         ColumnTypeSpec::Double => {
@@ -339,9 +343,11 @@ fn encode_pg_array(buf: &mut Vec<u8>, row: &PgRow, idx: usize, item: &ColumnType
         ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary => {
             encode_pg_array_ref::<serde_json::Value>(buf, row, idx, write_json_value);
         }
-        // Unknown / nested / bytea element types — JSON array fallback.
-        // (Legacy had no bytea[] arm either; preserved as is.)
-        ColumnTypeSpec::Unknown | ColumnTypeSpec::Array { .. } | ColumnTypeSpec::Blob => {
+        ColumnTypeSpec::Blob => {
+            encode_pg_array_ref::<Vec<u8>>(buf, row, idx, |b, v| write_bin(b, v));
+        }
+        // Unknown / nested element types — JSON array fallback.
+        ColumnTypeSpec::Unknown | ColumnTypeSpec::Array { .. } => {
             match row.try_get::<Option<serde_json::Value>, _>(idx) {
                 Ok(Some(v)) => write_json_value(buf, &v),
                 Ok(None) => write_nil(buf),

@@ -242,10 +242,32 @@ class RenamedChild(Model):
         table_name = "renamed_children"
 
 
+class ConvertedValues(Model):
+    """Fields whose values are converted to the column's kind when bound."""
+
+    id: int | None = Field(default=None, db_pk=True)
+    name: str = Field(default="", max_length=50)
+    # Naive TIMESTAMP[] on PostgreSQL: aware elements are stored as UTC
+    times: list[datetime] | None = Field(default=None, db_nullable=True)
+    # JSONB[] on PostgreSQL, a JSON array elsewhere
+    items: list[dict | str] | None = Field(default=None, db_nullable=True)
+    mixed: list[dict | int | bool] | None = Field(default=None, db_nullable=True)
+    ratios: list[float] | None = Field(default=None, db_nullable=True)
+    amounts: list[Decimal] | None = Field(default=None, db_nullable=True)
+    # A union element type: TEXT[] on PostgreSQL, a JSON array elsewhere
+    labels: list[str | int] | None = Field(default=None, db_nullable=True)
+    # A str field stored as JSON
+    body: str | None = Field(default=None, db_nullable=True, db_type="JSON")
+
+    class Meta:
+        is_table = True
+        table_name = "converted_values"
+
+
 ALL_MODELS = [
     Event, AliasedEvent, Author, Category, Post, Comment, Tag, PostTag,
     AllTypes, NullableTypes, BytesModel, TdModel, Product, FactoryKeyed,
-    RenamedParent, RenamedChild,
+    RenamedParent, RenamedChild, ConvertedValues,
 ]
 
 

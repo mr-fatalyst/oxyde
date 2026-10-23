@@ -30,6 +30,7 @@ from oxyde.models.serializers import (
 from oxyde.models.utils import _unpack_annotated, _unwrap_optional
 from oxyde.queries.base import (
     SupportsExecute,
+    _build_column_db_types,
     _build_column_types,
     _collect_model_columns,
     _map_values_to_columns,
@@ -166,6 +167,7 @@ class MutationMixin(Generic[TModel]):
             values={field: _serialize_value_for_ir(F(field) + by)},
             filter_tree=self._build_filter_tree(),
             column_types=column_types,
+            column_db_types=_build_column_db_types(self.model_class),
             model=_model_key(self.model_class),
         )
         result_bytes = await exec_client.execute(update_ir)
@@ -239,6 +241,7 @@ class MutationMixin(Generic[TModel]):
             values=serialized_values,
             filter_tree=self._build_filter_tree(),
             column_types=column_types,
+            column_db_types=_build_column_db_types(self.model_class),
             model=_model_key(self.model_class),
             returning=returning,
         )
@@ -267,6 +270,7 @@ class MutationMixin(Generic[TModel]):
         pk_db_col: str = meta.db_column or pk_field
         table = self.model_class.get_table_name()
         filter_tree = self._build_filter_tree()
+        column_db_types = _build_column_db_types(self.model_class)
         alias = using or "default"
 
         async def _do(tx_client: SupportsExecute) -> list[TModel]:
@@ -276,6 +280,7 @@ class MutationMixin(Generic[TModel]):
                 columns=[pk_db_col],
                 filter_tree=filter_tree,
                 column_types=column_types,
+                column_db_types=column_db_types,
                 lock="update",
             )
             pk_bytes = await tx_client.execute(select_pks_ir)
@@ -293,6 +298,7 @@ class MutationMixin(Generic[TModel]):
                 values=serialized_values,
                 filter_tree=filter_tree,
                 column_types=column_types,
+                column_db_types=column_db_types,
                 model=_model_key(self.model_class),
                 returning=False,
             )
@@ -352,6 +358,7 @@ class MutationMixin(Generic[TModel]):
             table=self.model_class.get_table_name(),
             filter_tree=self._build_filter_tree(),
             column_types=_build_column_types(self.model_class),
+            column_db_types=_build_column_db_types(self.model_class),
             model=_model_key(self.model_class),
         )
         result_bytes = await exec_client.execute(delete_ir)
