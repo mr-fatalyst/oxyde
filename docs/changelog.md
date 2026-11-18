@@ -8,7 +8,7 @@ All notable changes to Oxyde are documented here.
 
 ### Packaging
 
-- `oxyde-core` release builds now include CPython 3.15 wheels. The PyO3 bridge has been upgraded to 0.30 for Python 3.15 support.
+- `oxyde-core` release builds now include CPython 3.15 wheels, including free-threaded 3.15t. The PyO3 bridge has been upgraded to 0.30 for Python 3.15 support.
 
 ### Queries
 
@@ -17,6 +17,7 @@ All notable changes to Oxyde are documented here.
 ### Fixes
 
 - **Joins to a model with renamed columns** — `join()` and FK-traversal filters (`filter(author__name=...)`) failed with `no column found for name` when the related model's primary key set `db_column`, and on SQLite returned undecoded JSON for a related list/JSON field with `db_column`. Joined result columns are named by field, but the primary-key lookup and the column types used for decoding were keyed by column name.
+- **`get_active_transaction()` outside an event loop** — calling it from a worker thread that inherited the context of a task inside `atomic()` (e.g. via `asyncio.to_thread`) raised `RuntimeError: no running event loop`. It now returns `None`: the transaction belongs to the task, not to the thread.
 
 ### Migrations
 

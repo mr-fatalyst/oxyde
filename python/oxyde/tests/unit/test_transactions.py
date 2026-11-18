@@ -331,7 +331,7 @@ class TestGetActiveTransaction:
 class TestTransactionDepth:
     """Test public depth inspection without exposing transaction state."""
 
-    def test_depth_outside_event_loop(self, reset_transactions):
+    def test_depth_is_zero_without_transaction(self, reset_transactions):
         assert get_transaction_depth() == 0
 
     def test_helper_export(self):
