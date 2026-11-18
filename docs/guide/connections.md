@@ -225,12 +225,12 @@ settings = PoolSettings(
 )
 ```
 
-### SQLite extensions
+Default settings are optimized for most use cases.
 
-Configure trusted native libraries with `sqlite_extensions`. Oxyde passes these
-libraries to SQLx's SQLite connection options, so they are loaded on **every**
-connection, including connections opened later by the pool. Extension loading is
-opt-in; the default leaves existing behavior unchanged.
+### SQLite Extensions
+
+`sqlite_extensions` lists native extension libraries to load on every
+connection of the pool, including connections the pool opens later:
 
 ```python
 import sqlite_vec
@@ -244,18 +244,14 @@ await database.connect()
 rows = await execute_raw("SELECT vec_version() AS version", client=database)
 ```
 
-Install the extension separately (for example, `pip install sqlite-vec`). Oxyde
-neither downloads libraries nor discovers them in database files. Use absolute
-paths to trusted libraries compatible with your platform and SQLite version.
-A missing or incompatible library causes pool initialization to fail. Native
-extensions execute code inside the database process: never accept their paths
-from an untrusted user, an agent's tool arguments, or source document content.
-PostgreSQL and MySQL do not use this SQLite-only setting. SQLx handles loading
-during connection setup; this option does not expose a runtime extension-loading
-tool or enable arbitrary SQL `load_extension()` calls.
+Install the extension separately (for example, `pip install sqlite-vec`) —
+Oxyde does not download or discover libraries. A missing or incompatible
+library makes `connect()` fail.
 
-
-Default settings are optimized for most use cases.
+!!! warning
+    An extension is native code running inside your process. Take the paths
+    only from trusted configuration, never from user input. Loading extensions
+    from SQL with `load_extension()` stays disabled.
 
 ## Schema Management
 

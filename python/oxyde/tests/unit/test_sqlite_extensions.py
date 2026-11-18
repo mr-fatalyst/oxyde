@@ -40,11 +40,13 @@ int sqlite3_extension_init(sqlite3 *db, char **err, const sqlite3_api_routines *
         "oxyde_marker.dylib" if sys.platform == "darwin" else "oxyde_marker.so"
     )
     flag = "-dynamiclib" if sys.platform == "darwin" else "-shared"
-    subprocess.run(
+    result = subprocess.run(
         [compiler, flag, "-fPIC", str(source), "-o", str(output)],
-        check=True,
         capture_output=True,
+        text=True,
     )
+    if result.returncode != 0:
+        pytest.skip(f"Cannot build the SQLite test extension: {result.stderr.strip()}")
     return str(output)
 
 
@@ -92,8 +94,10 @@ async def test_invalid_extension_fails_pool_initialization(tmp_path):
         ),
     )
     try:
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError, match="Failed to connect") as excinfo:
             await database.connect()
+        assert "sqlite_extensions" in str(excinfo.value)
+        assert "missing.so" in str(excinfo.value)
         assert not database.connected
     finally:
         await database.disconnect()

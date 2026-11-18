@@ -10,6 +10,10 @@ All notable changes to Oxyde are documented here.
 
 - `oxyde-core` release builds now include CPython 3.15 wheels, including free-threaded 3.15t. The PyO3 bridge has been upgraded to 0.30 for Python 3.15 support.
 
+### Connections
+
+- **SQLite extensions** — new `PoolSettings(sqlite_extensions=[...])` loads native extension libraries (e.g. [sqlite-vec](https://github.com/asg017/sqlite-vec)) on every connection of the pool. Off by default; `load_extension()` from SQL stays disabled. See [Connections](guide/connections.md#sqlite-extensions).
+
 ### Queries
 
 - UUID fields now support `gt`, `gte`, `lt`, `lte`, `between`, and `range` filters on PostgreSQL, SQLite, and MySQL. These use each database's UUID ordering and typed UUID parameters.

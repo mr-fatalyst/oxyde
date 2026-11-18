@@ -113,10 +113,20 @@ async fn init_pool_inner(
                 connect_opts = connect_opts.extension(extension.clone());
             }
 
-            let pool = options
-                .connect_with(connect_opts)
-                .await
-                .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {e}")))?;
+            let pool = options.connect_with(connect_opts).await.map_err(|e| {
+                // SQLx loses SQLite's own message when an extension fails to
+                // load, so name the configured libraries here.
+                let hint = if settings.sqlite_extensions.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        " (sqlite_extensions = {:?}; a library that fails to load \
+                         aborts the connection)",
+                        settings.sqlite_extensions
+                    )
+                };
+                DriverError::ConnectionError(format!("Failed to connect: {e}{hint}"))
+            })?;
 
             info!("SQLite pool created with PRAGMA settings (create_if_missing=true)");
 
@@ -194,15 +204,6 @@ fn backend_from_url(url: &str) -> Option<DatabaseBackend> {
 }
 
 fn validate_settings(settings: &PoolSettings) -> Result<()> {
-    if settings
-        .sqlite_extensions
-        .iter()
-        .any(|path| path.trim().is_empty() || path.contains('\0'))
-    {
-        return Err(DriverError::InvalidPoolSettings(
-            "sqlite_extensions must contain non-empty library paths without NUL bytes".into(),
-        ));
-    }
     if let (Some(min), Some(max)) = (settings.min_connections, settings.max_connections) {
         if min > max {
             return Err(DriverError::InvalidPoolSettings(
