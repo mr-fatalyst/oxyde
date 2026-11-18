@@ -106,14 +106,27 @@ async fn init_pool_inner(
             });
 
             // Parse URL and enable automatic database file creation
-            let connect_opts = SqliteConnectOptions::from_str(url)
+            let mut connect_opts = SqliteConnectOptions::from_str(url)
                 .map_err(|e| DriverError::ConnectionError(format!("Invalid SQLite URL: {e}")))?
                 .create_if_missing(true);
+            for extension in &settings.sqlite_extensions {
+                connect_opts = connect_opts.extension(extension.clone());
+            }
 
-            let pool = options
-                .connect_with(connect_opts)
-                .await
-                .map_err(|e| DriverError::ConnectionError(format!("Failed to connect: {e}")))?;
+            let pool = options.connect_with(connect_opts).await.map_err(|e| {
+                // SQLx loses SQLite's own message when an extension fails to
+                // load, so name the configured libraries here.
+                let hint = if settings.sqlite_extensions.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        " (sqlite_extensions = {:?}; a library that fails to load \
+                         aborts the connection)",
+                        settings.sqlite_extensions
+                    )
+                };
+                DriverError::ConnectionError(format!("Failed to connect: {e}{hint}"))
+            })?;
 
             info!("SQLite pool created with PRAGMA settings (create_if_missing=true)");
 

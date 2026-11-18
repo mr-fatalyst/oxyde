@@ -6,6 +6,14 @@ All notable changes to Oxyde are documented here.
 
 ## Unreleased
 
+### Packaging
+
+- `oxyde-core` release builds now include CPython 3.15 wheels, including free-threaded 3.15t. The PyO3 bridge has been upgraded to 0.30 for Python 3.15 support.
+
+### Connections
+
+- **SQLite extensions** — new `PoolSettings(sqlite_extensions=[...])` loads native extension libraries (e.g. [sqlite-vec](https://github.com/asg017/sqlite-vec)) on every connection of the pool. Off by default; `load_extension()` from SQL stays disabled. See [Connections](guide/connections.md#sqlite-extensions).
+
 ### Queries
 
 - UUID fields now support `gt`, `gte`, `lt`, `lte`, `between`, and `range` filters on PostgreSQL, SQLite, and MySQL. These use each database's UUID ordering and typed UUID parameters.
@@ -25,6 +33,7 @@ All notable changes to Oxyde are documented here.
 - **Filters on joined columns without a column type** — a filter on a related model's column that has no column type of its own (`filter(author__name=...)` where `name` has `db_type="CITEXT"`) was typed by the base model's column of the same name, so a base JSON or array column could change how the value was bound or compared. Joined columns now use only their own type.
 - **`having()` on aggregates of typed fields** — comparing `Max`/`Min` of a `Decimal`, `date`, `datetime`, `UUID` or enum field, or `Sum`/`Avg` against a `Decimal` (`annotate(top=Max("price")).having(top__gt=Decimal("5"))`), bound the value as text, which failed on PostgreSQL with `operator does not exist: numeric > text`. Values are now bound by the aggregate's result type, never by a column that shares the alias.
 - Tuples in filter values are serialized like lists, so `UUID`, `Decimal` and `datetime` elements inside a tuple are converted as well.
+- **`get_active_transaction()` outside an event loop** — calling it from a worker thread that inherited the context of a task inside `atomic()` (e.g. via `asyncio.to_thread`) raised `RuntimeError: no running event loop`. It now returns `None`: the transaction belongs to the task, not to the thread.
 
 ### Migrations
 

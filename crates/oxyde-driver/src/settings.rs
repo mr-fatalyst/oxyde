@@ -18,6 +18,8 @@ pub struct PoolSettings {
     pub sqlite_synchronous: Option<String>,
     pub sqlite_cache_size: Option<i32>,
     pub sqlite_busy_timeout: Option<i32>,
+    /// Trusted native libraries loaded by SQLx on every SQLite connection.
+    pub sqlite_extensions: Vec<String>,
     // TLS settings (PostgreSQL + MySQL)
     pub ssl_mode: Option<String>,
     pub ssl_root_cert: Option<String>,
@@ -46,6 +48,7 @@ impl Default for PoolSettings {
             sqlite_synchronous: None,
             sqlite_cache_size: None,
             sqlite_busy_timeout: None,
+            sqlite_extensions: Vec::new(),
             ssl_mode: None,
             ssl_root_cert: None,
             ssl_client_cert: None,

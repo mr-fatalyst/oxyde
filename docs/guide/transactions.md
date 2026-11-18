@@ -41,6 +41,35 @@ async with transaction.atomic():
     # Outer transaction commits
 ```
 
+### Inspecting Transaction Depth
+
+Use `transaction.get_transaction_depth(using="default")` to inspect the current
+`atomic()` nesting depth. It returns `0` outside an atomic transaction, `1` in the
+outermost block, and `2` or more in nested blocks. The helper is also available as
+`from oxyde.db import get_transaction_depth`.
+
+```python
+from oxyde.db import transaction
+
+assert transaction.get_transaction_depth() == 0
+
+async with transaction.atomic():
+    assert transaction.get_transaction_depth() == 1
+
+    async with transaction.atomic():
+        assert transaction.get_transaction_depth() == 2
+
+    assert transaction.get_transaction_depth() == 1
+
+assert transaction.get_transaction_depth() == 0
+```
+
+Depth is independent for each database alias. For example, use
+`transaction.get_transaction_depth(using="analytics")` to inspect analytics
+transactions. Child tasks do not see their parent's depth: they start at `0` and
+track their own transactions independently. These APIs measure managed
+`atomic()` blocks, rather than standalone low-level `AsyncTransaction` usage.
+
 ## Manual Rollback
 
 Force rollback without an exception:

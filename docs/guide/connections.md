@@ -227,6 +227,32 @@ settings = PoolSettings(
 
 Default settings are optimized for most use cases.
 
+### SQLite Extensions
+
+`sqlite_extensions` lists native extension libraries to load on every
+connection of the pool, including connections the pool opens later:
+
+```python
+import sqlite_vec
+from oxyde import AsyncDatabase, PoolSettings, execute_raw
+
+database = AsyncDatabase(
+    "sqlite:///app.sqlite",
+    settings=PoolSettings(sqlite_extensions=[sqlite_vec.loadable_path()]),
+)
+await database.connect()
+rows = await execute_raw("SELECT vec_version() AS version", client=database)
+```
+
+Install the extension separately (for example, `pip install sqlite-vec`) —
+Oxyde does not download or discover libraries. A missing or incompatible
+library makes `connect()` fail.
+
+!!! warning
+    An extension is native code running inside your process. Take the paths
+    only from trusted configuration, never from user input. Loading extensions
+    from SQL with `load_extension()` stays disabled.
+
 ## Schema Management
 
 Create or drop all registered model tables programmatically — no migration files needed. Useful for tests, scripts, and rapid prototyping.
