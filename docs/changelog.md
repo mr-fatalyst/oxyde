@@ -6,6 +6,10 @@ All notable changes to Oxyde are documented here.
 
 ## Unreleased
 
+### Packaging
+
+- `oxyde-core` release builds now include CPython 3.15 wheels. The PyO3 bridge has been upgraded to 0.30 for Python 3.15 support.
+
 ### Queries
 
 - UUID fields now support `gt`, `gte`, `lt`, `lte`, `between`, and `range` filters on PostgreSQL, SQLite, and MySQL. These use each database's UUID ordering and typed UUID parameters.

@@ -35,7 +35,7 @@ pub(crate) fn extract_pool_settings(
         return Ok(parsed);
     }
 
-    if let Ok(dict) = obj.downcast::<PyDict>() {
+    if let Ok(dict) = obj.cast::<PyDict>() {
         parse_pool_dict(dict, &mut parsed)?;
         return Ok(parsed);
     }
@@ -45,7 +45,7 @@ pub(crate) fn extract_pool_settings(
         if payload.is_none() {
             return Ok(parsed);
         }
-        let dict = payload.downcast::<PyDict>()?;
+        let dict = payload.cast::<PyDict>()?;
         parse_pool_dict(dict, &mut parsed)?;
         return Ok(parsed);
     }
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn test_extract_pool_settings_from_dict() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
         Python::attach(|py| {
             let dict = PyDict::new(py);
             dict.set_item("max_connections", 20u32).unwrap();
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn test_extract_pool_settings_rejects_invalid_type() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
         Python::attach(|py| {
             let value = "invalid".into_pyobject(py).unwrap().into_any();
             let err = extract_pool_settings(py, Some(value)).unwrap_err();
