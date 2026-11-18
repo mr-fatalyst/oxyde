@@ -12,8 +12,10 @@ literals) delegates here. ``TYPE_REGISTRY`` keeps its other roles
 Two roles of ``db_type`` are split deliberately:
 - its *semantic kind* (for binding/decoding) is derived here via
   ``_KNOWN_DB_TYPES``;
-- its *verbatim DDL string* travels separately (``FieldDef.db_type``)
-  and is never classified in Rust.
+- its *verbatim DDL string* travels separately (``FieldDef.db_type`` for
+  migrations, ``column_db_types`` for array overrides in queries). Rust
+  owns the SQL type names made from it: the DDL, and the PostgreSQL cast
+  of array filter values. It never derives a semantic kind from it.
 
 Unknown annotations and unrecognized ``db_type`` strings return ``None``:
 the column is simply omitted from ``column_types`` and Rust falls back to

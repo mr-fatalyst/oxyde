@@ -254,7 +254,8 @@ class ConvertedValues(Model):
     mixed: list[dict | int | bool] | None = Field(default=None, db_nullable=True)
     ratios: list[float] | None = Field(default=None, db_nullable=True)
     amounts: list[Decimal] | None = Field(default=None, db_nullable=True)
-    # A union element type: TEXT[] on PostgreSQL, a JSON array elsewhere
+    # A union element type: VARCHAR[] on PostgreSQL (strings only), a JSON
+    # array elsewhere
     labels: list[str | int] | None = Field(default=None, db_nullable=True)
     # A str field stored as JSON
     body: str | None = Field(default=None, db_nullable=True, db_type="JSON")

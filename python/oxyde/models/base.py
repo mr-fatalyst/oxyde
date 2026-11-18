@@ -84,6 +84,7 @@ from pydantic.fields import FieldInfo, PydanticUndefined
 from typing_extensions import Self, dataclass_transform
 
 from oxyde.core import register_validator
+from oxyde.core.column_types import compute_column_type
 
 if TYPE_CHECKING:
     from oxyde.queries.base import SupportsExecute
@@ -97,7 +98,6 @@ from oxyde.models.metadata import (
     ModelMeta,
     RelationDescriptorBase,
     RelationInfo,
-    column_type_for_meta,
     is_column_field,
 )
 from oxyde.models.registry import finalize_pending, register_table
@@ -327,7 +327,13 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             # have no column of their own, nor a reverse mapping
             if not is_column_field(meta):
                 continue
-            spec = column_type_for_meta(meta)
+            spec = compute_column_type(
+                meta.python_type,
+                meta.db_type,
+                max_length=meta.max_length,
+                max_digits=meta.max_digits,
+                decimal_places=meta.decimal_places,
+            )
             if spec is not None:
                 column_types[meta.db_column] = spec
             # Only array overrides change how filter values bind (PostgreSQL

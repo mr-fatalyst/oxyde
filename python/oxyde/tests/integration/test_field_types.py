@@ -13,6 +13,7 @@ from uuid import UUID
 import pytest
 import pytest_asyncio
 
+from oxyde.exceptions import ManagerError
 from oxyde.migrations.utils import detect_dialect
 from oxyde.queries import F
 from oxyde.queries.raw import execute_raw
@@ -500,6 +501,39 @@ class TestArrayRoundTrip:
         # A JSON array keeps each element's own type, as saved.
         await ConvertedValues.objects.create(labels=["a", 1], using=db.name)
         assert await query.count(using=db.name) == 1
+
+    @pytest.mark.asyncio
+    async def test_union_list_write(self, db):
+        # PostgreSQL stores the list as VARCHAR[]: the 1 was written as NULL.
+        # It now raises; a JSON array keeps each element's own type.
+        labels = ["a", 1]
+        if detect_dialect(db.url) == "postgres":
+            with pytest.raises(ManagerError, match="does not match the array's element type"):
+                await ConvertedValues.objects.create(labels=labels, using=db.name)
+            obj = await ConvertedValues.objects.create(labels=["a"], using=db.name)
+            query = ConvertedValues.objects.filter(id=obj.id)
+            with pytest.raises(RuntimeError, match="does not match the array's element type"):
+                await query.update(labels=labels, using=db.name)
+            return
+        obj = await ConvertedValues.objects.create(labels=labels, using=db.name)
+        fetched = await ConvertedValues.objects.get(id=obj.id, using=db.name)
+        assert fetched.labels == labels
+
+    @pytest.mark.asyncio
+    async def test_str_list_filter(self, db):
+        # The column is VARCHAR(n)[] on PostgreSQL, which has no = with the
+        # text[] strings bind as: values are cast to the column's type.
+        if detect_dialect(db.url) == "mysql":
+            pytest.skip("array equality filters do not match on MySQL")
+        await AllTypes.objects.create(str_list=["alpha", "beta"], using=db.name)
+        await AllTypes.objects.create(str_list=["beta"], using=db.name)
+
+        async def count(**filters) -> int:
+            return await AllTypes.objects.filter(**filters).count(using=db.name)
+
+        assert await count(str_list=["alpha", "beta"]) == 1
+        assert await count(str_list=["beta", "alpha"]) == 0
+        assert await count(str_list__in=[["beta"], ["gamma"]]) == 1
 
     @pytest.mark.asyncio
     async def test_null_list(self, db):

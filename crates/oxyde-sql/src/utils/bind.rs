@@ -15,6 +15,7 @@ use sea_query::value::ArrayType;
 use sea_query::{Expr, SimpleExpr, Value};
 use uuid::Uuid;
 
+use crate::error::{QueryError, Result as QueryResult};
 use crate::Dialect;
 
 /// Convert an rmpv value without a column spec (raw SQL parameters).
@@ -119,81 +120,12 @@ fn coerce_element(value: Value, spec: &ColumnTypeSpec) -> Value {
     }
 }
 
-/// Parse a decimal string; Python's `str(Decimal)` may use an exponent.
+/// Parse a decimal string; Python's `str(Decimal)` may use an exponent
+/// (`str(Decimal("0.0000001"))` is `"1E-7"`).
 fn parse_decimal(s: &str) -> Option<Decimal> {
     s.parse::<Decimal>()
         .or_else(|_| Decimal::from_scientific(s))
         .ok()
-        // Exact values the two parsers miss: zeros with a large exponent
-        // ("0E-30") and mantissas with long runs of trailing zeros.
-        .or_else(|| parse_decimal_exact(s))
-}
-
-/// `parse_decimal` without rounding: `None` for a value a `Decimal` cannot
-/// hold exactly (more than 28 fractional digits once trailing zeros go).
-fn parse_decimal_exact(s: &str) -> Option<Decimal> {
-    // Keep the scale of ordinary decimal strings when they already fit.
-    if let Ok(decimal) = Decimal::from_str_exact(s) {
-        return Some(decimal);
-    }
-    let (mantissa, exponent) = match s.split_once(['e', 'E']) {
-        Some((mantissa, exponent)) => (mantissa, exponent.parse::<i64>().ok()?),
-        None => (s, 0),
-    };
-    let (negative, unsigned) = match mantissa.as_bytes().first()? {
-        b'-' => (true, &mantissa[1..]),
-        b'+' => (false, &mantissa[1..]),
-        _ => (false, mantissa),
-    };
-
-    // Read the coefficient as text: it may exceed Decimal's limits before
-    // the exponent is applied (1e30 * 1e-2 is the exactly representable 1e28).
-    let mut coefficient = String::with_capacity(unsigned.len());
-    let mut fractional_digits = 0i64;
-    let mut point = false;
-    for byte in unsigned.bytes() {
-        match byte {
-            b'0'..=b'9' => {
-                coefficient.push(char::from(byte));
-                if point {
-                    fractional_digits = fractional_digits.checked_add(1)?;
-                }
-            }
-            b'.' if !point => point = true,
-            // Decimal accepts separators after the first digit.
-            b'_' if !coefficient.is_empty() => {}
-            _ => return None,
-        }
-    }
-    if coefficient.is_empty() {
-        return None;
-    }
-    let significant = coefficient.trim_start_matches('0');
-    // Zero is exact whatever its exponent, without any scale arithmetic.
-    if significant.is_empty() {
-        return Some(Decimal::ZERO);
-    }
-
-    // Remove only zeros, never significant digits, before imposing either
-    // the 96-bit coefficient limit or the 28-place scale limit.
-    let digits = significant.trim_end_matches('0');
-    let trailing_zeros = i64::try_from(significant.len() - digits.len()).ok()?;
-    let mut scale = fractional_digits
-        .checked_sub(exponent)?
-        .checked_sub(trailing_zeros)?;
-    let mut digits = digits.parse::<i128>().ok()?;
-    if negative {
-        digits = -digits;
-    }
-    if scale < 0 {
-        let power = 10i128.checked_pow(u32::try_from(scale.checked_neg()?).ok()?)?;
-        digits = digits.checked_mul(power)?;
-        scale = 0;
-    }
-    let scale = u32::try_from(scale)
-        .ok()
-        .filter(|&s| s <= Decimal::MAX_SCALE)?;
-    Decimal::try_from_i128_with_scale(digits, scale).ok()
 }
 
 #[must_use]
@@ -204,6 +136,34 @@ pub fn typed_value_expr(value: Value, spec: &ColumnTypeSpec, dialect: Dialect) -
         }
     }
     Expr::val(value).into()
+}
+
+/// `typed_value_expr` for a value written to or compared with a column.
+///
+/// On PostgreSQL an array element of another type than the column's (the `1`
+/// in `["a", 1]` for a `list[str | int]`) is an error: array binding would
+/// send it as NULL, silently losing the value on a write and matching rows
+/// that hold `[None]` in a filter. JSON arrays (MySQL, SQLite) encode each
+/// element as given.
+pub fn checked_value_expr(
+    value: Value,
+    spec: &ColumnTypeSpec,
+    dialect: Dialect,
+) -> QueryResult<SimpleExpr> {
+    check_array_elements(&value, dialect)?;
+    Ok(typed_value_expr(value, spec, dialect))
+}
+
+pub(crate) fn check_array_elements(value: &Value, dialect: Dialect) -> QueryResult<()> {
+    if dialect != Dialect::Postgres {
+        return Ok(());
+    }
+    match (value, mismatched_array_element(value)) {
+        (Value::Array(arr_type, _), Some(element)) => Err(QueryError::InvalidQuery(format!(
+            "Array element {element:?} does not match the array's element type {arr_type:?}"
+        ))),
+        _ => Ok(()),
+    }
 }
 
 /// Bind a string payload according to the spec.
@@ -325,7 +285,7 @@ fn element_array_type(item: &ColumnTypeSpec) -> Option<ArrayType> {
 /// Only PostgreSQL arrays are typed: their binding drops such an element as
 /// NULL, and NULL elements compare equal there, so a filter value with one
 /// would match the wrong rows. JSON arrays encode each element as given.
-pub(crate) fn mismatched_array_element(value: &Value) -> Option<&Value> {
+fn mismatched_array_element(value: &Value) -> Option<&Value> {
     let Value::Array(arr_type, Some(elements)) = value else {
         return None;
     };
@@ -816,88 +776,6 @@ mod tests {
             bind_value(&s("1E+2"), &decimal_spec()),
             Value::Decimal(Some(Box::new(Decimal::from(100))))
         );
-    }
-
-    #[test]
-    fn zero_decimals_with_any_exponent() {
-        for zero in ["0E-30", "0E+40", "-0E-50", "0.000E-99"] {
-            assert_eq!(parse_decimal_exact(zero), Some(Decimal::ZERO), "{zero}");
-            assert_eq!(parse_decimal(zero), Some(Decimal::ZERO), "{zero}");
-        }
-        assert_eq!(parse_decimal_exact("0Eabc"), None);
-        assert_eq!(parse_decimal("0Eabc"), None);
-        assert_eq!(
-            bind_value(&s("0E-30"), &decimal_spec()),
-            Value::Decimal(Some(Box::new(Decimal::ZERO)))
-        );
-    }
-
-    #[test]
-    fn exact_decimals_with_any_exponent() {
-        let tiny = Decimal::new(1, 27);
-        let huge = Decimal::from_i128_with_scale(10i128.pow(27), 0);
-        for (text, expected) in [
-            ("100E-29", tiny),
-            ("1000E-30", tiny),
-            ("1.500E-27", Decimal::new(15, 28)),
-            ("0.001E+30", huge),
-            ("1E+2", Decimal::from(100)),
-            // The mantissa itself does not fit, but the final value does.
-            ("0.00000000000000000000000000001E+1", Decimal::new(1, 28)),
-            (
-                "1000000000000000000000000000000E-2",
-                Decimal::from_i128_with_scale(10i128.pow(28), 0),
-            ),
-            ("-0.00000000000000000000000000001E+1", -Decimal::new(1, 28)),
-            (
-                "-1000000000000000000000000000000E-2",
-                -Decimal::from_i128_with_scale(10i128.pow(28), 0),
-            ),
-            ("792281625142643375935439503350E-1", Decimal::MAX),
-        ] {
-            assert_eq!(parse_decimal_exact(text), Some(expected), "{text}");
-        }
-        // Would round, or overflow 96 bits.
-        for text in [
-            "1E-29",
-            "1.001E-28",
-            "1E+29",
-            "8E+28",
-            "79228162514264337593543950336E-1",
-            "1E-99999999999999999999",
-        ] {
-            assert_eq!(parse_decimal_exact(text), None, "{text}");
-        }
-    }
-
-    #[test]
-    fn exact_decimal_extreme_exponents_do_not_overflow() {
-        for text in [
-            "1E-9223372036854775808",
-            "1.0E-9223372036854775808",
-            "10E+9223372036854775807",
-        ] {
-            assert_eq!(parse_decimal_exact(text), None, "{text}");
-        }
-        for text in ["0.0E-9223372036854775808", "0E+9223372036854775807"] {
-            assert_eq!(parse_decimal_exact(text), Some(Decimal::ZERO), "{text}");
-        }
-    }
-
-    #[test]
-    fn exact_decimal_normalization_validates_the_whole_mantissa() {
-        for text in ["1e", "1e1e1", "--1", "1.2.3E+1", "._0E+1", "__1E+2"] {
-            assert_eq!(parse_decimal_exact(text), None, "{text}");
-        }
-        for (text, expected) in [
-            ("+.5e1", Decimal::from(5)),
-            ("1_000.50E-2", Decimal::new(10005, 3)),
-            ("2.50", Decimal::new(250, 2)),
-        ] {
-            let value = parse_decimal_exact(text).unwrap();
-            assert_eq!(value, expected, "{text}");
-            assert_eq!(value.scale(), expected.scale(), "{text}");
-        }
     }
 
     #[test]

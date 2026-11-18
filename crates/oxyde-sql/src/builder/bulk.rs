@@ -10,7 +10,7 @@ use sea_query::{
 
 use crate::error::{QueryError, Result};
 use crate::filter::build_filter_node;
-use crate::utils::{bind_value, typed_value_expr, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, checked_value_expr, typed_value_expr, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build bulk UPDATE query using CASE WHEN statements.
@@ -68,7 +68,7 @@ pub fn build_bulk_update(
             if let Some(value) = row.values.get(&column) {
                 case_stmt = case_stmt.case(
                     cond.clone(),
-                    typed_value_expr(bind_value(value, spec), spec, dialect),
+                    checked_value_expr(bind_value(value, spec), spec, dialect)?,
                 );
             }
         }

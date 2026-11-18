@@ -9,7 +9,7 @@ use super::pg_array::{out_of_range_element, pg_array_type};
 use super::render::render_col;
 use crate::aggregate::build_aggregate;
 use crate::error::{QueryError, Result};
-use crate::utils::bind::mismatched_array_element;
+use crate::utils::bind::check_array_elements;
 use crate::utils::{bind_value, typed_value_expr, ColumnIdent, TableIdent};
 use crate::Dialect;
 
@@ -85,22 +85,30 @@ fn aggregate_type<'a>(
     }
 }
 
-/// PostgreSQL array type that a filter's array values are cast to: the
-/// column's `db_type` override, since an `INTEGER[]` column has no `=` with
-/// the `bigint[]` the value binds as. An override that is not an array type
-/// leaves values as they bind.
+/// PostgreSQL array type that a filter's array values are cast to, where
+/// the column's type is not the one the value binds as: PostgreSQL has no
+/// `=` between arrays of different element types.
+///
+/// - A `db_type` array override: an `INTEGER[]` column against the
+///   `bigint[]` an integer list binds as.
+/// - A string array without an override: its column is `VARCHAR(n)[]`, and
+///   strings bind as `text[]`.
+///
+/// Other arrays bind as their column's type, and an override that is not an
+/// array type leaves values as they bind.
 fn pg_array_cast(
     spec: &ColumnTypeSpec,
     db_type: Option<&str>,
     dialect: Dialect,
 ) -> Option<Result<String>> {
-    match (dialect, spec, db_type) {
-        (Dialect::Postgres, ColumnTypeSpec::Array { .. }, Some(db_type))
-            if db_type.trim().ends_with("[]") =>
-        {
-            Some(pg_array_type(db_type))
-        }
-        _ => None,
+    let (Dialect::Postgres, ColumnTypeSpec::Array { item }) = (dialect, spec) else {
+        return None;
+    };
+    match db_type {
+        Some(db_type) if db_type.trim().ends_with("[]") => Some(pg_array_type(db_type)),
+        Some(_) => None,
+        None if matches!(**item, ColumnTypeSpec::String { .. }) => Some(Ok("VARCHAR[]".into())),
+        None => None,
     }
 }
 
@@ -118,15 +126,7 @@ fn filter_value_expr(
     array_cast: Option<&Result<String>>,
     dialect: Dialect,
 ) -> Result<SimpleExpr> {
-    if dialect == Dialect::Postgres {
-        if let (Value::Array(arr_type, _), Some(element)) =
-            (&value, mismatched_array_element(&value))
-        {
-            return Err(QueryError::InvalidQuery(format!(
-                "Array element {element:?} does not match the array's element type {arr_type:?}"
-            )));
-        }
-    }
+    check_array_elements(&value, dialect)?;
     match (array_cast, &value) {
         (Some(Ok(array_type)), Value::Array(..)) => {
             if let Some(shown) = out_of_range_element(&value, array_type) {

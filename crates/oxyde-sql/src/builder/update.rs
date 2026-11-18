@@ -5,7 +5,7 @@ use sea_query::{MysqlQueryBuilder, PostgresQueryBuilder, Query, SqliteQueryBuild
 
 use crate::error::Result;
 use crate::filter::build_filter_node;
-use crate::utils::{bind_value, rmpv_to_simple_expr, typed_value_expr, ColumnIdent, TableIdent};
+use crate::utils::{bind_value, checked_value_expr, rmpv_to_simple_expr, ColumnIdent, TableIdent};
 use crate::Dialect;
 
 /// Build UPDATE query from QueryIR
@@ -35,7 +35,7 @@ pub fn build_update(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                 let spec = get_spec(col);
                 query.value(
                     ColumnIdent(col.clone()),
-                    typed_value_expr(bind_value(val, spec), spec, dialect),
+                    checked_value_expr(bind_value(val, spec), spec, dialect)?,
                 );
             }
         }

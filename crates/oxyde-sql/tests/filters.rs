@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use oxyde_codec::{Aggregate, AggregateOp, ColumnTypeSpec, Filter, FilterNode, QueryIR};
+use oxyde_codec::{Aggregate, AggregateOp, ColumnTypeSpec, Filter, FilterNode, Operation, QueryIR};
 use oxyde_sql::{build_sql, Dialect};
 use rust_decimal::Decimal;
 use sea_query::Value;
@@ -248,6 +248,67 @@ fn array_values_without_an_array_override_are_not_cast() {
     condition.db_type = Some("JSONB");
     let (sql, _) = condition.build(Dialect::Postgres);
     assert!(sql.ends_with(r#""tags" = $1"#), "{sql}");
+}
+
+#[test]
+fn string_arrays_without_an_override_are_cast_to_varchar() {
+    // The column is VARCHAR(n)[], and strings bind as text[].
+    let strs = || arr(vec![s("a"), s("b")]);
+    let spec = || array_of(ColumnTypeSpec::String { length: None });
+    let (sql, _) = Condition::new("=", strs(), spec()).build(Dialect::Postgres);
+    assert!(sql.ends_with(r#""tags" = ($1::VARCHAR[])"#), "{sql}");
+    let (sql, params) =
+        Condition::new("IN", arr(vec![strs(), strs()]), spec()).build(Dialect::Postgres);
+    assert!(
+        sql.ends_with(r#""tags" IN ($1::VARCHAR[], $2::VARCHAR[])"#),
+        "{sql}"
+    );
+    assert_eq!(params.len(), 2);
+
+    // TEXT[] columns already match the text[] values bind as.
+    let (sql, _) =
+        Condition::new("=", strs(), array_of(ColumnTypeSpec::Text)).build(Dialect::Postgres);
+    assert!(sql.ends_with(r#""tags" = $1"#), "{sql}");
+    for dialect in [Dialect::Mysql, Dialect::Sqlite] {
+        let (sql, _) = Condition::new("=", strs(), spec()).build(dialect);
+        assert!(!sql.contains("VARCHAR"), "{dialect:?}: {sql}");
+    }
+}
+
+#[test]
+fn written_array_elements_of_another_type_are_an_error_on_postgres() {
+    // Array binding would send the 1 as NULL, silently losing the value.
+    let spec = array_of(ColumnTypeSpec::String { length: None });
+    let column_types = Some(HashMap::from([("tags".into(), spec)]));
+    let values = Some(HashMap::from([(
+        "tags".into(),
+        arr(vec![s("a"), 1.into()]),
+    )]));
+    let insert = QueryIR {
+        op: Operation::Insert,
+        table: "posts".into(),
+        values: values.clone(),
+        column_types: column_types.clone(),
+        ..Default::default()
+    };
+    let update = QueryIR {
+        op: Operation::Update,
+        table: "posts".into(),
+        values,
+        column_types,
+        ..Default::default()
+    };
+    for ir in [&insert, &update] {
+        let err = build_sql(ir, Dialect::Postgres).unwrap_err().to_string();
+        assert!(
+            err.contains("does not match the array's element type"),
+            "{err}"
+        );
+        // JSON arrays keep each element as given.
+        for dialect in [Dialect::Mysql, Dialect::Sqlite] {
+            build_sql(ir, dialect).unwrap();
+        }
+    }
 }
 
 #[test]
