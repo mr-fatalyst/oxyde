@@ -720,7 +720,13 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
         manager = self.__class__.objects
         pk_field = self.__class__._db_meta.pk_field
         pk_value = getattr(self, pk_field) if pk_field else None
-        is_create = not (pk_field and pk_value not in (None, PydanticUndefined))
+        # A PK filled by its default (default_factory=uuid4) on a new instance is not
+        # a saved row: only a PK the caller set, or one loaded from the database, is.
+        is_create = not (
+            pk_field
+            and pk_value not in (None, PydanticUndefined)
+            and pk_field in self.model_fields_set
+        )
 
         # Convert update_fields to set for hooks
         update_fields_set: set[str] | None = None
@@ -782,6 +788,8 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                 instance=self, client=client, using=using, _skip_hooks=True
             )
             self.__dict__.update(created.__dict__)
+            if pk_field:
+                self.model_fields_set.add(pk_field)
 
         # Call post_save hook
         await self.post_save(is_create=is_create, update_fields=update_fields_set)
