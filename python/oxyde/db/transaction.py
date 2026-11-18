@@ -48,6 +48,10 @@ Functions:
         Get current transaction for connection (or None).
         Used by QueryManager to route queries through active tx.
 
+    get_transaction_depth(using="default"):
+        Get atomic() depth for the connection alias and current task.
+        Returns 0 outside atomic(), 1 in the outermost block, and 2+ when nested.
+
 ContextVar Storage:
     _ACTIVE_TRANSACTIONS stores {alias: {transaction, depth, force_rollback, task}}
     per async context. This allows concurrent requests to have separate
@@ -127,7 +131,14 @@ _ACTIVE_TRANSACTIONS: ContextVar[dict[str, dict[str, Any]]] = ContextVar(
 def _get_owned_entry(using: str) -> dict[str, Any] | None:
     """Return the transaction entry only if it belongs to the current task."""
     entry = _ACTIVE_TRANSACTIONS.get().get(using)
-    if entry and entry.get("task") is asyncio.current_task():
+    if not entry:
+        return None
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:
+        # No running event loop (e.g. a worker thread with a copied context)
+        return None
+    if entry.get("task") is task:
         return entry
     return None
 
@@ -344,10 +355,24 @@ def get_active_transaction(using: str = "default") -> AsyncTransaction | None:
     return None
 
 
+def get_transaction_depth(using: str = "default") -> int:
+    """Return the atomic() depth for a connection alias in the calling task.
+
+    Returns 0 when no atomic() block is active, 1 in the outermost block,
+    and 2+ in nested blocks. Transactions owned by other tasks are excluded.
+    """
+    entry = _get_owned_entry(using)
+    if entry:
+        depth: int = entry["depth"]
+        return depth
+    return 0
+
+
 __all__ = [
     "AsyncTransaction",
     "TransactionTimeoutError",
     "AtomicTransactionContext",
     "atomic",
     "get_active_transaction",
+    "get_transaction_depth",
 ]

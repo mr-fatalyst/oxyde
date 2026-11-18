@@ -69,6 +69,7 @@ from .transaction import (
     TransactionTimeoutError,
     atomic,
     get_active_transaction,
+    get_transaction_depth,
 )
 
 
@@ -219,6 +220,7 @@ __all__ = [
     "transaction",
     "atomic",
     "get_active_transaction",
+    "get_transaction_depth",
     # Schema management
     "create_tables",
     "drop_tables",
