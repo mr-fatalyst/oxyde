@@ -106,9 +106,12 @@ async fn init_pool_inner(
             });
 
             // Parse URL and enable automatic database file creation
-            let connect_opts = SqliteConnectOptions::from_str(url)
+            let mut connect_opts = SqliteConnectOptions::from_str(url)
                 .map_err(|e| DriverError::ConnectionError(format!("Invalid SQLite URL: {e}")))?
                 .create_if_missing(true);
+            for extension in &settings.sqlite_extensions {
+                connect_opts = connect_opts.extension(extension.clone());
+            }
 
             let pool = options
                 .connect_with(connect_opts)
@@ -191,6 +194,15 @@ fn backend_from_url(url: &str) -> Option<DatabaseBackend> {
 }
 
 fn validate_settings(settings: &PoolSettings) -> Result<()> {
+    if settings
+        .sqlite_extensions
+        .iter()
+        .any(|path| path.trim().is_empty() || path.contains('\0'))
+    {
+        return Err(DriverError::InvalidPoolSettings(
+            "sqlite_extensions must contain non-empty library paths without NUL bytes".into(),
+        ));
+    }
     if let (Some(min), Some(max)) = (settings.min_connections, settings.max_connections) {
         if min > max {
             return Err(DriverError::InvalidPoolSettings(

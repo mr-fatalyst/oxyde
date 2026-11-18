@@ -215,3 +215,19 @@ def test_validate_url_scheme() -> None:
 
     with pytest.raises(ValueError):
         _validate_url_scheme("mongodb://localhost")
+
+
+@pytest.mark.parametrize("value", ["vec0", [""], ["  "], ["bad\x00path"], [123]])
+def test_sqlite_extensions_reject_invalid_paths(value):
+    with pytest.raises(ValueError, match="sqlite_extensions"):
+        PoolSettings(sqlite_extensions=value).to_payload()
+
+
+def test_sqlite_extensions_payload_is_opt_in_and_copied():
+    assert "sqlite_extensions" not in PoolSettings().to_payload()
+    paths = ["/trusted/vec0", "/trusted/another_extension"]
+    settings = PoolSettings(sqlite_extensions=paths)
+    payload = settings.to_payload()
+    assert payload["sqlite_extensions"] == paths
+    assert payload["sqlite_extensions"] is not paths
+    assert PoolSettings(sqlite_extensions=[]).to_payload()["sqlite_extensions"] == []

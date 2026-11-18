@@ -333,6 +333,10 @@ fn parse_pool_dict(dict: &Bound<'_, PyDict>, parsed: &mut DriverPoolSettings) ->
         parsed.sqlite_busy_timeout = extract_optional_i32(&value)?;
     }
 
+    if let Some(value) = dict.get_item("sqlite_extensions")? {
+        parsed.sqlite_extensions = value.extract::<Option<Vec<String>>>()?.unwrap_or_default();
+    }
+
     // TLS settings
     if let Some(value) = dict.get_item("ssl_mode")? {
         parsed.ssl_mode = extract_optional_string(&value)?;
