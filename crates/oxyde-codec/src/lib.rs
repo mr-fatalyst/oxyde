@@ -296,6 +296,12 @@ pub struct QueryIR {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub column_types: Option<HashMap<String, ColumnTypeSpec>>,
 
+    /// Verbatim array `db_type` overrides, keyed like `column_types`.
+    /// Filters on PostgreSQL cast array values to them (`INTEGER[]` where
+    /// the spec alone would say `BIGINT[]`); other overrides are ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column_db_types: Option<HashMap<String, String>>,
+
     // Filters using FilterNode tree (supports AND/OR/NOT logic)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter_tree: Option<FilterNode>,
@@ -403,6 +409,7 @@ impl Default for QueryIR {
             table: String::new(),
             cols: None,
             column_types: None,
+            column_db_types: None,
             filter_tree: None,
             limit: None,
             offset: None,

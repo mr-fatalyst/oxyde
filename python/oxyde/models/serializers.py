@@ -42,6 +42,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from oxyde.exceptions import ManagerError
+from oxyde.models.metadata import is_column_field
 
 if TYPE_CHECKING:
     from oxyde.models.base import Model
@@ -58,13 +59,11 @@ def _get_virtual_fields(model_class: type[Model]) -> set[str]:
     - db_m2m: many-to-many relations (e.g., tags: list[Tag])
     - FK model fields: (e.g., author: Author) — real column is author_id
     """
-    virtual: set[str] = set()
-    for name, meta in model_class._db_meta.field_metadata.items():
-        if meta.extra.get("reverse_fk") or meta.extra.get("m2m"):
-            virtual.add(name)
-        elif meta.foreign_key is not None:
-            virtual.add(name)
-    return virtual
+    return {
+        name
+        for name, meta in model_class._db_meta.field_metadata.items()
+        if not is_column_field(meta)
+    }
 
 
 def _dump_insert_data(instance: Model) -> dict[str, Any]:

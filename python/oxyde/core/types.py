@@ -50,11 +50,11 @@ TYPE_REGISTRY: dict[type, TypeDescriptor] = {
 def serialize_value(value: Any) -> Any:
     """Serialize a value for msgpack/IR using TYPE_REGISTRY.
 
-    Handles lists and dicts recursively. Returns value unchanged if type is not
-    in the registry (int, str, float, bool, None pass through as-is
-    since msgpack handles them natively).
+    Handles lists, tuples (as lists) and dicts recursively. Returns value
+    unchanged if type is not in the registry (int, str, float, bool, None
+    pass through as-is since msgpack handles them natively).
     """
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [serialize_value(v) for v in value]
     if isinstance(value, dict):
         return {k: serialize_value(v) for k, v in value.items()}

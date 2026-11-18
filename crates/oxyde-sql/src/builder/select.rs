@@ -65,6 +65,7 @@ fn build_select_statement(ir: &QueryIR, dialect: Dialect) -> Result<SelectStatem
             filter_tree,
             default_table,
             ir.column_types.as_ref(),
+            ir.column_db_types.as_ref(),
             None,
             dialect,
         )?;
@@ -90,6 +91,7 @@ fn build_select_statement(ir: &QueryIR, dialect: Dialect) -> Result<SelectStatem
             having,
             default_table,
             ir.column_types.as_ref(),
+            ir.column_db_types.as_ref(),
             ir.aggregates.as_deref(),
             dialect,
         )?;
@@ -183,6 +185,7 @@ pub fn build_select(ir: &QueryIR, dialect: Dialect) -> Result<(String, Vec<Value
                 filter_tree,
                 default_table,
                 ir.column_types.as_ref(),
+                ir.column_db_types.as_ref(),
                 None,
                 dialect,
             )?;

@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum QueryError {
     #[error("Invalid query: {0}")]
     InvalidQuery(String),

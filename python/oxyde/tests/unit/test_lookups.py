@@ -18,6 +18,7 @@ from oxyde.models.lookups import (
     _split_lookup_key,
 )
 from oxyde.models.registry import registered_tables
+from oxyde.tests.helpers import StubExecuteClient
 
 
 def get_filter_condition(ir: dict[str, Any]) -> dict[str, Any]:
@@ -240,6 +241,103 @@ class TestUuidLookups:
             OxydeTestModel.objects.filter(uuid_val__contains="1000")
         with pytest.raises(FieldLookupError):
             OxydeTestModel.objects.filter(uuid_val__year=2026)
+
+
+class ArrayFieldModel(Model):
+    """Array fields with and without a db_type override."""
+
+    id: int | None = Field(default=None, db_pk=True)
+    tags: list[str] | None = None
+    scores: list[int] = Field(default_factory=list, db_type="INTEGER[]")
+    raw: list[Any] | dict | None = Field(default=None, db_type="JSON")
+    title: str = ""
+
+    class Meta:
+        is_table = True
+
+
+@pytest.fixture
+def spec_child() -> type[Model]:
+    """A child that shares the `status` column name with its parent, typed
+    differently, and joins a parent with an overridden array column.
+    Defined per test: the unit conftest clears the registry."""
+
+    class SpecParent(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        status: str = Field(default="", max_length=20)
+        small: list[int] = Field(default_factory=list, db_type="SMALLINT[]")
+
+        class Meta:
+            is_table = True
+
+    class SpecChild(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        status: int = 0
+        parent: SpecParent | None = Field(default=None, db_nullable=True)
+
+        class Meta:
+            is_table = True
+
+    return SpecChild
+
+
+class TestQueryColumnTypes:
+    """Joined fields are typed by the `alias.column` entry of the query's
+    column_types, not by the base model's same-named column."""
+
+    def test_own_field(self, spec_child):
+        ir = spec_child.objects.filter(status=1).to_ir()
+        assert ir["column_types"]["status"] == {"kind": "big_integer"}
+        assert "column_type" not in get_filter_condition(ir)
+
+    @pytest.mark.parametrize(
+        ("lookup", "value"),
+        [("exact", "x"), ("in", ["a", "b"]), ("startswith", "x"), ("isnull", True)],
+    )
+    def test_fk_traversal_uses_the_related_models_spec(self, spec_child, lookup, value):
+        ir = spec_child.objects.filter(**{f"parent__status__{lookup}": value}).to_ir()
+        condition = get_filter_condition(ir)
+        assert condition["column"] == "parent.status"
+        assert "column_type" not in condition
+        assert ir["column_types"]["parent.status"] == {"kind": "string", "length": 20}
+        assert ir["column_types"]["status"] == {"kind": "big_integer"}
+
+    def test_relation_field_uses_the_fk_columns_spec(self, spec_child):
+        ir = spec_child.objects.filter(parent=1).to_ir()
+        assert get_filter_condition(ir)["column"] == "parent_id"
+        assert ir["column_types"]["parent_id"] == {"kind": "big_integer"}
+
+
+class TestColumnDbTypes:
+    """Queries carry each column's array db_type override, keyed like
+    column_types, for PostgreSQL to cast array filter values to (integer[]
+    has no = with bigint[])."""
+
+    def test_select_sends_the_overrides(self):
+        ir = ArrayFieldModel.objects.filter(scores=[1, 2]).to_ir()
+        # `raw` (db_type="JSON") is not an array override, so it stays home.
+        assert ir["column_db_types"] == {"scores": "INTEGER[]"}
+        # Conditions themselves carry no type information.
+        assert "db_type" not in get_filter_condition(ir)
+
+    def test_models_without_overrides_send_none(self):
+        registered_tables()
+        assert "column_db_types" not in OxydeTestModel.objects.filter(age=1).to_ir()
+
+    def test_fk_traversal_sends_the_related_fields_db_type(self, spec_child):
+        ir = spec_child.objects.filter(parent__small=[1]).to_ir()
+        assert get_filter_condition(ir)["column"] == "parent.small"
+        assert ir["column_db_types"] == {"parent.small": "SMALLINT[]"}
+
+    @pytest.mark.asyncio
+    async def test_update_and_delete_send_the_overrides(self):
+        stub = StubExecuteClient([{"affected": 1}, {"affected": 1}, {"affected": 1}])
+        query = ArrayFieldModel.objects.filter(scores=[1])
+        await query.update(title="x", client=stub)
+        await query.delete(client=stub)
+        await query.increment("id", client=stub)
+        for call in stub.calls:
+            assert call["column_db_types"] == {"scores": "INTEGER[]"}
 
 
 class TestStringLookups:

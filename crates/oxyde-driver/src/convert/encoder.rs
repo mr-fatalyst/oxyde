@@ -93,11 +93,6 @@ pub fn write_i64(buf: &mut Vec<u8>, v: i64) {
 }
 
 #[inline]
-pub fn write_i32_as_i64(buf: &mut Vec<u8>, v: i32) {
-    rmp::encode::write_sint(buf, i64::from(v)).unwrap();
-}
-
-#[inline]
 pub fn write_u64(buf: &mut Vec<u8>, v: u64) {
     rmp::encode::write_uint(buf, v).unwrap();
 }

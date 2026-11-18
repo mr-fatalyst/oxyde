@@ -144,6 +144,11 @@ def _build_column_types(model_class: type[Model]) -> dict[str, dict] | None:
     return model_class._db_meta.column_types
 
 
+def _build_column_db_types(model_class: type[Model]) -> dict[str, str] | None:
+    """Get cached array db_type overrides by column from model metadata."""
+    return model_class._db_meta.column_db_types
+
+
 def _collect_model_columns(model_class: type[Model]) -> list[tuple[str, str]]:
     """Collect all (field_name, db_column) pairs from model.
 

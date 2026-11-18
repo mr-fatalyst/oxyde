@@ -85,7 +85,8 @@ pub fn build_bulk_update(
     query.cond_where(filter_cond);
 
     if let Some(filter_tree) = &ir.filter_tree {
-        let expr = build_filter_node(filter_tree, None, col_types, None, dialect)?;
+        let db_types = ir.column_db_types.as_ref();
+        let expr = build_filter_node(filter_tree, None, col_types, db_types, None, dialect)?;
         query.and_where(expr);
     }
 

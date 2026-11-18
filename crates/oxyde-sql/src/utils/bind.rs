@@ -61,7 +61,7 @@ pub fn bind_value(value: &rmpv::Value, spec: &ColumnTypeSpec) -> Value {
             }
             ColumnTypeSpec::Array { item } => match element_array_type(item) {
                 Some(arr_type) => {
-                    let values: Vec<Value> = arr.iter().map(|v| bind_value(v, item)).collect();
+                    let values: Vec<Value> = arr.iter().map(|v| bind_element(v, item)).collect();
                     Value::Array(arr_type, Some(Box::new(values)))
                 }
                 // Unknown / nested-array element types have no sea_query
@@ -72,6 +72,128 @@ pub fn bind_value(value: &rmpv::Value, spec: &ColumnTypeSpec) -> Value {
         },
         rmpv::Value::Ext(_, _) => Value::String(Some(Box::new(format!("{value}")))),
     }
+}
+
+/// Bind one array element as the value kind its item spec stores.
+/// PostgreSQL array binding drops elements of any other kind as NULL, and
+/// the JSON encoder (MySQL/SQLite) writes them in another format.
+///
+/// Elements of a `Json` / `JsonBinary` item keep their own JSON type: a
+/// string is a JSON string, never parsed as JSON text, so `"123"` in a
+/// `list[str]` stays a string. (A whole JSON column holds the document a
+/// `str` field gives, so `bind_string` parses that.)
+fn bind_element(value: &rmpv::Value, item: &ColumnTypeSpec) -> Value {
+    match item {
+        ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary if !value.is_nil() => {
+            match super::value::rmpv_to_json(value) {
+                Some(json) => Value::Json(Some(Box::new(json))),
+                None => typed_null(item),
+            }
+        }
+        _ => coerce_element(bind_value(value, item), item),
+    }
+}
+
+/// Give a bound array element the one value kind its item spec stores;
+/// other values pass through unchanged.
+///
+/// - An aware/naive datetime takes the flavour of a `DateTime` /
+///   `DateTimeUtc` spec (via UTC).
+/// - An integer becomes a float or decimal in a `Double` / `Decimal` spec.
+fn coerce_element(value: Value, spec: &ColumnTypeSpec) -> Value {
+    match (spec, value) {
+        (ColumnTypeSpec::DateTime, Value::ChronoDateTimeUtc(Some(dt))) => {
+            Value::ChronoDateTime(Some(Box::new(dt.naive_utc())))
+        }
+        (ColumnTypeSpec::DateTimeUtc, Value::ChronoDateTime(Some(dt))) => {
+            Value::ChronoDateTimeUtc(Some(Box::new(dt.and_utc())))
+        }
+        // The column holds doubles, so the comparison happens in double
+        // precision whatever the integer.
+        #[allow(clippy::cast_precision_loss)]
+        (ColumnTypeSpec::Double, Value::BigInt(Some(n))) => Value::Double(Some(n as f64)),
+        (ColumnTypeSpec::Decimal { .. }, Value::BigInt(Some(n))) => {
+            Value::Decimal(Some(Box::new(Decimal::from(n))))
+        }
+        (_, value) => value,
+    }
+}
+
+/// Parse a decimal string; Python's `str(Decimal)` may use an exponent.
+fn parse_decimal(s: &str) -> Option<Decimal> {
+    s.parse::<Decimal>()
+        .or_else(|_| Decimal::from_scientific(s))
+        .ok()
+        // Exact values the two parsers miss: zeros with a large exponent
+        // ("0E-30") and mantissas with long runs of trailing zeros.
+        .or_else(|| parse_decimal_exact(s))
+}
+
+/// `parse_decimal` without rounding: `None` for a value a `Decimal` cannot
+/// hold exactly (more than 28 fractional digits once trailing zeros go).
+fn parse_decimal_exact(s: &str) -> Option<Decimal> {
+    // Keep the scale of ordinary decimal strings when they already fit.
+    if let Ok(decimal) = Decimal::from_str_exact(s) {
+        return Some(decimal);
+    }
+    let (mantissa, exponent) = match s.split_once(['e', 'E']) {
+        Some((mantissa, exponent)) => (mantissa, exponent.parse::<i64>().ok()?),
+        None => (s, 0),
+    };
+    let (negative, unsigned) = match mantissa.as_bytes().first()? {
+        b'-' => (true, &mantissa[1..]),
+        b'+' => (false, &mantissa[1..]),
+        _ => (false, mantissa),
+    };
+
+    // Read the coefficient as text: it may exceed Decimal's limits before
+    // the exponent is applied (1e30 * 1e-2 is the exactly representable 1e28).
+    let mut coefficient = String::with_capacity(unsigned.len());
+    let mut fractional_digits = 0i64;
+    let mut point = false;
+    for byte in unsigned.bytes() {
+        match byte {
+            b'0'..=b'9' => {
+                coefficient.push(char::from(byte));
+                if point {
+                    fractional_digits = fractional_digits.checked_add(1)?;
+                }
+            }
+            b'.' if !point => point = true,
+            // Decimal accepts separators after the first digit.
+            b'_' if !coefficient.is_empty() => {}
+            _ => return None,
+        }
+    }
+    if coefficient.is_empty() {
+        return None;
+    }
+    let significant = coefficient.trim_start_matches('0');
+    // Zero is exact whatever its exponent, without any scale arithmetic.
+    if significant.is_empty() {
+        return Some(Decimal::ZERO);
+    }
+
+    // Remove only zeros, never significant digits, before imposing either
+    // the 96-bit coefficient limit or the 28-place scale limit.
+    let digits = significant.trim_end_matches('0');
+    let trailing_zeros = i64::try_from(significant.len() - digits.len()).ok()?;
+    let mut scale = fractional_digits
+        .checked_sub(exponent)?
+        .checked_sub(trailing_zeros)?;
+    let mut digits = digits.parse::<i128>().ok()?;
+    if negative {
+        digits = -digits;
+    }
+    if scale < 0 {
+        let power = 10i128.checked_pow(u32::try_from(scale.checked_neg()?).ok()?)?;
+        digits = digits.checked_mul(power)?;
+        scale = 0;
+    }
+    let scale = u32::try_from(scale)
+        .ok()
+        .filter(|&s| s <= Decimal::MAX_SCALE)?;
+    Decimal::try_from_i128_with_scale(digits, scale).ok()
 }
 
 #[must_use]
@@ -124,9 +246,9 @@ fn bind_string(s: &str, spec: &ColumnTypeSpec) -> Value {
             Ok(u) => Value::Uuid(Some(Box::new(u))),
             Err(_) => string_value(s),
         },
-        ColumnTypeSpec::Decimal { .. } => match s.parse::<Decimal>() {
-            Ok(d) => Value::Decimal(Some(Box::new(d))),
-            Err(_) => string_value(s),
+        ColumnTypeSpec::Decimal { .. } => match parse_decimal(s) {
+            Some(d) => Value::Decimal(Some(Box::new(d))),
+            None => string_value(s),
         },
         ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary => {
             match serde_json::from_str::<serde_json::Value>(s) {
@@ -193,6 +315,37 @@ fn element_array_type(item: &ColumnTypeSpec) -> Option<ArrayType> {
         ColumnTypeSpec::Json | ColumnTypeSpec::JsonBinary => Some(ArrayType::Json),
         ColumnTypeSpec::Array { .. } | ColumnTypeSpec::Unknown => None,
     }
+}
+
+/// The first element of an array value that is not of the array's element
+/// type, such as a float in a `Decimal` array or an integer beyond 64 bits
+/// (bound as a string) in an integer one. NULL elements bind as their
+/// item's typed NULL, so they always fit.
+///
+/// Only PostgreSQL arrays are typed: their binding drops such an element as
+/// NULL, and NULL elements compare equal there, so a filter value with one
+/// would match the wrong rows. JSON arrays encode each element as given.
+pub(crate) fn mismatched_array_element(value: &Value) -> Option<&Value> {
+    let Value::Array(arr_type, Some(elements)) = value else {
+        return None;
+    };
+    elements.iter().find(|element| {
+        !matches!(
+            (arr_type, element),
+            (ArrayType::Bool, Value::Bool(_))
+                | (ArrayType::BigInt, Value::BigInt(_))
+                | (ArrayType::Double, Value::Double(_))
+                | (ArrayType::String, Value::String(_))
+                | (ArrayType::Bytes, Value::Bytes(_))
+                | (ArrayType::ChronoDateTime, Value::ChronoDateTime(_))
+                | (ArrayType::ChronoDateTimeUtc, Value::ChronoDateTimeUtc(_))
+                | (ArrayType::ChronoDate, Value::ChronoDate(_))
+                | (ArrayType::ChronoTime, Value::ChronoTime(_))
+                | (ArrayType::Uuid, Value::Uuid(_))
+                | (ArrayType::Decimal, Value::Decimal(_))
+                | (ArrayType::Json, Value::Json(_))
+        )
+    })
 }
 
 fn postgres_enum_cast_type(spec: &ColumnTypeSpec) -> Option<String> {
@@ -557,6 +710,193 @@ mod tests {
                 assert!(matches!(vals[1], Value::BigInt(None)));
             }
             other => panic!("expected Array(BigInt), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn datetime_array_elements_take_the_spec_flavour() {
+        let val = rmpv::Value::Array(vec![
+            s("2024-01-01T10:00:00+02:00"),
+            s("2024-01-01T10:00:00"),
+        ]);
+
+        match bind_value(&val, &array_of(ColumnTypeSpec::DateTime)) {
+            Value::Array(ArrayType::ChronoDateTime, Some(vals)) => {
+                let expected = NaiveDateTime::from_str("2024-01-01T08:00:00").unwrap();
+                assert_eq!(vals[0], Value::ChronoDateTime(Some(Box::new(expected))));
+                assert!(matches!(vals[1], Value::ChronoDateTime(Some(_))));
+            }
+            other => panic!("expected Array(ChronoDateTime), got {other:?}"),
+        }
+
+        match bind_value(&val, &array_of(ColumnTypeSpec::DateTimeUtc)) {
+            Value::Array(ArrayType::ChronoDateTimeUtc, Some(vals)) => {
+                let expected = NaiveDateTime::from_str("2024-01-01T10:00:00")
+                    .unwrap()
+                    .and_utc();
+                assert!(matches!(vals[0], Value::ChronoDateTimeUtc(Some(_))));
+                assert_eq!(vals[1], Value::ChronoDateTimeUtc(Some(Box::new(expected))));
+            }
+            other => panic!("expected Array(ChronoDateTimeUtc), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn json_array_elements_keep_their_json_type() {
+        let val = rmpv::Value::Array(vec![
+            rmpv::Value::Map(vec![(s("a"), 1.into())]),
+            5.into(),
+            true.into(),
+            rmpv::Value::F64(1.5),
+            // Strings are JSON strings, even when they read as JSON text.
+            s("hello"),
+            s("123"),
+            s("null"),
+            s(r#"{"a": 1}"#),
+            rmpv::Value::Nil,
+        ]);
+        for item in [ColumnTypeSpec::Json, ColumnTypeSpec::JsonBinary] {
+            match bind_value(&val, &array_of(item)) {
+                Value::Array(ArrayType::Json, Some(vals)) => {
+                    let json = |v: serde_json::Value| Value::Json(Some(Box::new(v)));
+                    assert_eq!(
+                        *vals,
+                        vec![
+                            json(serde_json::json!({"a": 1})),
+                            json(serde_json::json!(5)),
+                            json(serde_json::json!(true)),
+                            json(serde_json::json!(1.5)),
+                            json(serde_json::json!("hello")),
+                            json(serde_json::json!("123")),
+                            json(serde_json::json!("null")),
+                            json(serde_json::json!(r#"{"a": 1}"#)),
+                            Value::Json(None),
+                        ]
+                    );
+                }
+                other => panic!("expected Array(Json), got {other:?}"),
+            }
+        }
+        // A whole JSON column still takes a `str` field's JSON text.
+        assert_eq!(
+            bind_value(&s("123"), &ColumnTypeSpec::Json),
+            Value::Json(Some(Box::new(serde_json::json!(123))))
+        );
+    }
+
+    #[test]
+    fn integer_elements_of_float_and_decimal_arrays_convert() {
+        let val = rmpv::Value::Array(vec![1.into(), rmpv::Value::F64(2.5)]);
+        assert_eq!(
+            bind_value(&val, &array_of(ColumnTypeSpec::Double)),
+            Value::Array(
+                ArrayType::Double,
+                Some(Box::new(vec![
+                    Value::Double(Some(1.0)),
+                    Value::Double(Some(2.5))
+                ]))
+            )
+        );
+        let val = rmpv::Value::Array(vec![1.into(), s("2.50")]);
+        assert_eq!(
+            bind_value(&val, &array_of(decimal_spec())),
+            Value::Array(
+                ArrayType::Decimal,
+                Some(Box::new(vec![
+                    Value::Decimal(Some(Box::new(Decimal::from(1)))),
+                    Value::Decimal(Some(Box::new(Decimal::new(250, 2)))),
+                ]))
+            )
+        );
+    }
+
+    #[test]
+    fn decimal_exponent_string() {
+        assert_eq!(
+            bind_value(&s("1E+2"), &decimal_spec()),
+            Value::Decimal(Some(Box::new(Decimal::from(100))))
+        );
+    }
+
+    #[test]
+    fn zero_decimals_with_any_exponent() {
+        for zero in ["0E-30", "0E+40", "-0E-50", "0.000E-99"] {
+            assert_eq!(parse_decimal_exact(zero), Some(Decimal::ZERO), "{zero}");
+            assert_eq!(parse_decimal(zero), Some(Decimal::ZERO), "{zero}");
+        }
+        assert_eq!(parse_decimal_exact("0Eabc"), None);
+        assert_eq!(parse_decimal("0Eabc"), None);
+        assert_eq!(
+            bind_value(&s("0E-30"), &decimal_spec()),
+            Value::Decimal(Some(Box::new(Decimal::ZERO)))
+        );
+    }
+
+    #[test]
+    fn exact_decimals_with_any_exponent() {
+        let tiny = Decimal::new(1, 27);
+        let huge = Decimal::from_i128_with_scale(10i128.pow(27), 0);
+        for (text, expected) in [
+            ("100E-29", tiny),
+            ("1000E-30", tiny),
+            ("1.500E-27", Decimal::new(15, 28)),
+            ("0.001E+30", huge),
+            ("1E+2", Decimal::from(100)),
+            // The mantissa itself does not fit, but the final value does.
+            ("0.00000000000000000000000000001E+1", Decimal::new(1, 28)),
+            (
+                "1000000000000000000000000000000E-2",
+                Decimal::from_i128_with_scale(10i128.pow(28), 0),
+            ),
+            ("-0.00000000000000000000000000001E+1", -Decimal::new(1, 28)),
+            (
+                "-1000000000000000000000000000000E-2",
+                -Decimal::from_i128_with_scale(10i128.pow(28), 0),
+            ),
+            ("792281625142643375935439503350E-1", Decimal::MAX),
+        ] {
+            assert_eq!(parse_decimal_exact(text), Some(expected), "{text}");
+        }
+        // Would round, or overflow 96 bits.
+        for text in [
+            "1E-29",
+            "1.001E-28",
+            "1E+29",
+            "8E+28",
+            "79228162514264337593543950336E-1",
+            "1E-99999999999999999999",
+        ] {
+            assert_eq!(parse_decimal_exact(text), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn exact_decimal_extreme_exponents_do_not_overflow() {
+        for text in [
+            "1E-9223372036854775808",
+            "1.0E-9223372036854775808",
+            "10E+9223372036854775807",
+        ] {
+            assert_eq!(parse_decimal_exact(text), None, "{text}");
+        }
+        for text in ["0.0E-9223372036854775808", "0E+9223372036854775807"] {
+            assert_eq!(parse_decimal_exact(text), Some(Decimal::ZERO), "{text}");
+        }
+    }
+
+    #[test]
+    fn exact_decimal_normalization_validates_the_whole_mantissa() {
+        for text in ["1e", "1e1e1", "--1", "1.2.3E+1", "._0E+1", "__1E+2"] {
+            assert_eq!(parse_decimal_exact(text), None, "{text}");
+        }
+        for (text, expected) in [
+            ("+.5e1", Decimal::from(5)),
+            ("1_000.50E-2", Decimal::new(10005, 3)),
+            ("2.50", Decimal::new(250, 2)),
+        ] {
+            let value = parse_decimal_exact(text).unwrap();
+            assert_eq!(value, expected, "{text}");
+            assert_eq!(value.scale(), expected.scale(), "{text}");
         }
     }
 

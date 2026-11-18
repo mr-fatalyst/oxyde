@@ -7,14 +7,14 @@ One model per dialect, fixture selects by backend.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
 import pytest
 import pytest_asyncio
 
-from oxyde import AsyncDatabase, Field, Model, disconnect_all
+from oxyde import AsyncDatabase, Field, Model, Q, disconnect_all
 from oxyde.db.schema import create_tables
 from oxyde.models.registry import clear_registry, register_table
 from oxyde.queries.raw import execute_raw
@@ -54,6 +54,26 @@ class PgDbTypes(Model):
     int_arr: list[int] | None = Field(
         default=None, db_nullable=True, db_type="INTEGER[]"
     )
+    smallint_val: int | None = Field(
+        default=None, db_nullable=True, db_type="SMALLINT"
+    )
+    smallint_arr: list[int] | None = Field(
+        default=None, db_nullable=True, db_type="SMALLINT[]"
+    )
+    char_arr: list[str] | None = Field(
+        default=None, db_nullable=True, db_type="CHAR(3)[]"
+    )
+    real_arr: list[float] | None = Field(
+        default=None, db_nullable=True, db_type="FLOAT(24)[]"
+    )
+    tstz_arr: list[datetime] | None = Field(
+        default=None, db_nullable=True, db_type="TIMESTAMPTZ[]"
+    )
+    # Elements are JSON values: a str element is a JSON string, never parsed
+    jsonb_arr: list[str | None] | None = Field(
+        default=None, db_nullable=True, db_type="JSONB[]"
+    )
+    bytea_arr: list[bytes] | None = Field(default=None, db_nullable=True)
 
     class Meta:
         is_table = True
@@ -226,3 +246,108 @@ class TestDbTypes:
         obj = await model.objects.create(int_arr=val, using=db.name)
         fetched = await model.objects.get(id=obj.id, using=db.name)
         assert fetched.int_arr == val
+
+    @pytest.mark.asyncio
+    async def test_array_overrides_cast_filter_values(self, typed_db):
+        db, model = typed_db
+        if not _has(model, "char_arr"):
+            pytest.skip("No array db_type overrides on this dialect model")
+        await model.objects.create(
+            int_arr=[1, 2], char_arr=["abc", "de"], real_arr=[1.5, 0.25], using=db.name
+        )
+        await model.objects.create(real_arr=[float("nan")], using=db.name)
+
+        async def count(*args, **filters) -> int:
+            return await model.objects.filter(*args, **filters).count(using=db.name)
+
+        # integer[] has no = with the bigint[] values bind as, without a cast.
+        assert await count(int_arr=[1, 2]) == 1
+        assert await count(int_arr=[2, 1]) == 0
+        assert await count(int_arr__in=[[1, 2], [3]]) == 1
+        assert await count(char_arr=["abc", "de"]) == 1
+        # FLOAT(24) is real: values are cast to real[], not double precision[].
+        assert await count(real_arr=[1.5, 0.25]) == 1
+        assert await count(real_arr=[float("nan")]) == 1
+        # Values the column type cannot hold equal no stored value.
+        assert await count(int_arr=[2**31]) == 0
+        assert await count(int_arr__in=[[1, 2], [2**31]]) == 1
+        assert await count(~Q(int_arr=[2**31])) == 1
+        assert await count(real_arr=[1e300]) == 0
+
+    @pytest.mark.asyncio
+    async def test_bytea_array(self, typed_db):
+        db, model = typed_db
+        if not _has(model, "bytea_arr"):
+            pytest.skip("No bytea array on this dialect model")
+        val = [b"\x00ab", b"cd"]
+        obj = await model.objects.create(bytea_arr=val, using=db.name)
+        fetched = await model.objects.get(id=obj.id, using=db.name)
+        assert fetched.bytea_arr == val
+        assert await model.objects.filter(bytea_arr=val).count(using=db.name) == 1
+
+    @pytest.mark.asyncio
+    async def test_timestamptz_array_elements(self, typed_db):
+        db, model = typed_db
+        if not _has(model, "tstz_arr"):
+            pytest.skip("No timestamptz array on this dialect model")
+        # Naive elements of a TIMESTAMPTZ[] column are taken as UTC (they
+        # were stored as NULL).
+        cest = timezone(timedelta(hours=2))
+        obj = await model.objects.create(
+            tstz_arr=[datetime(2024, 1, 1, 8, 0), datetime(2024, 1, 1, 10, 0, tzinfo=cest)],
+            using=db.name,
+        )
+        fetched = await model.objects.get(id=obj.id, using=db.name)
+        expected = datetime(2024, 1, 1, 8, 0, tzinfo=timezone.utc)
+        assert fetched.tstz_arr == [expected, expected]
+
+    @pytest.mark.asyncio
+    async def test_jsonb_array_strings(self, typed_db):
+        db, model = typed_db
+        if not _has(model, "jsonb_arr"):
+            pytest.skip("No jsonb array on this dialect model")
+        # Strings are JSON strings, never parsed: text that is not JSON was
+        # stored as NULL, and JSON text ("123", "null") changed type.
+        strings = ['"hello"', "world", "123", "null", None]
+        obj = await model.objects.create(jsonb_arr=strings, using=db.name)
+        fetched = await model.objects.get(id=obj.id, using=db.name)
+        assert fetched.jsonb_arr == strings
+
+        async def count(**filters) -> int:
+            return await model.objects.filter(**filters).count(using=db.name)
+
+        assert await count(jsonb_arr=strings) == 1
+        assert await count(jsonb_arr=["hello", "world", "123", "null", None]) == 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("val", [-32768, -1, 0, 3, 32767, None])
+    async def test_smallint(self, typed_db, val):
+        db, model = typed_db
+        if not _has(model, "smallint_val"):
+            pytest.skip("No SMALLINT field on this dialect model")
+        obj = await model.objects.create(smallint_val=val, using=db.name)
+        fetched = await model.objects.get(id=obj.id, using=db.name)
+        assert fetched.smallint_val == val
+        if val is not None:
+            assert isinstance(fetched.smallint_val, int)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("val", [[-32768, -1, 0, 3, 32767], [], None])
+    async def test_smallint_array(self, typed_db, val):
+        db, model = typed_db
+        if not _has(model, "smallint_arr"):
+            pytest.skip("No SMALLINT array on this dialect model")
+        obj = await model.objects.create(smallint_arr=val, using=db.name)
+        fetched = await model.objects.get(id=obj.id, using=db.name)
+        assert fetched.smallint_arr == val
+        if val is not None:
+            assert all(isinstance(item, int) for item in fetched.smallint_arr)
+
+    @pytest.mark.asyncio
+    async def test_raw_smallint(self, typed_db):
+        db, model = typed_db
+        if not _has(model, "smallint_val"):
+            pytest.skip("PostgreSQL-specific SMALLINT cast")
+        rows = await execute_raw("SELECT 3::smallint AS v", using=db.name)
+        assert rows == [{"v": 3}]
+        assert isinstance(rows[0]["v"], int)

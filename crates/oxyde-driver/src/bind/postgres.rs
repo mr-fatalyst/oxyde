@@ -183,6 +183,16 @@ fn bind_pg_array<'q>(
                 .collect();
             query.bind(v)
         }
+        ArrayType::Bytes => {
+            let v: Vec<Option<Vec<u8>>> = vals
+                .iter()
+                .map(|v| match v {
+                    Value::Bytes(Some(b)) => Some(b.as_ref().clone()),
+                    _ => None,
+                })
+                .collect();
+            query.bind(v)
+        }
         ArrayType::Json => {
             let v: Vec<Option<serde_json::Value>> = vals
                 .iter()
@@ -217,6 +227,7 @@ fn bind_pg_array_null<'q>(query: PgQuery<'q>, arr_type: &ArrayType) -> Result<Pg
         ArrayType::ChronoDateTimeUtc => query.bind(Option::<Vec<DateTime<Utc>>>::None),
         ArrayType::ChronoDate => query.bind(Option::<Vec<NaiveDate>>::None),
         ArrayType::ChronoTime => query.bind(Option::<Vec<NaiveTime>>::None),
+        ArrayType::Bytes => query.bind(Option::<Vec<Vec<u8>>>::None),
         ArrayType::Json => query.bind(Option::<Vec<serde_json::Value>>::None),
         #[allow(unreachable_patterns)]
         _ => {

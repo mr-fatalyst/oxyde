@@ -56,6 +56,7 @@ async fn sqlite_end_to_end_pipeline() {
         table: "users".into(),
         cols: None,
         column_types: None,
+        column_db_types: None,
         filter_tree: None,
         limit: None,
         offset: None,
@@ -92,6 +93,7 @@ async fn sqlite_end_to_end_pipeline() {
         table: "users".into(),
         cols: Some(vec!["id".into(), "name".into()]),
         column_types: None,
+        column_db_types: None,
         filter_tree: Some(FilterNode::Condition(Filter {
             field: "id".into(),
             operator: "=".into(),

@@ -6,17 +6,18 @@ Python -> msgpack IR -> Rust -> SQL -> DB -> Rust convert -> msgpack -> Python -
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
 import pytest
 import pytest_asyncio
 
+from oxyde.migrations.utils import detect_dialect
 from oxyde.queries import F
 from oxyde.queries.raw import execute_raw
 
-from .conftest import AllTypes, BytesModel, NullableTypes, TdModel
+from .conftest import AllTypes, BytesModel, ConvertedValues, NullableTypes, TdModel
 
 # ── Models for this file are defined in conftest.py ────────────────────
 # AllTypes, NullableTypes, BytesModel, TdModel
@@ -245,6 +246,16 @@ class TestDecimalRoundTrip:
         fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
         assert fetched.decimal_val == d
 
+    @pytest.mark.asyncio
+    async def test_exponent(self, db):
+        # str(Decimal("1E+2")) keeps the exponent; it binds as a decimal.
+        d = Decimal("1E+2")
+        obj = await AllTypes.objects.create(decimal_val=d, using=db.name)
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.decimal_val == Decimal("100")
+        count = await AllTypes.objects.filter(decimal_val=d).count(using=db.name)
+        assert count == 1
+
 
 class TestDecimalFArithmetic:
     """Regression: F() arithmetic with Decimal literals must execute on the DB.
@@ -403,6 +414,92 @@ class TestArrayRoundTrip:
         obj = await AllTypes.objects.create(decimal_list=vals, using=db.name)
         fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
         assert fetched.decimal_list == vals
+
+    @pytest.mark.asyncio
+    async def test_decimal_list_with_exponent(self, db):
+        # Was stored as NULL on PostgreSQL.
+        vals = [Decimal("1E+2"), Decimal("1.5")]
+        obj = await AllTypes.objects.create(decimal_list=vals, using=db.name)
+        fetched = await AllTypes.objects.get(id=obj.id, using=db.name)
+        assert fetched.decimal_list == [Decimal("100"), Decimal("1.5")]
+
+    @pytest.mark.asyncio
+    async def test_datetime_list_with_mixed_timezones(self, db):
+        # An aware element of a naive list is stored as naive UTC.
+        cest = timezone(timedelta(hours=2))
+        obj = await ConvertedValues.objects.create(
+            times=[datetime(2024, 1, 1, 10, 0, tzinfo=cest), datetime(2024, 1, 2)],
+            using=db.name,
+        )
+        fetched = await ConvertedValues.objects.get(id=obj.id, using=db.name)
+        assert fetched.times == [datetime(2024, 1, 1, 8, 0), datetime(2024, 1, 2)]
+
+    @pytest.mark.asyncio
+    async def test_json_list_strings_round_trip(self, db):
+        # String elements are JSON strings, never parsed. Text that is not
+        # JSON was stored as NULL on PostgreSQL, and JSON text ("123",
+        # '{"a": 1}') was parsed into another type on every backend.
+        items = ['"hello"', "world", "123", "true", "null", '{"a": 1}', {"a": 1}]
+        obj = await ConvertedValues.objects.create(items=items, using=db.name)
+        fetched = await ConvertedValues.objects.get(id=obj.id, using=db.name)
+        assert fetched.items == items
+
+    @pytest.mark.asyncio
+    async def test_json_list_with_mixed_elements(self, db):
+        # Numbers and booleans were stored as NULL on PostgreSQL.
+        mixed = [{"a": 1}, 5, True]
+        obj = await ConvertedValues.objects.create(mixed=mixed, using=db.name)
+        fetched = await ConvertedValues.objects.get(id=obj.id, using=db.name)
+        assert fetched.mixed == mixed
+
+    @pytest.mark.asyncio
+    async def test_integers_in_float_and_decimal_list_filters(self, db):
+        # Integer elements were bound as NULL on PostgreSQL, and as JSON
+        # integers on SQLite, so these filters never matched.
+        if detect_dialect(db.url) == "mysql":
+            pytest.skip("array equality filters do not match on MySQL")
+        await ConvertedValues.objects.create(
+            ratios=[1.0, 2.5], amounts=[Decimal("1"), Decimal("2.5")], using=db.name
+        )
+        query = ConvertedValues.objects.filter(ratios=[1, 2.5])
+        assert await query.count(using=db.name) == 1
+        query = ConvertedValues.objects.filter(amounts=[1, Decimal("2.5")])
+        assert await query.count(using=db.name) == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "filters",
+        [
+            {"amounts": [1.5]},
+            {"ratios": [Decimal("2.5")]},
+            {"amounts__in": [[Decimal("1")], [1.5]]},
+        ],
+    )
+    async def test_list_filter_elements_of_another_type(self, db, filters):
+        # PostgreSQL bound such elements as NULL, and NULL elements compare
+        # equal there, so the filter matched rows holding [None]; it now
+        # raises. JSON arrays (MySQL, SQLite) compare each element as given.
+        query = ConvertedValues.objects.filter(**filters)
+        if detect_dialect(db.url) == "postgres":
+            with pytest.raises(RuntimeError, match="does not match the array's element type"):
+                await query.count(using=db.name)
+        else:
+            assert await query.count(using=db.name) == 0
+
+    @pytest.mark.asyncio
+    async def test_union_list_filter(self, db):
+        dialect = detect_dialect(db.url)
+        if dialect == "mysql":
+            pytest.skip("array equality filters do not match on MySQL")
+        query = ConvertedValues.objects.filter(labels=["a", 1])
+        if dialect == "postgres":
+            # TEXT[] cannot hold the 1: it would bind as NULL.
+            with pytest.raises(RuntimeError, match="does not match the array's element type"):
+                await query.count(using=db.name)
+            return
+        # A JSON array keeps each element's own type, as saved.
+        await ConvertedValues.objects.create(labels=["a", 1], using=db.name)
+        assert await query.count(using=db.name) == 1
 
     @pytest.mark.asyncio
     async def test_null_list(self, db):

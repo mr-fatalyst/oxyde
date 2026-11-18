@@ -268,6 +268,50 @@ mod tests {
     }
 
     #[test]
+    fn test_qualified_column_type_wins_over_same_named_base_column() {
+        // The base model's `status` is text; the joined `author.status` is an
+        // enum. The query-level map holds both, keyed by SQL column reference.
+        let ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_with_column(
+                "status",
+                "author.status",
+                "=",
+                rmpv_str("draft"),
+            )),
+            column_types: Some(HashMap::from([
+                ("status".into(), ColumnTypeSpec::Text),
+                ("author.status".into(), enum_spec()),
+            ])),
+            ..Default::default()
+        };
+        let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains("$1::\"post_status_enum\""), "{sql}");
+    }
+
+    #[test]
+    fn test_qualified_column_without_a_spec_ignores_the_base_column() {
+        // The base model's `name` is JSON; the joined `author.name` has no
+        // spec (e.g. db_type="CITEXT"), so LIKE must not unwrap it as JSON.
+        let ir = QueryIR {
+            table: "posts".into(),
+            cols: Some(vec!["id".into()]),
+            filter_tree: Some(filter_with_column(
+                "name",
+                "author.name",
+                "LIKE",
+                rmpv_str("a%"),
+            )),
+            column_types: Some(HashMap::from([("name".into(), ColumnTypeSpec::Json)])),
+            ..Default::default()
+        };
+        let (sql, _) = build_sql(&ir, Dialect::Postgres).unwrap();
+        assert!(sql.contains(r#""author"."name" LIKE $1"#), "{sql}");
+        assert!(!sql.contains("#>>"), "{sql}");
+    }
+
+    #[test]
     fn test_mysql_placeholders() {
         let ir = QueryIR {
             table: "widgets".into(),
