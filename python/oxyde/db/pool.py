@@ -154,6 +154,9 @@ class PoolSettings:
     )
     sqlite_busy_timeout: int | None = 5000  # Timeout in milliseconds for busy database
 
+    # Trusted native SQLite libraries, loaded on every pooled connection.
+    sqlite_extensions: list[str] | None = None
+
     # TLS settings (PostgreSQL + MySQL)
     # ssl_mode controls both TLS requirement and certificate verification:
     #   PG:    "disable", "allow", "prefer", "require", "verify-ca", "verify-full"
@@ -204,6 +207,16 @@ class PoolSettings:
             payload["sqlite_cache_size"] = int(self.sqlite_cache_size)
         if self.sqlite_busy_timeout is not None:
             payload["sqlite_busy_timeout"] = int(self.sqlite_busy_timeout)
+
+        if self.sqlite_extensions is not None:
+            if not isinstance(self.sqlite_extensions, list) or any(
+                not isinstance(path, str) or not path.strip() or "\x00" in path
+                for path in self.sqlite_extensions
+            ):
+                raise ValueError(
+                    "sqlite_extensions must be a list of non-empty library paths"
+                )
+            payload["sqlite_extensions"] = list(self.sqlite_extensions)
 
         # TLS settings
         if self.ssl_mode is not None:
