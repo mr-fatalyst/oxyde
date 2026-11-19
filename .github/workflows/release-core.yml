@@ -61,11 +61,11 @@ jobs:
             target: aarch64-unknown-linux-musl
             manylinux: musllinux_1_2
           # macOS x86_64 (Intel) - runs on ARM with Rosetta
-          - os: macos-14
+          - os: macos-15
             target: x86_64-apple-darwin
             manylinux: auto
           # macOS ARM64 (Apple Silicon)
-          - os: macos-14
+          - os: macos-15
             target: aarch64-apple-darwin
             manylinux: auto
           # Windows x86_64
