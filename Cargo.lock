@@ -1044,7 +1044,7 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "oxyde-codec"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "rmp-serde",
@@ -1056,7 +1056,7 @@ dependencies = [
 
 [[package]]
 name = "oxyde-core-py"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "oxyde-driver"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1103,14 +1103,14 @@ dependencies = [
 
 [[package]]
 name = "oxyde-migrate"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "oxyde-codec",
 ]
 
 [[package]]
 name = "oxyde-sql"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
