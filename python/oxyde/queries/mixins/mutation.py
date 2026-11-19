@@ -59,6 +59,18 @@ async def _is_mysql(using: str | None, client: SupportsExecute | None) -> bool:
     return db.backend == "mysql"
 
 
+def _mark_pk_written(instance: Model, pk_field: str | None) -> None:
+    """Record that the instance's pk names a row that has been written.
+
+    ``save()`` updates only when the pk is in ``model_fields_set``. A pk
+    filled by ``default_factory`` is not, and an instance is not always
+    rebuilt from the database after an insert (MySQL has no RETURNING).
+    A pk that is still None stays unset, so the INSERT keeps omitting it.
+    """
+    if pk_field and getattr(instance, pk_field) is not None:
+        instance.model_fields_set.add(pk_field)
+
+
 def _hydrate_models(
     model_class: type[TModel], columns: list[str], rows: list[list[Any]]
 ) -> list[TModel]:
@@ -449,6 +461,8 @@ class MutationMixin(Generic[TModel]):
                 row_dict[pk_field] = result["inserted_ids"][0]
                 instance = self.model_class.model_validate(row_dict)
 
+        _mark_pk_written(instance, self._primary_key_field())
+
         # Call post_save hook
         if not _skip_hooks:
             await instance.post_save(is_create=True, update_fields=None)
@@ -519,9 +533,15 @@ class MutationMixin(Generic[TModel]):
                     stacklevel=2,
                 )
 
-            if pk_field and inserted_ids:
+            if pk_field:
+                # Only database-generated pks are assigned: a pk the instance
+                # already has (default_factory, or set by the caller) is the
+                # one that was inserted.
                 for instance, pk_value in zip(batch, inserted_ids):
-                    setattr(instance, pk_field, pk_value)
+                    if getattr(instance, pk_field) is None:
+                        setattr(instance, pk_field, pk_value)
+                for instance in batch:
+                    _mark_pk_written(instance, pk_field)
 
         return instances
 

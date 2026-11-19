@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 import pytest
 
 from oxyde import F
@@ -189,6 +191,45 @@ class TestSave:
 
         refreshed = await Author.objects.get(id=1, using=db.name)
         assert refreshed.name == "Alice Updated"
+
+
+async def _factory_keyed_names(db) -> list[str]:
+    rows = await FactoryKeyed.objects.order_by("name").all(using=db.name)
+    return [row.name for row in rows]
+
+
+class TestSaveWithDefaultFactoryPk:
+    """A pk filled by default_factory is a new row until it is written; after
+    that, save() updates it. MySQL has no RETURNING, so a written instance
+    there is not rebuilt from the database."""
+
+    @pytest.mark.asyncio
+    async def test_save_inserts_then_updates(self, db):
+        obj = FactoryKeyed(name="first")
+        await obj.save(using=db.name)
+        assert await _factory_keyed_names(db) == ["first"]
+
+        obj.name = "second"
+        await obj.save(using=db.name)
+        assert await _factory_keyed_names(db) == ["second"]
+
+    @pytest.mark.asyncio
+    async def test_save_after_create_updates(self, db):
+        obj = await FactoryKeyed.objects.create(name="first", using=db.name)
+        obj.name = "second"
+        await obj.save(using=db.name)
+        assert await _factory_keyed_names(db) == ["second"]
+
+    @pytest.mark.asyncio
+    async def test_save_after_bulk_create_updates(self, db):
+        objs = await FactoryKeyed.objects.bulk_create(
+            [FactoryKeyed(name="a"), FactoryKeyed(name="b")], using=db.name
+        )
+        # The pk each instance was inserted with stays as it is.
+        assert all(isinstance(obj.id, UUID) for obj in objs)
+        objs[0].name = "c"
+        await objs[0].save(using=db.name)
+        assert await _factory_keyed_names(db) == ["b", "c"]
 
 
 class TestDelete:

@@ -131,10 +131,11 @@ class ExecutionMixin(Generic[TModel]):
         Uses direct msgpack path (no batching) for maximum speed on simple queries.
         """
         result_bytes = await self.fetch_msgpack(client)
-        data = msgpack.unpackb(result_bytes, raw=False)
+        # A query with joins gets [columns, rows, relations], whose map has int keys
+        data = msgpack.unpackb(result_bytes, raw=False, strict_map_key=False)
         del result_bytes
-        if isinstance(data, (list, tuple)) and len(data) == 2:
-            first, second = data
+        if isinstance(data, (list, tuple)) and len(data) in (2, 3):
+            first, second = data[0], data[1]
             if isinstance(first, list) and all(isinstance(c, str) for c in first):
                 columns = _remap_columns(first, self.model_class)
                 return [dict(zip(columns, row)) for row in second]
