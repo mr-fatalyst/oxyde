@@ -81,7 +81,8 @@ class ExecutionMixin(Generic[TModel]):
     async def fetch_all(self, client: SupportsExecute) -> list[Any]:
         """Execute query and return all results as dicts."""
         result_bytes = await self.fetch_msgpack(client)
-        data = msgpack.unpackb(result_bytes, raw=False)
+        # A query with joins gets [columns, rows, relations], whose map has int keys
+        data = msgpack.unpackb(result_bytes, raw=False, strict_map_key=False)
 
         # Columnar format from Rust: [columns, rows]
         columns = _remap_columns(data[0], self.model_class)

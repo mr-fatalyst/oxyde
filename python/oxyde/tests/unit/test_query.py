@@ -545,6 +545,11 @@ async def test_values_list_execution_returns_expected_shapes() -> None:
     tuple_result = await Sample.objects.values_list("id", "email").fetch_all(stub_tuple)
     assert tuple_result == [(1, "a")]
 
+    # A related filter adds a join: the result carries a relations map with int keys
+    stub_joined = StubExecuteClient([(["id"], [[1]], {1: {}})])
+    joined_result = await Sample.objects.values_list("id", flat=True).fetch_all(stub_joined)
+    assert joined_result == [1]
+
     clear_registry()
 
 
