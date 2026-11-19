@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID, uuid4
+
 import pytest
 from pydantic import computed_field
 
@@ -50,6 +52,31 @@ class TestModelSave:
         assert stub.calls[0]["op"] == "insert"
         assert result is instance
         assert instance.id == 42
+
+    @pytest.mark.asyncio
+    async def test_save_new_instance_with_pk_default_creates(self):
+        """A PK filled by default_factory does not make a new instance an existing row."""
+
+        class UuidModel(Model):
+            id: UUID = Field(default_factory=uuid4, db_pk=True)
+            title: str
+
+            class Meta:
+                is_table = True
+
+        instance = UuidModel(title="hello")
+        stub = StubExecuteClient(
+            [
+                {"columns": ["id", "title"], "rows": [[str(instance.id), "hello"]]},
+                {"columns": ["id", "title"], "rows": [[str(instance.id), "again"]]},
+            ]
+        )
+
+        await instance.save(client=stub)
+        instance.title = "again"
+        await instance.save(client=stub)
+
+        assert [call["op"] for call in stub.calls] == ["insert", "update"]
 
     @pytest.mark.asyncio
     async def test_save_existing_instance_updates(self):
