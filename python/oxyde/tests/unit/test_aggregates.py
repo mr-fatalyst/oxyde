@@ -288,6 +288,15 @@ class TestManagerAggregates:
         assert stub.calls[0]["aggregates"][0]["op"] == "sum"
 
     @pytest.mark.asyncio
+    async def test_sum_with_join_result(self):
+        """A related filter adds a join: the result carries a relations map with int keys."""
+        stub = StubExecuteClient([(["_sum"], [[150.0]], {1: {}})])
+
+        total = await Product.objects.sum("price", client=stub)
+
+        assert total == 150.0
+
+    @pytest.mark.asyncio
     async def test_manager_avg(self):
         """Test manager.avg() method."""
         stub = StubExecuteClient([(["__avg__"], [[4.5]])])
