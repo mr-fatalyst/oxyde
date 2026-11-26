@@ -54,6 +54,29 @@ class TestCreate:
         assert fetched.status == "active"
 
     @pytest.mark.asyncio
+    async def test_create_with_related_instance_sets_fk(self, db):
+        """Passing the related object stores its key in the FK column."""
+        author = await create_author(db)
+        post = await Post.objects.create(
+            title="By instance", author=author, using=db.name
+        )
+        fetched = await Post.objects.get(id=post.id, using=db.name)
+        assert fetched.author_id == author.id
+
+    @pytest.mark.asyncio
+    async def test_reassign_related_instance_and_save(self, db):
+        """Assigning a new related object moves the row on save."""
+        first = await create_author(db, email="first@test.com")
+        second = await create_author(db, email="second@test.com")
+        post = await Post.objects.create(
+            title="Moved", author_id=first.id, using=db.name
+        )
+        post.author = second
+        await post.save(update_fields=["author"], using=db.name)
+        fetched = await Post.objects.get(id=post.id, using=db.name)
+        assert fetched.author_id == second.id
+
+    @pytest.mark.asyncio
     async def test_create_with_null_fk(self, db):
         """Nullable FK can be None."""
         post = await Post.objects.create(

@@ -222,6 +222,24 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
     __pending_fk_fields__: ClassVar[list[tuple[str, Any, Any]]] = []
     __fk_fields_resolved__: ClassVar[bool] = False
 
+    def model_post_init(self, context: Any, /) -> None:
+        super().model_post_init(context)
+        for name in list(self.model_fields_set):
+            self._sync_fk_column(name, self.__dict__.get(name))
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        super().__setattr__(name, value)
+        self._sync_fk_column(name, value)
+
+    def _sync_fk_column(self, name: str, value: Any) -> None:
+        # Only instances: queries and refresh() also assign None to unloaded relations.
+        meta = self.__class__._db_meta.field_metadata.get(name)
+        if meta is None or meta.foreign_key is None or not isinstance(value, Model):
+            return
+        fk = meta.foreign_key
+        self.__dict__[fk.column_name] = getattr(value, fk.target_field)
+        self.model_fields_set.add(fk.column_name)
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
