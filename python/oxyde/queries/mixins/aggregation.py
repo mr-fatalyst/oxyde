@@ -173,11 +173,12 @@ class AggregationMixin(Generic[TModel]):
         # Execute and extract value
         query_ir = agg_query.to_ir()
         result_bytes = await exec_client.execute(query_ir)
-        result = msgpack.unpackb(result_bytes, raw=False)
+        # A query with joins gets [columns, rows, relations], whose map has int keys
+        result = msgpack.unpackb(result_bytes, raw=False, strict_map_key=False)
 
-        # Handle columnar format: (columns, rows)
-        if isinstance(result, (list, tuple)) and len(result) == 2:
-            first, second = result
+        # Handle columnar format: (columns, rows) or (columns, rows, relations)
+        if isinstance(result, (list, tuple)) and len(result) in (2, 3):
+            first, second = result[0], result[1]
             if isinstance(first, list) and all(isinstance(c, str) for c in first):
                 # Columnar format
                 columns = first
