@@ -37,6 +37,36 @@ post = await Post.objects.create(
 print(post.author_id)  # 1
 ```
 
+The related object and its key column are two views of the same foreign key
+and stay in step:
+
+```python
+# Pass the object instead of its ID
+post = await Post.objects.create(title="Hello World", author=author)
+print(post.author_id)  # author.id
+
+# Reassign and save
+post.author = other_author   # post.author_id is other_author.id now
+await post.save()
+
+# Detach (nullable FK)
+post.author = None           # post.author_id is None now
+await post.save()
+```
+
+The related object must be saved before its owner. Saving a model whose
+related object has no key yet raises `ManagerError` instead of storing NULL:
+
+```python
+author = Author(name="Alice")
+post = Post(title="Hello", author=author)
+await author.save()   # first
+await post.save()     # post.author_id is author.id
+```
+
+If both are passed and disagree (`Post(author=author, author_id=5)`), the
+column wins.
+
 ### FK to Non-PK Field
 
 Reference a different field:
@@ -90,7 +120,36 @@ for post in posts:
     print(f"{post.title} by {post.author.name}")
 ```
 
-Without `join()`, accessing `post.author` would require another query.
+### Relations Are Loaded Explicitly
+
+Oxyde never runs a hidden query when you read a relation. A relation that
+was not loaded raises `RelationNotLoadedError` instead of returning `None` or
+an empty list, which would look exactly like "no related row":
+
+```python
+post = await Post.objects.get(id=1)
+
+post.author_id   # 5 — the key is always there
+post.author      # RelationNotLoadedError: Post.author is not loaded.
+                 # Load it with .join('author'), or read author_id for the key alone.
+```
+
+| Relation | Loaded with | Not loaded |
+|----------|-------------|------------|
+| Foreign key (`post.author`) | `join("author")` | `None` if the key is NULL, otherwise `RelationNotLoadedError` |
+| Reverse FK (`author.posts`) | `prefetch("posts")` | `RelationNotLoadedError` |
+| Many-to-many (`post.tags`) | `prefetch("tags")` | `RelationNotLoadedError` |
+
+A loaded relation with no rows is an empty list, and a foreign key whose
+column is NULL is `None` — both without an error. `model_dump()` does not
+read through attributes, so it never raises: unloaded relations come out as
+`None` / `[]`.
+
+!!! note "Response models"
+    Serializers that read attributes (`from_attributes=True`, as FastAPI
+    does for a `response_model`) raise the same error when the schema
+    includes a relation that was not loaded. Load it in the query, or leave
+    it out of the schema.
 
 ### Multiple Joins
 

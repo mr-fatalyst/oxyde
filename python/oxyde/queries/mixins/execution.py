@@ -17,6 +17,7 @@ from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.exceptions import FieldLookupError, MultipleObjectsReturned, NotFoundError
 from oxyde.models.registry import registered_tables
+from oxyde.models.relations import loaded, set_loaded
 from oxyde.queries.base import (
     _TYPE_ADAPTER_CACHE,
     _TYPE_ADAPTER_LOCK,
@@ -40,6 +41,18 @@ def _remap_columns(columns: list[str], model_class: type[Model]) -> list[str]:
     if not rmap:
         return columns
     return [rmap.get(c, c) for c in columns]
+
+
+def _assign_prefetched(
+    model_class: type[Model], parent: Model, name: str, values: list[Any]
+) -> None:
+    """Store a prefetched relation: through a custom relation descriptor when
+    the model defines one, otherwise as a loaded relation field."""
+    descriptor = getattr(model_class, name, None)
+    if descriptor is not None and hasattr(descriptor, "__set__"):
+        descriptor.__set__(parent, values)
+    else:
+        set_loaded(parent, name, values)
 
 
 class ExecutionMixin(Generic[TModel]):
@@ -456,14 +469,10 @@ class ExecutionMixin(Generic[TModel]):
                 parent = self._resolve_join_parent(model, spec.parent_path)
                 if parent is None:
                     continue
-                if ref_pk is None:
-                    setattr(parent, spec.attr_name, None)
-                else:
-                    instance = instance_cache.get(ref_pk)
-                    if instance is not None:
-                        setattr(parent, spec.attr_name, instance)
-                    else:
-                        setattr(parent, spec.attr_name, None)
+                # No related row leaves the relation as it is: None.
+                instance = instance_cache.get(ref_pk) if ref_pk is not None else None
+                if instance is not None:
+                    set_loaded(parent, spec.attr_name, instance)
 
     def _resolve_join_parent(
         self,
@@ -475,7 +484,7 @@ class ExecutionMixin(Generic[TModel]):
             return model
         current: Any = model
         for segment in parent_path.split("__"):
-            current = getattr(current, segment, None)
+            current = loaded(current, segment)
             if current is None:
                 return None
         parent: Model = current
@@ -520,7 +529,7 @@ class ExecutionMixin(Generic[TModel]):
                 target_model = _resolve_registered_model(relation.target)
                 all_targets: list[Model] = []
                 for parent in parents:
-                    targets = getattr(parent, relation_name, [])
+                    targets = loaded(parent, relation_name) or []
                     all_targets.extend(targets)
                 if all_targets:
                     await self._prefetch_path(
@@ -571,15 +580,10 @@ class ExecutionMixin(Generic[TModel]):
                     continue
                 grouped.setdefault(key, []).append(child)
 
-        descriptor = getattr(current_model, relation_name, None)
-
         for parent in parents:
             parent_id = getattr(parent, parent_pk.name, None)
             values = grouped.get(parent_id, [])
-            if descriptor is not None and hasattr(descriptor, "__set__"):
-                descriptor.__set__(parent, list(values))
-            else:
-                parent.__dict__[relation_name] = list(values)
+            _assign_prefetched(current_model, parent, relation_name, list(values))
 
         if len(segments) > 1:
             nested_children: list[Model] = [
@@ -693,11 +697,7 @@ class ExecutionMixin(Generic[TModel]):
                 grouped.setdefault(source_id, []).append(targets_by_pk[target_id])
 
         # Assign to parents
-        descriptor = getattr(source_model, relation_name, None)
         for parent in parents:
             parent_id = getattr(parent, parent_pk.name, None)
             values = grouped.get(parent_id, [])
-            if descriptor is not None and hasattr(descriptor, "__set__"):
-                descriptor.__set__(parent, list(values))
-            else:
-                parent.__dict__[relation_name] = list(values)
+            _assign_prefetched(source_model, parent, relation_name, list(values))

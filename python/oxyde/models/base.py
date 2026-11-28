@@ -101,6 +101,12 @@ from oxyde.models.metadata import (
     is_column_field,
 )
 from oxyde.models.registry import finalize_pending, register_table
+from oxyde.models.relations import (
+    fk_column_default,
+    install_accessors,
+    prepare_fk_columns,
+    sync_assignment,
+)
 from oxyde.models.serializers import _dump_update_data
 from oxyde.models.utils import (
     _extract_constraints,
@@ -221,6 +227,12 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
     _is_table: ClassVar[bool] = False
     __pending_fk_fields__: ClassVar[list[tuple[str, Any, Any]]] = []
     __fk_fields_resolved__: ClassVar[bool] = False
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        super().__setattr__(name, value)
+        meta = type(self)._db_meta
+        if name in meta.fk_fields or name in meta.fk_column_fields:
+            sync_assignment(self, name, value)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -425,12 +437,17 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
 
             # Determine FK column type (nullable if original FK field is optional)
             # db_nullable from virtual FK field applies to the real column
+            # A nullable column defaults to the key of the related object
+            # passed with it (Post(author=author)), else None.
+            fk_defaults: dict[str, Any]
             if is_optional:
                 fk_column_type = fk_type | None
-                fk_default = None
+                fk_defaults = {
+                    "default_factory": fk_column_default(field_name, target_field_name)
+                }
             else:
                 fk_column_type = fk_type
-                fk_default = PydanticUndefined
+                fk_defaults = {}
 
             # Carry column-level attributes from the virtual FK field over to
             # the synthetic column — it is the real DB column, so db_unique
@@ -440,7 +457,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                     fk_column_name,
                     fk_column_type,
                     Field(
-                        default=fk_default,
+                        **fk_defaults,
                         db_nullable=db_nullable,
                         db_unique=db_unique,
                         db_index=db_index,
@@ -645,6 +662,8 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             )
             cls._db_meta.field_metadata[field_name] = column_meta
 
+        install_accessors(cls)
+
     @classmethod
     def get_table_name(cls) -> str:
         """Get the table name for this model."""
@@ -774,6 +793,7 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
                 fields = set(self.__class__.model_fields.keys())
             if pk_field:
                 fields.discard(pk_field)
+            prepare_fk_columns(self)
             values = _dump_update_data(self, fields)
             if not values:
                 # Call post_save even if no values to update (for consistency)
@@ -870,10 +890,12 @@ class Model(BaseModel, metaclass=OxydeModelMeta):
             client=client, using=using, **{pk_field: pk_value}
         )
 
-        # Update all DB fields from the refreshed instance (skip virtual relations)
+        # Update the columns from the refreshed instance. Relations are not
+        # reloaded: assigning a foreign key column drops a loaded object that
+        # no longer matches it.
         for field_name in type(self).model_fields:
             meta = type(self)._db_meta.field_metadata.get(field_name)
-            if meta and (meta.extra.get("reverse_fk") or meta.extra.get("m2m")):
+            if meta is not None and not is_column_field(meta):
                 continue
             setattr(self, field_name, getattr(refreshed, field_name))
 

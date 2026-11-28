@@ -172,7 +172,8 @@ Use `join()` for FK relations:
 # Without join - author not loaded
 posts = await Post.objects.all()
 for post in posts:
-    print(post.author)  # None - not loaded
+    print(post.author_id)  # the key is always available
+    print(post.author)     # RelationNotLoadedError - not loaded
 
 # With join - author loaded in same query
 posts = await Post.objects.join("author").all()

@@ -3,7 +3,17 @@ from __future__ import annotations
 
 import pytest
 
-from .conftest import Author, Post, RenamedChild, RenamedParent
+from oxyde.exceptions import ManagerError, RelationNotLoadedError
+
+from .conftest import (
+    Author,
+    Category,
+    Post,
+    RenamedChild,
+    RenamedParent,
+    create_author,
+    create_post,
+)
 
 
 class TestJoin:
@@ -96,3 +106,116 @@ class TestPrefetch:
 
         quantum = posts[2]
         assert {t.name for t in quantum.tags} == {"SQL"}
+
+
+class TestRelationLoading:
+    """A relation is read only after it was loaded."""
+
+    @pytest.mark.asyncio
+    async def test_foreign_key_needs_a_join(self, db):
+        author = await create_author(db)
+        created = await create_post(db, author_id=author.id)
+
+        post = await Post.objects.get(id=created.id, using=db.name)
+        assert post.author_id == author.id
+        with pytest.raises(RelationNotLoadedError, match="join"):
+            post.author
+        # A foreign key without a value has nothing to load.
+        assert post.category is None
+
+        query = Post.objects.filter(id=created.id).join("author")
+        joined = await query.get(using=db.name)
+        assert joined.author.id == author.id
+
+    @pytest.mark.asyncio
+    async def test_reverse_and_m2m_need_a_prefetch(self, db):
+        author = await create_author(db)
+        created = await create_post(db, author_id=author.id)
+
+        plain = await Author.objects.get(id=author.id, using=db.name)
+        with pytest.raises(RelationNotLoadedError, match="prefetch"):
+            plain.posts
+        post = await Post.objects.get(id=created.id, using=db.name)
+        with pytest.raises(RelationNotLoadedError, match="prefetch"):
+            post.tags
+
+        query = Author.objects.filter(id=author.id).prefetch("posts")
+        loaded = await query.get(using=db.name)
+        assert [p.id for p in loaded.posts] == [created.id]
+        # Loaded and empty is an empty list, not an error.
+        query = Post.objects.filter(id=created.id).prefetch("tags", "comments")
+        post = await query.get(using=db.name)
+        assert post.tags == []
+        assert post.comments == []
+
+    @pytest.mark.asyncio
+    async def test_refresh_drops_a_relation_that_moved(self, db):
+        first = await create_author(db)
+        second = await create_author(db)
+        created = await create_post(db, author_id=first.id)
+
+        query = Post.objects.filter(id=created.id).join("author")
+        post = await query.get(using=db.name)
+        assert post.author.id == first.id
+        await Post.objects.filter(id=created.id).update(
+            author_id=second.id, using=db.name
+        )
+        await post.refresh(using=db.name)
+        assert post.author_id == second.id
+        with pytest.raises(RelationNotLoadedError):
+            post.author
+
+
+class TestForeignKeyWrites:
+    """The related object and its key column are written as one."""
+
+    @pytest.mark.asyncio
+    async def test_create_with_related_instance(self, db):
+        author = await create_author(db)
+        post = await Post.objects.create(
+            title="By instance", author=author, using=db.name
+        )
+        fetched = await Post.objects.get(id=post.id, using=db.name)
+        assert fetched.author_id == author.id
+
+    @pytest.mark.asyncio
+    async def test_reassign_and_save(self, db):
+        first = await create_author(db)
+        second = await create_author(db)
+        post = await create_post(db, author_id=first.id)
+
+        post.author = second
+        await post.save(using=db.name)
+        fetched = await Post.objects.get(id=post.id, using=db.name)
+        assert fetched.author_id == second.id
+
+        post.author = first
+        await post.save(update_fields=["author"], using=db.name)
+        fetched = await Post.objects.get(id=post.id, using=db.name)
+        assert fetched.author_id == first.id
+
+    @pytest.mark.asyncio
+    async def test_detach_with_none(self, db):
+        author = await create_author(db)
+        category = await Category.objects.create(
+            name=f"c-{author.id}", using=db.name
+        )
+        post = await create_post(db, author_id=author.id, category_id=category.id)
+
+        post.category = None
+        await post.save(using=db.name)
+        fetched = await Post.objects.get(id=post.id, using=db.name)
+        assert fetched.category_id is None
+
+    @pytest.mark.asyncio
+    async def test_related_object_saved_before_its_owner(self, db):
+        author = Author(name="Later", email="later@test.com")
+        post = Post(title="Graph", author=author)
+
+        with pytest.raises(ManagerError, match="not saved yet"):
+            await post.save(using=db.name)
+
+        await author.save(using=db.name)
+        await post.save(using=db.name)
+        fetched = await Post.objects.get(id=post.id, using=db.name)
+        assert fetched.author_id == author.id

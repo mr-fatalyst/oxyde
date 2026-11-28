@@ -75,6 +75,7 @@ from oxyde.exceptions import (
     NotFoundError,
     NotNullViolationError,
     OxydeError,
+    RelationNotLoadedError,
     UniqueViolationError,
 )
 from oxyde.models import Check, Field, Index, Model
@@ -126,6 +127,7 @@ __all__ = [
     "QueryManager",
     "OxydeError",
     "FieldError",
+    "RelationNotLoadedError",
     "FieldLookupError",
     "FieldLookupValueError",
     "ManagerError",

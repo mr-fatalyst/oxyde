@@ -6,6 +6,7 @@ import msgpack
 import pytest
 
 from oxyde import Field, Model
+from oxyde.exceptions import ManagerError, RelationNotLoadedError
 from oxyde.models.registry import registered_tables
 from oxyde.tests.helpers import StubExecuteClient
 
@@ -248,14 +249,11 @@ class TestReverseFKRelation:
         field = Container.model_fields["items"]
         assert field.default_factory is list
 
-        # Check instances are isolated (each has own list)
+        # Each instance gets its own list
         c1 = Container()
         c2 = Container()
-        assert c1.items == []
-        assert c2.items == []
-        c1.items.append(Item())
-        assert len(c1.items) == 1
-        assert len(c2.items) == 0  # c2 should not be affected
+        assert c1.model_dump()["items"] == []
+        assert c1.__dict__["items"] is not c2.__dict__["items"]
 
 
 class TestManyToManyRelation:
@@ -808,3 +806,178 @@ class TestNestedJoinHydration:
         assert users[0].profile.bio == "Developer"
         assert users[0].profile.country is not None
         assert users[0].profile.country.name == "USA"
+
+
+@pytest.fixture
+def blog() -> tuple[type[Model], type[Model]]:
+    """Writer with posts, Article with a nullable writer.
+    Defined per test: the unit conftest clears the registry."""
+
+    class Writer(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        name: str = ""
+        articles: list[Article] = Field(db_reverse_fk="writer")
+
+        class Meta:
+            is_table = True
+
+    class Article(Model):
+        id: int | None = Field(default=None, db_pk=True)
+        title: str = ""
+        writer: Writer | None = Field(default=None, db_nullable=True)
+
+        class Meta:
+            is_table = True
+
+    return Writer, Article
+
+
+class TestRelationAccess:
+    """Reading a relation that was not loaded raises instead of returning
+    None / [], which would read as "no related row"."""
+
+    def test_foreign_key_with_a_key_is_not_loaded(self, blog):
+        _, Article = blog
+        article = Article.model_validate({"id": 1, "writer_id": 5})
+        with pytest.raises(RelationNotLoadedError, match=r"join\('writer'\)"):
+            article.writer
+        assert article.writer_id == 5
+
+    def test_foreign_key_without_a_key_is_none(self, blog):
+        _, Article = blog
+        assert Article.model_validate({"id": 1, "writer_id": None}).writer is None
+        assert Article(title="new").writer is None
+
+    def test_reverse_relation_is_not_loaded(self, blog):
+        Writer, Article = blog
+        writer = Writer.model_validate({"id": 1})
+        with pytest.raises(RelationNotLoadedError, match=r"prefetch\('articles'\)"):
+            writer.articles
+        # Set by the caller, it is a value like any other.
+        assert Writer(articles=[]).articles == []
+        writer.articles = [Article(title="a")]
+        assert len(writer.articles) == 1
+
+    def test_error_is_not_swallowed_as_a_missing_attribute(self, blog):
+        _, Article = blog
+        article = Article.model_validate({"id": 1, "writer_id": 5})
+        with pytest.raises(RelationNotLoadedError):
+            getattr(article, "writer", None)
+
+    def test_pydantic_reads_are_unaffected(self, blog):
+        Writer, Article = blog
+        article = Article.model_validate({"id": 1, "writer_id": 5})
+        assert article.model_dump() == {
+            "id": 1,
+            "title": "",
+            "writer": None,
+            "writer_id": 5,
+        }
+        assert "writer=None" in repr(article)
+        assert article == article.model_copy()
+        assert Writer.model_validate({"id": 1}).model_dump()["articles"] == []
+
+    def test_class_attribute_stays_absent(self, blog):
+        _, Article = blog
+        assert not hasattr(Article, "writer")
+
+    def test_subclass_keeps_relation_fields(self, blog):
+        Writer, Article = blog
+
+        class Essay(Article):
+            words: int = 0
+
+            class Meta:
+                is_table = True
+
+        essay = Essay(title="t", writer=Writer(id=3))
+        assert essay.writer_id == 3
+        with pytest.raises(RelationNotLoadedError):
+            Essay.model_validate({"id": 1, "writer_id": 5}).writer
+
+
+class TestForeignKeyAssignment:
+    """A foreign key's object and its column stay in step."""
+
+    def test_constructor_takes_the_key_from_the_object(self, blog):
+        Writer, Article = blog
+        writer = Writer(id=7)
+        article = Article(title="t", writer=writer)
+        assert article.writer_id == 7
+        assert article.writer is writer
+
+    def test_explicit_column_wins_in_the_constructor(self, blog):
+        Writer, Article = blog
+        assert Article(writer=Writer(id=7), writer_id=9).writer_id == 9
+
+    def test_assigning_the_object_sets_the_column(self, blog):
+        Writer, Article = blog
+        article = Article.model_validate({"id": 1, "writer_id": 5})
+        article.writer = Writer(id=7)
+        assert article.writer_id == 7
+        assert "writer_id" in article.model_fields_set
+
+    def test_assigning_none_clears_the_column(self, blog):
+        Writer, Article = blog
+        article = Article(writer=Writer(id=7))
+        article.writer = None
+        assert article.writer_id is None
+        assert article.writer is None
+
+    def test_assigning_the_column_drops_a_stale_object(self, blog):
+        Writer, Article = blog
+        writer = Writer(id=7)
+        article = Article(writer=writer)
+        article.writer_id = 7
+        assert article.writer is writer
+        article.writer_id = 8
+        with pytest.raises(RelationNotLoadedError):
+            article.writer
+
+    @pytest.mark.asyncio
+    async def test_create_sends_the_key_of_the_related_object(self, blog):
+        Writer, Article = blog
+        stub = StubExecuteClient(
+            [{"columns": ["id", "title", "writer_id"], "rows": [[1, "t", 7]]}]
+        )
+        article = await Article.objects.create(
+            title="t", writer=Writer(id=7), client=stub
+        )
+        assert stub.calls[0]["values"]["writer_id"] == 7
+        assert "writer" not in stub.calls[0]["values"]
+        assert article.writer_id == 7
+
+    @pytest.mark.asyncio
+    async def test_unsaved_related_object_is_an_error_on_write(self, blog):
+        Writer, Article = blog
+        stub = StubExecuteClient([])
+        article = Article(title="t", writer=Writer(name="new"))
+        with pytest.raises(ManagerError, match="not saved yet"):
+            await article.save(client=stub)
+        with pytest.raises(ManagerError, match="not saved yet"):
+            await Article.objects.bulk_create([article], client=stub)
+        assert stub.calls == []
+
+    @pytest.mark.asyncio
+    async def test_object_saved_after_assignment_gives_its_key(self, blog):
+        Writer, Article = blog
+        writer = Writer(name="new")
+        article = Article(title="t", writer=writer)
+        assert article.writer_id is None
+        writer.id = 7  # as save() does
+        stub = StubExecuteClient(
+            [{"columns": ["id", "title", "writer_id"], "rows": [[1, "t", 7]]}]
+        )
+        await article.save(client=stub)
+        assert stub.calls[0]["values"]["writer_id"] == 7
+
+    @pytest.mark.asyncio
+    async def test_update_sends_the_reassigned_key(self, blog):
+        Writer, Article = blog
+        article = Article.model_validate({"id": 1, "title": "t", "writer_id": 5})
+        article.writer = Writer(id=7)
+        stub = StubExecuteClient(
+            [{"columns": ["id", "title", "writer_id"], "rows": [[1, "t", 7]]}]
+        )
+        await article.save(update_fields=["writer"], client=stub)
+        assert stub.calls[0]["values"] == {"writer_id": 7}

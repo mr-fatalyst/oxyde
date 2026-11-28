@@ -117,6 +117,10 @@ class ModelMeta:
     constraints: list[Check] = dataclass_field(default_factory=list)
     field_metadata: dict[str, ColumnMeta] = dataclass_field(default_factory=dict)
     relations: dict[str, RelationInfo] = dataclass_field(default_factory=dict)
+    # Foreign keys by relation field ("author") and the relation field of each
+    # foreign key column ("author_id" -> "author"); see models/relations.py
+    fk_fields: dict[str, ForeignKeyInfo] = dataclass_field(default_factory=dict)
+    fk_column_fields: dict[str, str] = dataclass_field(default_factory=dict)
     extra: dict[str, Any] = dataclass_field(default_factory=dict)
     # Cached IR type hints for Rust decoding (computed at finalization)
     column_types: dict[str, dict] | None = None

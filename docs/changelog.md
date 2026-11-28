@@ -4,6 +4,40 @@ All notable changes to Oxyde are documented here.
 
 ---
 
+## Unreleased
+
+### Upgrade Notes
+
+#### Reading a relation that was not loaded raises
+
+`post.author` without `join("author")` used to return `None`, and `author.posts` without `prefetch("posts")` an empty list — the same values as "no related row". Both now raise `RelationNotLoadedError`:
+
+```python
+post = await Post.objects.get(id=1)
+post.author      # RelationNotLoadedError
+post.author_id   # the key is always available
+
+post = await Post.objects.filter(id=1).join("author").get()
+post.author      # loaded
+```
+
+A foreign key whose column is NULL still reads as `None`, and a loaded relation with no rows as `[]`. `model_dump()` is unaffected. Code that read an unloaded relation was working with wrong data and needs a `join()` / `prefetch()`; serializers that read attributes (`from_attributes=True`) need the relation loaded or left out of the schema. See [Relations](guide/relations.md#relations-are-loaded-explicitly).
+
+#### Pydantic 2.10 or newer is required
+
+The minimum Pydantic version is now 2.10 (released November 2024).
+
+### Models
+
+- **Foreign keys accept the related object** — `Post.objects.create(author=author)`, `Post(author=author)` and `post.author = author` now set `author_id`; they used to leave it untouched, so the row was written with the old key or NULL without an error. `post.author = None` detaches, and assigning `author_id` drops a loaded object that no longer matches. Saving a model whose related object is not saved yet raises `ManagerError` instead of storing NULL.
+- **`refresh()` no longer touches relation fields** — it reloads columns only. A loaded foreign key object is kept while its key is unchanged.
+
+### Bug Fixes
+
+- **`sum()` / `avg()` / `min()` / `max()` with a filter on a related model** — `Post.objects.filter(author__name="x").sum("views")` raised `ValueError: int is not allowed for map key`, like `values()` did before 0.9.0.
+
+---
+
 ## 0.9.0 - 2026-11-19
 
 **Rust core: 0.8.0** (`core-v0.8.0`)

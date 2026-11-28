@@ -23,6 +23,7 @@ from oxyde._msgpack import msgpack
 from oxyde.core import ir
 from oxyde.db.registry import get_connection
 from oxyde.exceptions import ManagerError
+from oxyde.models.relations import prepare_fk_columns
 from oxyde.models.serializers import (
     _dump_insert_data,
     _normalize_instance,
@@ -441,6 +442,7 @@ class MutationMixin(Generic[TModel]):
             await instance.pre_save(is_create=True, update_fields=None)
 
         exec_client = await _resolve_execution_client(using, client)
+        prepare_fk_columns(instance)
         payload = _dump_insert_data(instance)
         if not payload:
             raise ManagerError("create() requires at least one value")
@@ -510,6 +512,7 @@ class MutationMixin(Generic[TModel]):
         for batch in batches:
             payloads = []
             for instance in batch:
+                prepare_fk_columns(instance)
                 payload = _dump_insert_data(instance)
                 if not payload:
                     raise ManagerError("bulk_create() encountered an empty payload")

@@ -10,6 +10,7 @@ All Oxyde exceptions inherit from OxydeError, allowing catch-all handling:
 Exception hierarchy:
     OxydeError (base)
     ├── FieldError                - Invalid field definition or access
+    ├── RelationNotLoadedError    - Relation read before join()/prefetch()
     ├── FieldLookupError          - Unknown lookup operator (e.g., __xyz)
     │   └── FieldLookupValueError - Invalid value for lookup (e.g., __in=None)
     └── ManagerError              - Query execution errors
@@ -31,6 +32,15 @@ class OxydeError(Exception):
 
 class FieldError(OxydeError):
     """Raised when a model field is invalid or missing."""
+
+
+class RelationNotLoadedError(OxydeError):
+    """Raised when a relation is read before it was loaded.
+
+    Deliberately not an ``AttributeError``: ``getattr(obj, name, None)`` and
+    attribute-based serializers would otherwise read an unloaded relation
+    as missing, which is the silent ``None`` this error exists to prevent.
+    """
 
 
 class FieldLookupError(OxydeError):
@@ -76,6 +86,7 @@ class CheckViolationError(IntegrityError):
 __all__ = [
     "OxydeError",
     "FieldError",
+    "RelationNotLoadedError",
     "FieldLookupError",
     "FieldLookupValueError",
     "ManagerError",

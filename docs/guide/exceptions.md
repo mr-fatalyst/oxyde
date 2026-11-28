@@ -20,6 +20,7 @@ except OxydeError as e:
 ```
 OxydeError (base)
 ├── FieldError                - Invalid field definition or access
+├── RelationNotLoadedError    - Relation read before join()/prefetch()
 ├── FieldLookupError          - Unknown lookup operator
 │   └── FieldLookupValueError - Invalid value for lookup
 └── ManagerError              - Query execution errors
@@ -81,6 +82,33 @@ try:
 except FieldError as e:
     print(f"Invalid field: {e}")
 ```
+
+### RelationNotLoadedError
+
+```python
+class RelationNotLoadedError(OxydeError):
+    """Raised when a relation is read before it was loaded."""
+```
+
+**When raised:**
+
+- Reading a foreign key relation that was not loaded with `join()` (and whose key is not NULL)
+- Reading a reverse or many-to-many relation that was not loaded with `prefetch()`
+
+```python
+post = await Post.objects.get(id=1)
+try:
+    print(post.author.name)
+except RelationNotLoadedError as e:
+    print(e)
+    # "Post.author is not loaded. Load it with .join('author'), ..."
+
+post = await Post.objects.filter(id=1).join("author").get()
+print(post.author.name)  # loaded
+```
+
+It is not an `AttributeError`, so `getattr(post, "author", None)` raises too
+rather than returning the default. See [Relations](relations.md#relations-are-loaded-explicitly).
 
 ## Lookup Errors
 
@@ -373,6 +401,7 @@ async def get_user_with_fallback(user_id: int) -> User | None:
 from oxyde import (
     OxydeError,
     FieldError,
+    RelationNotLoadedError,
     FieldLookupError,
     FieldLookupValueError,
     ManagerError,
@@ -392,6 +421,7 @@ Or import from exceptions module:
 from oxyde.exceptions import (
     OxydeError,
     FieldError,
+    RelationNotLoadedError,
     FieldLookupError,
     FieldLookupValueError,
     ManagerError,
