@@ -72,6 +72,7 @@ use tracing::info;
 // Module declarations
 mod error;
 mod execute;
+mod listener;
 mod pool;
 mod settings;
 mod transaction;
@@ -137,6 +138,7 @@ pub(crate) fn ensure_cleanup_task() {
 // Types
 pub use error::{DbErrorKind, DriverError, Result};
 pub use explain::{ExplainFormat, ExplainOptions};
+pub use listener::NotificationListener;
 pub use pool::{DatabaseBackend, DbPool};
 pub use settings::PoolSettings;
 
